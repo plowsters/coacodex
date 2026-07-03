@@ -1,0 +1,23 @@
+{
+  "schema_version": "coa-scoring-profile-v1",
+  "profile_id": "generic_tank",
+  "class_name": "*",
+  "spec_key": "generic",
+  "role": "tank",
+  "supported_encounters": ["single_target", "cleave_2", "aoe_5", "solo"],
+  "baseline_index": 100,
+  "weights": {
+    "tabs": {"Class": 1.0},
+    "tags": {"tank": 5.0, "aura": 2.0, "cooldown": 2.5, "heal": 1.5, "hot": 1.0, "mobility": 1.0, "crowd_control": 1.0, "resource_management": 1.5, "dot": 0.5, "proc": 1.0},
+    "schools": {},
+    "resources": {"Energy": 0.5, "Mana": 0.5, "Rage": 1.0}
+  },
+  "named_boosts": {},
+  "regex_boosts": [
+    {"pattern": "\\barmor|block|parry|dodge|threat|damage taken|shield\\b", "weight": 3.0, "reason": "tank survival text"}
+  ],
+  "synergies": [],
+  "anti_synergies": [],
+  "confidence": {"base": "medium"},
+  "assumptions": ["Generic tank profile values survival and control over damage."]
+}

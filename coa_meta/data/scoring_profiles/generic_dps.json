@@ -1,0 +1,26 @@
+{
+  "schema_version": "coa-scoring-profile-v1",
+  "profile_id": "generic_dps",
+  "class_name": "*",
+  "spec_key": "generic",
+  "role": "dps",
+  "supported_encounters": ["single_target", "cleave_2", "aoe_5", "solo"],
+  "baseline_index": 100,
+  "weights": {
+    "tabs": {"Class": 1.0},
+    "tags": {"dot": 3.0, "proc": 3.0, "builder": 2.5, "spender": 2.5, "resource_management": 2.0, "cooldown": 2.0, "execute": 2.0, "summon": 1.5, "melee": 0.75, "ranged": 0.75, "aura": 1.0, "mobility": 0.4, "crowd_control": 0.25, "heal": -0.5, "hot": -0.5, "tank": -1.25},
+    "schools": {"physical": 0.75, "fire": 0.75, "frost": 0.75, "shadow": 0.75, "holy": 0.75, "nature": 0.75, "arcane": 0.75, "fel": 0.75},
+    "resources": {"Energy": 1.0, "Mana": 0.5, "Rage": 0.5, "Insanity": 0.5, "Felfury": 0.5, "Static": 0.5, "Heat": 0.5, "Advantage": 0.5}
+  },
+  "named_boosts": {},
+  "regex_boosts": [
+    {"pattern": "\\bcritical strike|critically|critical damage\\b", "weight": 1.25, "reason": "critical scaling"},
+    {"pattern": "\\bhaste\\b", "weight": 1.25, "reason": "haste scaling"},
+    {"pattern": "\\bcooldown\\b", "weight": 1.0, "reason": "cooldown interaction"},
+    {"pattern": "\\bperiodic damage|damage over\\b", "weight": 1.5, "reason": "periodic damage"}
+  ],
+  "synergies": [],
+  "anti_synergies": [],
+  "confidence": {"base": "medium"},
+  "assumptions": ["Generic DPS profile uses tooltip-derived features only.", "Output is a projected DPS index, not raw DPS."]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "coa-scoring-profile-v1",
+  "profile_id": "generic_healer_support",
+  "class_name": "*",
+  "spec_key": "generic",
+  "role": "healer_support",
+  "supported_encounters": ["single_target", "cleave_2", "aoe_5", "solo"],
+  "baseline_index": 100,
+  "weights": {
+    "tabs": {"Class": 1.0},
+    "tags": {"heal": 5.0, "hot": 4.0, "aura": 3.0, "cooldown": 2.0, "resource_management": 2.0, "crowd_control": 0.75, "tank": 0.5, "dot": -0.25},
+    "schools": {"holy": 1.0, "nature": 0.75, "shadow": -0.25},
+    "resources": {"Mana": 1.5, "Energy": 0.25}
+  },
+  "named_boosts": {},
+  "regex_boosts": [
+    {"pattern": "\\bheal|healing|absorbs?|allies within|party and raid\\b", "weight": 2.5, "reason": "support text"}
+  ],
+  "synergies": [],
+  "anti_synergies": [],
+  "confidence": {"base": "medium"},
+  "assumptions": ["Generic healer/support profile values healing, absorb, aura, and group utility text."]
+}

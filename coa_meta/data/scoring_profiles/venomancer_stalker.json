@@ -1,0 +1,69 @@
+{
+  "schema_version": "coa-scoring-profile-v1",
+  "profile_id": "venomancer_stalker",
+  "class_name": "Venomancer",
+  "spec_key": "stalker",
+  "role": "dps",
+  "supported_encounters": ["single_target", "cleave_2", "aoe_5", "solo"],
+  "baseline_index": 100,
+  "weights": {
+    "tabs": {"Stalking": 8.0, "Venom": 3.0, "Class": 1.0, "Vizier": 0.5, "Fortitude": -1.75},
+    "tags": {"dot": 5.0, "proc": 4.0, "builder": 3.25, "spender": 3.75, "resource_management": 3.25, "cooldown": 2.75, "execute": 2.0, "summon": 1.25, "aura": 1.0, "melee": 0.5, "ranged": 0.25, "mobility": 0.75, "crowd_control": 0.5, "tank": -2.25, "heal": -0.75, "hot": -1.0},
+    "schools": {"nature": 5.0, "shadow": 2.0, "arcane": 0.75, "physical": -0.25, "holy": -0.25, "fire": -0.25, "frost": -0.25, "fel": -0.25},
+    "resources": {"Energy": 4.0, "Mana": -0.5, "Rage": -1.0}
+  },
+  "encounter_overrides": {
+    "aoe_5": {
+      "tags": {"summon": 2.5, "crowd_control": 1.0, "dot": 5.75},
+      "named_boosts": {"Brood Lord": 13.0, "Contagion": 11.0, "Facemelter": 12.0}
+    }
+  },
+  "named_boosts": {
+    "Brood Marks": 20.0,
+    "Venom Fang": 15.0,
+    "Widow's Kiss": 14.0,
+    "Nerubian Sting": 14.0,
+    "Facemelter": 14.0,
+    "Noxious Empowerment": 13.0,
+    "Cunning of the Nerub'ar": 11.0,
+    "Venomous Bite": 8.0,
+    "Blistering Fangs": 7.0,
+    "Contagion": 7.0,
+    "Deadly Kiss": 7.0,
+    "Nature Against Nature": 7.0,
+    "Deadly Neurotoxins": 6.0,
+    "Glory to Shadra": 6.0,
+    "Virulent Resonance": 6.0,
+    "Adrenal Venom": 5.0,
+    "Blight Venom": 5.0,
+    "Withering Venom": 5.0,
+    "Rot": -2.0,
+    "Fortitude": -4.0
+  },
+  "regex_boosts": [
+    {"pattern": "\\bBrood Mark", "weight": 5.0, "reason": "Brood Mark interaction"},
+    {"pattern": "\\bVenom Fang\\b", "weight": 5.0, "reason": "Venom Fang loop"},
+    {"pattern": "\\bWidow", "weight": 4.0, "reason": "Widow interaction"},
+    {"pattern": "\\bNerubian Sting\\b", "weight": 4.0, "reason": "Nerubian Sting interaction"},
+    {"pattern": "\\bFacemelter\\b", "weight": 4.0, "reason": "mark spender interaction"},
+    {"pattern": "\\bEnergy\\b", "weight": 3.0, "reason": "energy economy"},
+    {"pattern": "\\bhaste\\b", "weight": 3.0, "reason": "haste scaling"},
+    {"pattern": "\\bcritical strike|critically|critical damage\\b", "weight": 2.0, "reason": "critical scaling"},
+    {"pattern": "\\bNature damage\\b", "weight": 2.0, "reason": "nature damage package"},
+    {"pattern": "\\bShadow damage\\b", "weight": 1.0, "reason": "shadow damage package"},
+    {"pattern": "\\bSpider Form\\b", "weight": 3.0, "reason": "Spider Form interaction"},
+    {"pattern": "\\btank|threat|armor|block|parry|dodge\\b", "weight": -3.0, "reason": "non-DPS defensive text"}
+  ],
+  "synergies": [
+    {"names": ["Brood Marks", "Venom Fang"], "weight": 12.0, "reason": "core mark builder"},
+    {"names": ["Brood Marks", "Facemelter"], "weight": 12.0, "reason": "core mark spender"},
+    {"names": ["Venom Fang", "Widow's Kiss"], "weight": 8.0, "reason": "every third fang conversion"},
+    {"names": ["Nerubian Sting", "Nature Against Nature"], "weight": 8.0, "reason": "sting amplifies poison loop"},
+    {"names": ["Facemelter", "Blistering Fangs"], "weight": 7.0, "reason": "high-mark spender refund"}
+  ],
+  "anti_synergies": [
+    {"names": ["Cunning of the Nerub'ar", "Brood Lord"], "weight": -5.0, "reason": "likely competing Spider Form packages; test separately"}
+  ],
+  "confidence": {"base": "high"},
+  "assumptions": ["Stalker Venomancer profile is a curated theorycraft profile.", "Output is a projected DPS index, not raw DPS."]
+}
