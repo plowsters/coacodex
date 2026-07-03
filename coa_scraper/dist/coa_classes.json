@@ -1,0 +1,788 @@
+[
+  {
+    "class_id": 12,
+    "class_name": "Barbarian",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 31,
+        "tab_name": "Brutality",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 32,
+        "tab_name": "Headhunting",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 33,
+        "tab_name": "Ancestry",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 13,
+    "class_name": "Witch Doctor",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 34,
+        "tab_name": "Voodoo",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 35,
+        "tab_name": "Brewing",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 36,
+        "tab_name": "Shadowhunting",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 14,
+    "class_name": "Felsworn",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 37,
+        "tab_name": "Slayer",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 38,
+        "tab_name": "Infernal",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 18,
+        "tab_name": "Tyrant",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 15,
+    "class_name": "Witch Hunter",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 1,
+        "tab_name": "None",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 39,
+        "tab_name": "Boltslinger",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 94,
+        "tab_name": "Black Knight",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 40,
+        "tab_name": "Houndmaster",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 41,
+        "tab_name": "Inquisition",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 16,
+    "class_name": "Stormbringer",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 42,
+        "tab_name": "Lightning",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 43,
+        "tab_name": "Wind",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 44,
+        "tab_name": "Maelstrom",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 17,
+    "class_name": "Knight of Xoroth",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 47,
+        "tab_name": "Defiance",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 46,
+        "tab_name": "Hellfire",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 45,
+        "tab_name": "War",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 18,
+    "class_name": "Guardian",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 1,
+        "tab_name": "None",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 7,
+        "tab_name": "Vanguard",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 48,
+        "tab_name": "Inspiration",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 49,
+        "tab_name": "Gladiator",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 19,
+    "class_name": "Templar",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 50,
+        "tab_name": "Zealot",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 16,
+        "tab_name": "Oathkeeper",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 51,
+        "tab_name": "Crusader",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 20,
+    "class_name": "Bloodmage",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 26,
+        "tab_name": "Sanguine",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 52,
+        "tab_name": "Accursed",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 53,
+        "tab_name": "Eternal",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 93,
+        "tab_name": "Fleshweaver",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 21,
+    "class_name": "Ranger",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 54,
+        "tab_name": "Archery",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 55,
+        "tab_name": "Brigand",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 2,
+        "tab_name": "Farstrider",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 22,
+    "class_name": "Chronomancer",
+    "tabs": [
+      {
+        "tab_id": 71,
+        "tab_name": "Blessings",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 56,
+        "tab_name": "Infinite",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 58,
+        "tab_name": "Time",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 57,
+        "tab_name": "Artificer",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 23,
+    "class_name": "Necromancer",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 59,
+        "tab_name": "Death",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 60,
+        "tab_name": "Rime",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 61,
+        "tab_name": "Animation",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 24,
+    "class_name": "Pyromancer",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 1,
+        "tab_name": "None",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 62,
+        "tab_name": "Incineration",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 19,
+        "tab_name": "Flameweaving",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 63,
+        "tab_name": "Draconic",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 25,
+    "class_name": "Cultist",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 64,
+        "tab_name": "Godblade",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 65,
+        "tab_name": "Corruption",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 88,
+        "tab_name": "Dreadnought",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 66,
+        "tab_name": "Heretic",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 26,
+    "class_name": "Starcaller",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 67,
+        "tab_name": "Moon Guard",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 69,
+        "tab_name": "Sentinel",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 68,
+        "tab_name": "Moon Priest",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 89,
+        "tab_name": "Warden",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 27,
+    "class_name": "Sun Cleric",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 1,
+        "tab_name": "None",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 70,
+        "tab_name": "Piety",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 71,
+        "tab_name": "Blessings",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 90,
+        "tab_name": "Valkyrie",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 72,
+        "tab_name": "Seraphim",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 28,
+    "class_name": "Tinker",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 73,
+        "tab_name": "Demolition",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 74,
+        "tab_name": "Invention",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 75,
+        "tab_name": "Mechanics",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 31,
+    "class_name": "Primalist",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 83,
+        "tab_name": "Geomancy",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 84,
+        "tab_name": "Life",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 91,
+        "tab_name": "Mountain King",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 82,
+        "tab_name": "Primal",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 30,
+    "class_name": "Reaper",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 79,
+        "tab_name": "Harvest",
+        "sort_order": 1,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 80,
+        "tab_name": "Soul",
+        "sort_order": 2,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 81,
+        "tab_name": "Domination",
+        "sort_order": 3,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 29,
+    "class_name": "Venomancer",
+    "tabs": [
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 78,
+        "tab_name": "Fortitude",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 77,
+        "tab_name": "Stalking",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 76,
+        "tab_name": "Venom",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 92,
+        "tab_name": "Vizier",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  },
+  {
+    "class_id": 32,
+    "class_name": "Runemaster",
+    "tabs": [
+      {
+        "tab_id": 11,
+        "tab_name": "Arcane",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 87,
+        "tab_name": "Class",
+        "sort_order": 0,
+        "nominal_essence_kind": "ability"
+      },
+      {
+        "tab_id": 86,
+        "tab_name": "Riftblade",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      },
+      {
+        "tab_id": 85,
+        "tab_name": "Runic",
+        "sort_order": 0,
+        "nominal_essence_kind": "talent"
+      }
+    ],
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    }
+  }
+]

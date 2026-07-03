@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: CoA Data Logger
+## Notes: Minimal 3.3.5-compatible combat/build data collector for CoA optimization experiments.
+## Author: Brandon Plowman + ChatGPT
+## Version: 0.1.0
+## SavedVariables: CoADataLoggerDB
+CoADataLogger.lua

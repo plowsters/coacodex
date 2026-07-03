@@ -1,0 +1,2148 @@
+[
+  {
+    "class_id": 12,
+    "class_name": "Barbarian",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 39,
+      "talent": 122
+    },
+    "top_tags": [
+      {
+        "key": "resource_management",
+        "value": 55
+      },
+      {
+        "key": "melee",
+        "value": 54
+      },
+      {
+        "key": "proc",
+        "value": 40
+      },
+      {
+        "key": "builder",
+        "value": 27
+      },
+      {
+        "key": "ranged",
+        "value": 24
+      },
+      {
+        "key": "heal",
+        "value": 23
+      },
+      {
+        "key": "cooldown",
+        "value": 18
+      },
+      {
+        "key": "mobility",
+        "value": 16
+      },
+      {
+        "key": "tank",
+        "value": 16
+      },
+      {
+        "key": "crowd_control",
+        "value": 15
+      },
+      {
+        "key": "dot",
+        "value": 13
+      },
+      {
+        "key": "spender",
+        "value": 12
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "physical",
+        "value": 31
+      },
+      {
+        "key": "frost",
+        "value": 18
+      },
+      {
+        "key": "arcane",
+        "value": 15
+      },
+      {
+        "key": "fire",
+        "value": 8
+      },
+      {
+        "key": "nature",
+        "value": 3
+      },
+      {
+        "key": "holy",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Energy",
+        "value": 26
+      },
+      {
+        "key": "Rage",
+        "value": 15
+      },
+      {
+        "key": "Fill Level",
+        "value": 7
+      }
+    ]
+  },
+  {
+    "class_id": 13,
+    "class_name": "Witch Doctor",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 37,
+      "talent": 122
+    },
+    "top_tags": [
+      {
+        "key": "heal",
+        "value": 39
+      },
+      {
+        "key": "dot",
+        "value": 28
+      },
+      {
+        "key": "summon",
+        "value": 28
+      },
+      {
+        "key": "proc",
+        "value": 26
+      },
+      {
+        "key": "melee",
+        "value": 21
+      },
+      {
+        "key": "resource_management",
+        "value": 21
+      },
+      {
+        "key": "aura",
+        "value": 18
+      },
+      {
+        "key": "ranged",
+        "value": 16
+      },
+      {
+        "key": "cooldown",
+        "value": 16
+      },
+      {
+        "key": "tank",
+        "value": 11
+      },
+      {
+        "key": "builder",
+        "value": 10
+      },
+      {
+        "key": "spender",
+        "value": 9
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "shadow",
+        "value": 39
+      },
+      {
+        "key": "arcane",
+        "value": 25
+      },
+      {
+        "key": "frost",
+        "value": 16
+      },
+      {
+        "key": "nature",
+        "value": 16
+      },
+      {
+        "key": "fire",
+        "value": 8
+      },
+      {
+        "key": "holy",
+        "value": 6
+      },
+      {
+        "key": "physical",
+        "value": 3
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 15
+      },
+      {
+        "key": "Energy",
+        "value": 2
+      },
+      {
+        "key": "Rage",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 14,
+    "class_name": "Felsworn",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 35,
+      "talent": 123
+    },
+    "top_tags": [
+      {
+        "key": "resource_management",
+        "value": 64
+      },
+      {
+        "key": "melee",
+        "value": 51
+      },
+      {
+        "key": "proc",
+        "value": 42
+      },
+      {
+        "key": "tank",
+        "value": 32
+      },
+      {
+        "key": "builder",
+        "value": 31
+      },
+      {
+        "key": "spender",
+        "value": 27
+      },
+      {
+        "key": "heal",
+        "value": 23
+      },
+      {
+        "key": "dot",
+        "value": 19
+      },
+      {
+        "key": "cooldown",
+        "value": 17
+      },
+      {
+        "key": "mobility",
+        "value": 16
+      },
+      {
+        "key": "aura",
+        "value": 9
+      },
+      {
+        "key": "summon",
+        "value": 4
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "fel",
+        "value": 93
+      },
+      {
+        "key": "fire",
+        "value": 44
+      },
+      {
+        "key": "arcane",
+        "value": 20
+      },
+      {
+        "key": "shadow",
+        "value": 17
+      },
+      {
+        "key": "physical",
+        "value": 15
+      },
+      {
+        "key": "frost",
+        "value": 12
+      },
+      {
+        "key": "holy",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Felfury",
+        "value": 33
+      },
+      {
+        "key": "Energy",
+        "value": 24
+      },
+      {
+        "key": "Rage",
+        "value": 4
+      },
+      {
+        "key": "Mana",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "class_id": 15,
+    "class_name": "Witch Hunter",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 24,
+      "talent": 167
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 51
+      },
+      {
+        "key": "proc",
+        "value": 49
+      },
+      {
+        "key": "ranged",
+        "value": 36
+      },
+      {
+        "key": "builder",
+        "value": 34
+      },
+      {
+        "key": "resource_management",
+        "value": 31
+      },
+      {
+        "key": "heal",
+        "value": 28
+      },
+      {
+        "key": "tank",
+        "value": 24
+      },
+      {
+        "key": "cooldown",
+        "value": 23
+      },
+      {
+        "key": "spender",
+        "value": 18
+      },
+      {
+        "key": "summon",
+        "value": 18
+      },
+      {
+        "key": "dot",
+        "value": 17
+      },
+      {
+        "key": "mobility",
+        "value": 13
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "shadow",
+        "value": 74
+      },
+      {
+        "key": "physical",
+        "value": 23
+      },
+      {
+        "key": "fire",
+        "value": 23
+      },
+      {
+        "key": "holy",
+        "value": 20
+      },
+      {
+        "key": "arcane",
+        "value": 16
+      },
+      {
+        "key": "fel",
+        "value": 6
+      },
+      {
+        "key": "frost",
+        "value": 1
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 21
+      },
+      {
+        "key": "Mana",
+        "value": 11
+      },
+      {
+        "key": "Energy",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 16,
+    "class_name": "Stormbringer",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 34,
+      "talent": 122
+    },
+    "top_tags": [
+      {
+        "key": "resource_management",
+        "value": 42
+      },
+      {
+        "key": "proc",
+        "value": 36
+      },
+      {
+        "key": "melee",
+        "value": 26
+      },
+      {
+        "key": "summon",
+        "value": 25
+      },
+      {
+        "key": "cooldown",
+        "value": 22
+      },
+      {
+        "key": "builder",
+        "value": 22
+      },
+      {
+        "key": "spender",
+        "value": 21
+      },
+      {
+        "key": "aura",
+        "value": 14
+      },
+      {
+        "key": "tank",
+        "value": 13
+      },
+      {
+        "key": "dot",
+        "value": 12
+      },
+      {
+        "key": "mobility",
+        "value": 12
+      },
+      {
+        "key": "crowd_control",
+        "value": 12
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "nature",
+        "value": 67
+      },
+      {
+        "key": "holy",
+        "value": 32
+      },
+      {
+        "key": "arcane",
+        "value": 20
+      },
+      {
+        "key": "fire",
+        "value": 7
+      },
+      {
+        "key": "frost",
+        "value": 6
+      },
+      {
+        "key": "shadow",
+        "value": 1
+      },
+      {
+        "key": "physical",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Static",
+        "value": 32
+      },
+      {
+        "key": "Mana",
+        "value": 7
+      },
+      {
+        "key": "Energy",
+        "value": 4
+      },
+      {
+        "key": "Rage",
+        "value": 2
+      }
+    ]
+  },
+  {
+    "class_id": 17,
+    "class_name": "Knight of Xoroth",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 27,
+      "talent": 129
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 42
+      },
+      {
+        "key": "proc",
+        "value": 41
+      },
+      {
+        "key": "tank",
+        "value": 37
+      },
+      {
+        "key": "spender",
+        "value": 27
+      },
+      {
+        "key": "builder",
+        "value": 25
+      },
+      {
+        "key": "dot",
+        "value": 24
+      },
+      {
+        "key": "resource_management",
+        "value": 23
+      },
+      {
+        "key": "cooldown",
+        "value": 21
+      },
+      {
+        "key": "heal",
+        "value": 16
+      },
+      {
+        "key": "aura",
+        "value": 8
+      },
+      {
+        "key": "mobility",
+        "value": 6
+      },
+      {
+        "key": "summon",
+        "value": 6
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "fire",
+        "value": 70
+      },
+      {
+        "key": "fel",
+        "value": 67
+      },
+      {
+        "key": "physical",
+        "value": 16
+      },
+      {
+        "key": "arcane",
+        "value": 8
+      },
+      {
+        "key": "shadow",
+        "value": 6
+      },
+      {
+        "key": "frost",
+        "value": 5
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 19
+      }
+    ]
+  },
+  {
+    "class_id": 18,
+    "class_name": "Guardian",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 44,
+      "talent": 117
+    },
+    "top_tags": [
+      {
+        "key": "tank",
+        "value": 56
+      },
+      {
+        "key": "proc",
+        "value": 39
+      },
+      {
+        "key": "melee",
+        "value": 33
+      },
+      {
+        "key": "resource_management",
+        "value": 28
+      },
+      {
+        "key": "cooldown",
+        "value": 25
+      },
+      {
+        "key": "aura",
+        "value": 17
+      },
+      {
+        "key": "spender",
+        "value": 17
+      },
+      {
+        "key": "builder",
+        "value": 14
+      },
+      {
+        "key": "crowd_control",
+        "value": 14
+      },
+      {
+        "key": "mobility",
+        "value": 13
+      },
+      {
+        "key": "ranged",
+        "value": 12
+      },
+      {
+        "key": "heal",
+        "value": 11
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "physical",
+        "value": 16
+      },
+      {
+        "key": "arcane",
+        "value": 11
+      },
+      {
+        "key": "fire",
+        "value": 7
+      },
+      {
+        "key": "frost",
+        "value": 3
+      },
+      {
+        "key": "holy",
+        "value": 2
+      },
+      {
+        "key": "shadow",
+        "value": 2
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Energy",
+        "value": 22
+      },
+      {
+        "key": "Advantage",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 19,
+    "class_name": "Templar",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 29,
+      "talent": 128
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 50
+      },
+      {
+        "key": "proc",
+        "value": 33
+      },
+      {
+        "key": "heal",
+        "value": 30
+      },
+      {
+        "key": "tank",
+        "value": 24
+      },
+      {
+        "key": "cooldown",
+        "value": 18
+      },
+      {
+        "key": "builder",
+        "value": 18
+      },
+      {
+        "key": "spender",
+        "value": 17
+      },
+      {
+        "key": "resource_management",
+        "value": 15
+      },
+      {
+        "key": "mobility",
+        "value": 13
+      },
+      {
+        "key": "dot",
+        "value": 10
+      },
+      {
+        "key": "aura",
+        "value": 7
+      },
+      {
+        "key": "summon",
+        "value": 4
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "holy",
+        "value": 58
+      },
+      {
+        "key": "physical",
+        "value": 21
+      },
+      {
+        "key": "arcane",
+        "value": 18
+      },
+      {
+        "key": "fire",
+        "value": 5
+      },
+      {
+        "key": "nature",
+        "value": 2
+      },
+      {
+        "key": "frost",
+        "value": 2
+      },
+      {
+        "key": "shadow",
+        "value": 1
+      },
+      {
+        "key": "fel",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Energy",
+        "value": 13
+      },
+      {
+        "key": "Rage",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 20,
+    "class_name": "Bloodmage",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 49,
+      "talent": 159
+    },
+    "top_tags": [
+      {
+        "key": "heal",
+        "value": 69
+      },
+      {
+        "key": "proc",
+        "value": 47
+      },
+      {
+        "key": "melee",
+        "value": 40
+      },
+      {
+        "key": "dot",
+        "value": 37
+      },
+      {
+        "key": "tank",
+        "value": 26
+      },
+      {
+        "key": "resource_management",
+        "value": 26
+      },
+      {
+        "key": "ranged",
+        "value": 24
+      },
+      {
+        "key": "builder",
+        "value": 20
+      },
+      {
+        "key": "spender",
+        "value": 19
+      },
+      {
+        "key": "cooldown",
+        "value": 19
+      },
+      {
+        "key": "aura",
+        "value": 18
+      },
+      {
+        "key": "mobility",
+        "value": 11
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "shadow",
+        "value": 70
+      },
+      {
+        "key": "arcane",
+        "value": 19
+      },
+      {
+        "key": "physical",
+        "value": 17
+      },
+      {
+        "key": "fire",
+        "value": 12
+      },
+      {
+        "key": "frost",
+        "value": 2
+      },
+      {
+        "key": "fel",
+        "value": 1
+      },
+      {
+        "key": "holy",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 20
+      }
+    ]
+  },
+  {
+    "class_id": 21,
+    "class_name": "Ranger",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 29,
+      "talent": 135
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 52
+      },
+      {
+        "key": "ranged",
+        "value": 46
+      },
+      {
+        "key": "proc",
+        "value": 42
+      },
+      {
+        "key": "resource_management",
+        "value": 39
+      },
+      {
+        "key": "dot",
+        "value": 30
+      },
+      {
+        "key": "summon",
+        "value": 20
+      },
+      {
+        "key": "builder",
+        "value": 19
+      },
+      {
+        "key": "heal",
+        "value": 16
+      },
+      {
+        "key": "cooldown",
+        "value": 14
+      },
+      {
+        "key": "mobility",
+        "value": 14
+      },
+      {
+        "key": "crowd_control",
+        "value": 13
+      },
+      {
+        "key": "aura",
+        "value": 12
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "physical",
+        "value": 25
+      },
+      {
+        "key": "nature",
+        "value": 15
+      },
+      {
+        "key": "fire",
+        "value": 12
+      },
+      {
+        "key": "arcane",
+        "value": 11
+      },
+      {
+        "key": "shadow",
+        "value": 2
+      },
+      {
+        "key": "holy",
+        "value": 1
+      },
+      {
+        "key": "frost",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Advantage",
+        "value": 36
+      }
+    ]
+  },
+  {
+    "class_id": 22,
+    "class_name": "Chronomancer",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 35,
+      "talent": 122
+    },
+    "top_tags": [
+      {
+        "key": "heal",
+        "value": 38
+      },
+      {
+        "key": "proc",
+        "value": 36
+      },
+      {
+        "key": "melee",
+        "value": 25
+      },
+      {
+        "key": "cooldown",
+        "value": 23
+      },
+      {
+        "key": "dot",
+        "value": 18
+      },
+      {
+        "key": "builder",
+        "value": 18
+      },
+      {
+        "key": "spender",
+        "value": 13
+      },
+      {
+        "key": "resource_management",
+        "value": 12
+      },
+      {
+        "key": "tank",
+        "value": 10
+      },
+      {
+        "key": "crowd_control",
+        "value": 8
+      },
+      {
+        "key": "aura",
+        "value": 7
+      },
+      {
+        "key": "ranged",
+        "value": 5
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "arcane",
+        "value": 80
+      },
+      {
+        "key": "frost",
+        "value": 9
+      },
+      {
+        "key": "fire",
+        "value": 6
+      },
+      {
+        "key": "physical",
+        "value": 4
+      },
+      {
+        "key": "nature",
+        "value": 3
+      },
+      {
+        "key": "holy",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 11
+      }
+    ]
+  },
+  {
+    "class_id": 23,
+    "class_name": "Necromancer",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 43,
+      "talent": 117
+    },
+    "top_tags": [
+      {
+        "key": "summon",
+        "value": 47
+      },
+      {
+        "key": "proc",
+        "value": 33
+      },
+      {
+        "key": "dot",
+        "value": 25
+      },
+      {
+        "key": "crowd_control",
+        "value": 25
+      },
+      {
+        "key": "melee",
+        "value": 22
+      },
+      {
+        "key": "builder",
+        "value": 18
+      },
+      {
+        "key": "heal",
+        "value": 17
+      },
+      {
+        "key": "resource_management",
+        "value": 15
+      },
+      {
+        "key": "cooldown",
+        "value": 13
+      },
+      {
+        "key": "tank",
+        "value": 13
+      },
+      {
+        "key": "spender",
+        "value": 13
+      },
+      {
+        "key": "mobility",
+        "value": 5
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "frost",
+        "value": 41
+      },
+      {
+        "key": "arcane",
+        "value": 22
+      },
+      {
+        "key": "shadow",
+        "value": 11
+      },
+      {
+        "key": "holy",
+        "value": 4
+      },
+      {
+        "key": "fire",
+        "value": 3
+      },
+      {
+        "key": "physical",
+        "value": 3
+      },
+      {
+        "key": "nature",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 7
+      }
+    ]
+  },
+  {
+    "class_id": 24,
+    "class_name": "Pyromancer",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 30,
+      "talent": 129
+    },
+    "top_tags": [
+      {
+        "key": "proc",
+        "value": 41
+      },
+      {
+        "key": "heal",
+        "value": 36
+      },
+      {
+        "key": "resource_management",
+        "value": 32
+      },
+      {
+        "key": "builder",
+        "value": 31
+      },
+      {
+        "key": "dot",
+        "value": 28
+      },
+      {
+        "key": "melee",
+        "value": 27
+      },
+      {
+        "key": "spender",
+        "value": 14
+      },
+      {
+        "key": "cooldown",
+        "value": 13
+      },
+      {
+        "key": "aura",
+        "value": 11
+      },
+      {
+        "key": "tank",
+        "value": 11
+      },
+      {
+        "key": "crowd_control",
+        "value": 9
+      },
+      {
+        "key": "ranged",
+        "value": 9
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "fire",
+        "value": 106
+      },
+      {
+        "key": "arcane",
+        "value": 25
+      },
+      {
+        "key": "holy",
+        "value": 10
+      },
+      {
+        "key": "nature",
+        "value": 5
+      },
+      {
+        "key": "shadow",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Heat",
+        "value": 21
+      },
+      {
+        "key": "Mana",
+        "value": 8
+      },
+      {
+        "key": "Rage",
+        "value": 2
+      }
+    ]
+  },
+  {
+    "class_id": 25,
+    "class_name": "Cultist",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 34,
+      "talent": 162
+    },
+    "top_tags": [
+      {
+        "key": "resource_management",
+        "value": 51
+      },
+      {
+        "key": "proc",
+        "value": 47
+      },
+      {
+        "key": "tank",
+        "value": 46
+      },
+      {
+        "key": "heal",
+        "value": 42
+      },
+      {
+        "key": "melee",
+        "value": 40
+      },
+      {
+        "key": "cooldown",
+        "value": 26
+      },
+      {
+        "key": "builder",
+        "value": 24
+      },
+      {
+        "key": "mobility",
+        "value": 15
+      },
+      {
+        "key": "dot",
+        "value": 13
+      },
+      {
+        "key": "crowd_control",
+        "value": 13
+      },
+      {
+        "key": "spender",
+        "value": 11
+      },
+      {
+        "key": "aura",
+        "value": 11
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "shadow",
+        "value": 112
+      },
+      {
+        "key": "holy",
+        "value": 27
+      },
+      {
+        "key": "arcane",
+        "value": 24
+      },
+      {
+        "key": "fire",
+        "value": 5
+      },
+      {
+        "key": "physical",
+        "value": 4
+      },
+      {
+        "key": "frost",
+        "value": 2
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Insanity",
+        "value": 33
+      },
+      {
+        "key": "Mana",
+        "value": 17
+      },
+      {
+        "key": "Energy",
+        "value": 4
+      },
+      {
+        "key": "Rage",
+        "value": 2
+      }
+    ]
+  },
+  {
+    "class_id": 26,
+    "class_name": "Starcaller",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 32,
+      "talent": 160
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 43
+      },
+      {
+        "key": "proc",
+        "value": 43
+      },
+      {
+        "key": "resource_management",
+        "value": 36
+      },
+      {
+        "key": "heal",
+        "value": 32
+      },
+      {
+        "key": "ranged",
+        "value": 32
+      },
+      {
+        "key": "tank",
+        "value": 26
+      },
+      {
+        "key": "cooldown",
+        "value": 24
+      },
+      {
+        "key": "spender",
+        "value": 22
+      },
+      {
+        "key": "builder",
+        "value": 17
+      },
+      {
+        "key": "mobility",
+        "value": 11
+      },
+      {
+        "key": "crowd_control",
+        "value": 9
+      },
+      {
+        "key": "aura",
+        "value": 8
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "arcane",
+        "value": 43
+      },
+      {
+        "key": "holy",
+        "value": 19
+      },
+      {
+        "key": "fire",
+        "value": 12
+      },
+      {
+        "key": "physical",
+        "value": 7
+      },
+      {
+        "key": "shadow",
+        "value": 3
+      },
+      {
+        "key": "frost",
+        "value": 2
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 31
+      },
+      {
+        "key": "Energy",
+        "value": 4
+      }
+    ]
+  },
+  {
+    "class_id": 27,
+    "class_name": "Sun Cleric",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 37,
+      "talent": 165
+    },
+    "top_tags": [
+      {
+        "key": "heal",
+        "value": 55
+      },
+      {
+        "key": "proc",
+        "value": 49
+      },
+      {
+        "key": "melee",
+        "value": 34
+      },
+      {
+        "key": "tank",
+        "value": 32
+      },
+      {
+        "key": "cooldown",
+        "value": 30
+      },
+      {
+        "key": "resource_management",
+        "value": 29
+      },
+      {
+        "key": "dot",
+        "value": 25
+      },
+      {
+        "key": "builder",
+        "value": 22
+      },
+      {
+        "key": "ranged",
+        "value": 14
+      },
+      {
+        "key": "spender",
+        "value": 14
+      },
+      {
+        "key": "aura",
+        "value": 12
+      },
+      {
+        "key": "crowd_control",
+        "value": 9
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "holy",
+        "value": 98
+      },
+      {
+        "key": "fire",
+        "value": 26
+      },
+      {
+        "key": "arcane",
+        "value": 21
+      },
+      {
+        "key": "physical",
+        "value": 7
+      },
+      {
+        "key": "shadow",
+        "value": 6
+      },
+      {
+        "key": "frost",
+        "value": 5
+      },
+      {
+        "key": "fel",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 23
+      },
+      {
+        "key": "Energy",
+        "value": 3
+      },
+      {
+        "key": "Heat",
+        "value": 3
+      },
+      {
+        "key": "Rage",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 28,
+    "class_name": "Tinker",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 29,
+      "talent": 129
+    },
+    "top_tags": [
+      {
+        "key": "proc",
+        "value": 35
+      },
+      {
+        "key": "ranged",
+        "value": 35
+      },
+      {
+        "key": "heal",
+        "value": 35
+      },
+      {
+        "key": "melee",
+        "value": 29
+      },
+      {
+        "key": "summon",
+        "value": 26
+      },
+      {
+        "key": "cooldown",
+        "value": 24
+      },
+      {
+        "key": "dot",
+        "value": 18
+      },
+      {
+        "key": "tank",
+        "value": 16
+      },
+      {
+        "key": "builder",
+        "value": 15
+      },
+      {
+        "key": "resource_management",
+        "value": 15
+      },
+      {
+        "key": "mobility",
+        "value": 14
+      },
+      {
+        "key": "crowd_control",
+        "value": 11
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "fire",
+        "value": 42
+      },
+      {
+        "key": "arcane",
+        "value": 29
+      },
+      {
+        "key": "nature",
+        "value": 6
+      },
+      {
+        "key": "physical",
+        "value": 5
+      },
+      {
+        "key": "frost",
+        "value": 3
+      },
+      {
+        "key": "holy",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 12
+      },
+      {
+        "key": "Energy",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "class_id": 29,
+    "class_name": "Venomancer",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 24,
+      "talent": 177
+    },
+    "top_tags": [
+      {
+        "key": "dot",
+        "value": 83
+      },
+      {
+        "key": "proc",
+        "value": 53
+      },
+      {
+        "key": "heal",
+        "value": 51
+      },
+      {
+        "key": "melee",
+        "value": 28
+      },
+      {
+        "key": "resource_management",
+        "value": 28
+      },
+      {
+        "key": "tank",
+        "value": 26
+      },
+      {
+        "key": "spender",
+        "value": 25
+      },
+      {
+        "key": "builder",
+        "value": 20
+      },
+      {
+        "key": "cooldown",
+        "value": 18
+      },
+      {
+        "key": "mobility",
+        "value": 18
+      },
+      {
+        "key": "crowd_control",
+        "value": 9
+      },
+      {
+        "key": "hot",
+        "value": 9
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "nature",
+        "value": 91
+      },
+      {
+        "key": "arcane",
+        "value": 23
+      },
+      {
+        "key": "shadow",
+        "value": 16
+      },
+      {
+        "key": "holy",
+        "value": 9
+      },
+      {
+        "key": "physical",
+        "value": 4
+      },
+      {
+        "key": "fire",
+        "value": 3
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 14
+      },
+      {
+        "key": "Mana",
+        "value": 12
+      },
+      {
+        "key": "Energy",
+        "value": 9
+      }
+    ]
+  },
+  {
+    "class_id": 30,
+    "class_name": "Reaper",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 32,
+      "talent": 121
+    },
+    "top_tags": [
+      {
+        "key": "melee",
+        "value": 46
+      },
+      {
+        "key": "builder",
+        "value": 34
+      },
+      {
+        "key": "proc",
+        "value": 33
+      },
+      {
+        "key": "heal",
+        "value": 31
+      },
+      {
+        "key": "tank",
+        "value": 25
+      },
+      {
+        "key": "spender",
+        "value": 16
+      },
+      {
+        "key": "cooldown",
+        "value": 16
+      },
+      {
+        "key": "summon",
+        "value": 15
+      },
+      {
+        "key": "mobility",
+        "value": 9
+      },
+      {
+        "key": "execute",
+        "value": 7
+      },
+      {
+        "key": "crowd_control",
+        "value": 7
+      },
+      {
+        "key": "stealth",
+        "value": 6
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "shadow",
+        "value": 69
+      },
+      {
+        "key": "arcane",
+        "value": 14
+      },
+      {
+        "key": "physical",
+        "value": 13
+      },
+      {
+        "key": "frost",
+        "value": 6
+      },
+      {
+        "key": "fire",
+        "value": 4
+      },
+      {
+        "key": "nature",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 2
+      }
+    ]
+  },
+  {
+    "class_id": 31,
+    "class_name": "Primalist",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 24,
+      "talent": 179
+    },
+    "top_tags": [
+      {
+        "key": "resource_management",
+        "value": 53
+      },
+      {
+        "key": "proc",
+        "value": 42
+      },
+      {
+        "key": "melee",
+        "value": 38
+      },
+      {
+        "key": "builder",
+        "value": 37
+      },
+      {
+        "key": "heal",
+        "value": 35
+      },
+      {
+        "key": "tank",
+        "value": 33
+      },
+      {
+        "key": "mobility",
+        "value": 30
+      },
+      {
+        "key": "cooldown",
+        "value": 29
+      },
+      {
+        "key": "dot",
+        "value": 24
+      },
+      {
+        "key": "summon",
+        "value": 22
+      },
+      {
+        "key": "aura",
+        "value": 18
+      },
+      {
+        "key": "spender",
+        "value": 15
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "nature",
+        "value": 95
+      },
+      {
+        "key": "physical",
+        "value": 23
+      },
+      {
+        "key": "arcane",
+        "value": 21
+      },
+      {
+        "key": "fire",
+        "value": 14
+      },
+      {
+        "key": "holy",
+        "value": 7
+      },
+      {
+        "key": "frost",
+        "value": 2
+      },
+      {
+        "key": "shadow",
+        "value": 2
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Rage",
+        "value": 35
+      },
+      {
+        "key": "Mana",
+        "value": 8
+      }
+    ]
+  },
+  {
+    "class_id": 32,
+    "class_name": "Runemaster",
+    "essence_caps": {
+      "maxTalentEssence": 25,
+      "maxAbilityEssence": 26
+    },
+    "counts": {
+      "ability": 33,
+      "talent": 127
+    },
+    "top_tags": [
+      {
+        "key": "proc",
+        "value": 43
+      },
+      {
+        "key": "melee",
+        "value": 36
+      },
+      {
+        "key": "summon",
+        "value": 28
+      },
+      {
+        "key": "cooldown",
+        "value": 22
+      },
+      {
+        "key": "ranged",
+        "value": 19
+      },
+      {
+        "key": "crowd_control",
+        "value": 14
+      },
+      {
+        "key": "dot",
+        "value": 13
+      },
+      {
+        "key": "tank",
+        "value": 11
+      },
+      {
+        "key": "resource_management",
+        "value": 11
+      },
+      {
+        "key": "builder",
+        "value": 10
+      },
+      {
+        "key": "mobility",
+        "value": 10
+      },
+      {
+        "key": "spender",
+        "value": 5
+      }
+    ],
+    "top_damage_schools": [
+      {
+        "key": "arcane",
+        "value": 65
+      },
+      {
+        "key": "frost",
+        "value": 21
+      },
+      {
+        "key": "fire",
+        "value": 20
+      },
+      {
+        "key": "nature",
+        "value": 20
+      },
+      {
+        "key": "physical",
+        "value": 5
+      },
+      {
+        "key": "shadow",
+        "value": 1
+      }
+    ],
+    "top_resources": [
+      {
+        "key": "Mana",
+        "value": 10
+      },
+      {
+        "key": "Energy",
+        "value": 1
+      }
+    ]
+  }
+]

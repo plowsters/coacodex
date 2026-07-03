@@ -1,0 +1,204 @@
+===== CoA normalized export report =====
+Builder: Vol'Jin Alpha (voljin-alpha)
+Classes: 21
+Raw records: 3612
+Deduped records: 3612
+Missing class records: 0
+Missing tab records: 0
+Unknown essence-kind records: 0
+
+Barbarian
+  ability: 39
+  talent: 122
+  unknown: 0
+  31:Brutality: 39
+  32:Headhunting: 38
+  33:Ancestry: 43
+  87:Class: 41
+
+Bloodmage
+  ability: 49
+  talent: 159
+  unknown: 0
+  26:Sanguine: 40
+  52:Accursed: 43
+  53:Eternal: 41
+  87:Class: 40
+  93:Fleshweaver: 44
+
+Chronomancer
+  ability: 35
+  talent: 122
+  unknown: 0
+  56:Infinite: 39
+  57:Artificer: 41
+  58:Time: 39
+  87:Class: 38
+
+Cultist
+  ability: 34
+  talent: 162
+  unknown: 0
+  64:Godblade: 37
+  65:Corruption: 39
+  66:Heretic: 42
+  87:Class: 40
+  88:Dreadnought: 38
+
+Felsworn
+  ability: 35
+  talent: 123
+  unknown: 0
+  18:Tyrant: 43
+  37:Slayer: 39
+  38:Infernal: 39
+  87:Class: 37
+
+Guardian
+  ability: 44
+  talent: 117
+  unknown: 0
+  48:Inspiration: 45
+  49:Gladiator: 38
+  7:Vanguard: 38
+  87:Class: 40
+
+Knight of Xoroth
+  ability: 27
+  talent: 129
+  unknown: 0
+  45:War: 39
+  46:Hellfire: 38
+  47:Defiance: 42
+  87:Class: 37
+
+Necromancer
+  ability: 43
+  talent: 117
+  unknown: 0
+  59:Death: 39
+  60:Rime: 41
+  61:Animation: 42
+  87:Class: 38
+
+Primalist
+  ability: 24
+  talent: 179
+  unknown: 0
+  82:Primal: 40
+  83:Geomancy: 40
+  84:Life: 46
+  87:Class: 37
+  91:Mountain King: 40
+
+Pyromancer
+  ability: 30
+  talent: 129
+  unknown: 0
+  19:Flameweaving: 40
+  62:Incineration: 38
+  63:Draconic: 41
+  87:Class: 40
+
+Ranger
+  ability: 29
+  talent: 135
+  unknown: 0
+  2:Farstrider: 45
+  54:Archery: 40
+  55:Brigand: 40
+  87:Class: 39
+
+Reaper
+  ability: 32
+  talent: 121
+  unknown: 0
+  79:Harvest: 40
+  80:Soul: 39
+  81:Domination: 39
+  87:Class: 35
+
+Runemaster
+  ability: 33
+  talent: 127
+  unknown: 0
+  11:Arcane: 41
+  85:Runic: 41
+  86:Riftblade: 41
+  87:Class: 37
+
+Starcaller
+  ability: 32
+  talent: 160
+  unknown: 0
+  67:Moon Guard: 36
+  68:Moon Priest: 39
+  69:Sentinel: 38
+  87:Class: 39
+  89:Warden: 40
+
+Stormbringer
+  ability: 34
+  talent: 122
+  unknown: 0
+  42:Lightning: 37
+  43:Wind: 43
+  44:Maelstrom: 37
+  87:Class: 39
+
+Sun Cleric
+  ability: 37
+  talent: 165
+  unknown: 0
+  70:Piety: 39
+  71:Blessings: 41
+  72:Seraphim: 41
+  87:Class: 39
+  90:Valkyrie: 42
+
+Templar
+  ability: 29
+  talent: 128
+  unknown: 0
+  16:Oathkeeper: 41
+  50:Zealot: 40
+  51:Crusader: 38
+  87:Class: 38
+
+Tinker
+  ability: 29
+  talent: 129
+  unknown: 0
+  73:Demolition: 40
+  74:Invention: 39
+  75:Mechanics: 43
+  87:Class: 36
+
+Venomancer
+  ability: 24
+  talent: 177
+  unknown: 0
+  76:Venom: 39
+  77:Stalking: 42
+  78:Fortitude: 43
+  87:Class: 37
+  92:Vizier: 40
+
+Witch Doctor
+  ability: 37
+  talent: 122
+  unknown: 0
+  34:Voodoo: 37
+  35:Brewing: 41
+  36:Shadowhunting: 43
+  87:Class: 38
+
+Witch Hunter
+  ability: 24
+  talent: 167
+  unknown: 0
+  39:Boltslinger: 39
+  40:Houndmaster: 38
+  41:Inquisition: 40
+  87:Class: 36
+  94:Black Knight: 38

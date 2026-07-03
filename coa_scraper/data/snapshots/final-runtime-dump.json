@@ -1,0 +1,17 @@
+{
+  "href": "https://ascension.gg/en/v2/coa-builder/voljin-alpha",
+  "title": "Talent & Build Calculator (Voljin Alpha CoA Builder) | Ascension Classless Game",
+  "nextData": null,
+  "nextFlight": [],
+  "localStorage": {
+    "lastExternalReferrer": "empty",
+    "CookieConsent_v2": "true",
+    "lastExternalReferrerTime": "1782795777642",
+    "CookieConsentParams_v2": "{\"ad_user_data\":\"granted\",\"ad_personalization\":\"granted\",\"ad_storage\":\"granted\",\"analytics_storage\":\"granted\"}",
+    "_gcl_ls": "{\"schema\":\"gcl\",\"version\":1,\"gsid_dc\":{\"value\":{\"joinId\":\"fkVXNh7NaDyJNAfTQ_ryGzXgGQdKnCJbZA\",\"lastJoinedTimeMs\":1782795778710},\"expires\":1782796078710},\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"eopCount\":0,\"creationTimeMs\":1782795778715},\"expires\":1790571778715}}",
+    "persistedCoaBuilderStateByRealm": "{\"voljin-alpha:2\":{\"selectedClassId\":31,\"selectedSpecTabId\":91,\"allocatedTalents\":[]}}"
+  },
+  "sessionStorage": {
+    "sentryReplaySession": "{\"id\":\"2a0ad6f878384e6cb91714d42985a1c5\",\"started\":1782795896451,\"lastActivity\":1782795898032,\"segmentId\":0,\"sampled\":\"buffer\",\"dirty\":false}"
+  }
+}

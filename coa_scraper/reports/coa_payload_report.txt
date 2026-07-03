@@ -1,0 +1,39 @@
+===== CoA builder payload report =====
+Builder: Vol'Jin Alpha
+Slug: voljin-alpha
+ID: 39
+Max level: 60
+
+===== talents keys =====
+meta: object
+classes: array(21)
+entriesByTab: object
+essenceByClass: object
+
+===== classes =====
+12	Barbarian	Brutality#31, Headhunting#32, Ancestry#33, Class#87
+13	Witch Doctor	Shadowhunting#36, Voodoo#34, Brewing#35, Class#87
+14	Felsworn	Slayer#37, Infernal#38, Tyrant#18, Class#87
+15	Witch Hunter	Boltslinger#39, Houndmaster#40, Inquisition#41, Black Knight#94, Class#87, None#1
+16	Stormbringer	Lightning#42, Wind#43, Maelstrom#44, Class#87
+17	Knight of Xoroth	Hellfire#46, War#45, Defiance#47, Class#87
+18	Guardian	Vanguard#7, Inspiration#48, Gladiator#49, Class#87, None#1
+19	Templar	Zealot#50, Oathkeeper#16, Crusader#51, Class#87
+20	Bloodmage	Sanguine#26, Accursed#52, Eternal#53, Fleshweaver#93, Class#87
+21	Ranger	Brigand#55, Class#87, Farstrider#2, Archery#54
+22	Chronomancer	Infinite#56, Artificer#57, Class#87, Time#58, Blessings#71
+23	Necromancer	Animation#61, Class#87, Death#59, Rime#60
+24	Pyromancer	Draconic#63, Flameweaving#19, Incineration#62, Class#87, None#1
+25	Cultist	Corruption#65, Godblade#64, Heretic#66, Dreadnought#88, Class#87
+26	Starcaller	Moon Guard#67, Sentinel#69, Moon Priest#68, Warden#89, Class#87
+27	Sun Cleric	Seraphim#72, Piety#70, Valkyrie#90, Blessings#71, Class#87, None#1
+28	Tinker	Class#87, Mechanics#75, Invention#74, Demolition#73
+31	Primalist	Life#84, Geomancy#83, Primal#82, Mountain King#91, Class#87
+30	Reaper	Harvest#79, Soul#80, Domination#81, Class#87
+29	Venomancer	Vizier#92, Venom#76, Stalking#77, Fortitude#78, Class#87
+32	Runemaster	Runic#85, Arcane#11, Riftblade#86, Class#87
+
+===== sample talents.classes =====
+{"tabs":[{"tabId":31,"tabName":"Brutality","sortOrder":1},{"tabId":32,"tabName":"Headhunting","sortOrder":2},{"tabId":33,"tabName":"Ancestry","sortOrder":3},{"tabId":87,"tabName":"Class","sortOrder":0}],"classId":12,"className":"Barbarian"}
+{"tabs":[{"tabId":36,"tabName":"Shadowhunting","sortOrder":3},{"tabId":34,"tabName":"Voodoo","sortOrder":1},{"tabId":35,"tabName":"Brewing","sortOrder":2},{"tabId":87,"tabName":"Class","sortOrder":0}],"classId":13,"className":"Witch Doctor"}
+{"tabs":[{"tabId":37,"tabName":"Slayer","sortOrder":1},{"tabId":38,"tabName":"Infernal","sortOrder":2},{"tabId":18,"tabName":"Tyrant","sortOrder":3},{"tabId":87,"tabName":"Class","sortOrder":0}],"classId":14,"className":"Felsworn"}

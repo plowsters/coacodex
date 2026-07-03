@@ -1,0 +1,629 @@
+[
+  {
+    "classId": 12,
+    "className": "Barbarian",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 31,
+        "tabName": "Brutality",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 32,
+        "tabName": "Headhunting",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 33,
+        "tabName": "Ancestry",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 13,
+    "className": "Witch Doctor",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 34,
+        "tabName": "Voodoo",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 35,
+        "tabName": "Brewing",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 36,
+        "tabName": "Shadowhunting",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 14,
+    "className": "Felsworn",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 37,
+        "tabName": "Slayer",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 38,
+        "tabName": "Infernal",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 18,
+        "tabName": "Tyrant",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 15,
+    "className": "Witch Hunter",
+    "tabCount": 6,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 1,
+        "tabName": "None",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 39,
+        "tabName": "Boltslinger",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 40,
+        "tabName": "Houndmaster",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 94,
+        "tabName": "Black Knight",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 41,
+        "tabName": "Inquisition",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 16,
+    "className": "Stormbringer",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 42,
+        "tabName": "Lightning",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 43,
+        "tabName": "Wind",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 44,
+        "tabName": "Maelstrom",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 17,
+    "className": "Knight of Xoroth",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 46,
+        "tabName": "Hellfire",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 45,
+        "tabName": "War",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 47,
+        "tabName": "Defiance",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      }
+    ]
+  },
+  {
+    "classId": 18,
+    "className": "Guardian",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 1,
+        "tabName": "None",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 7,
+        "tabName": "Vanguard",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 48,
+        "tabName": "Inspiration",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 49,
+        "tabName": "Gladiator",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 19,
+    "className": "Templar",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 50,
+        "tabName": "Zealot",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 16,
+        "tabName": "Oathkeeper",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 51,
+        "tabName": "Crusader",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 20,
+    "className": "Bloodmage",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 26,
+        "tabName": "Sanguine",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 52,
+        "tabName": "Accursed",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 53,
+        "tabName": "Eternal",
+        "sortOrder": 3
+      },
+      {
+        "tabId": 93,
+        "tabName": "Fleshweaver",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 21,
+    "className": "Ranger",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 54,
+        "tabName": "Archery",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 55,
+        "tabName": "Brigand",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 2,
+        "tabName": "Farstrider",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 22,
+    "className": "Chronomancer",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 71,
+        "tabName": "Blessings",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 56,
+        "tabName": "Infinite",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 58,
+        "tabName": "Time",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 57,
+        "tabName": "Artificer",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 23,
+    "className": "Necromancer",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 59,
+        "tabName": "Death",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 60,
+        "tabName": "Rime",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 61,
+        "tabName": "Animation",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 24,
+    "className": "Pyromancer",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 1,
+        "tabName": "None",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 62,
+        "tabName": "Incineration",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 19,
+        "tabName": "Flameweaving",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 63,
+        "tabName": "Draconic",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 25,
+    "className": "Cultist",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 64,
+        "tabName": "Godblade",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 65,
+        "tabName": "Corruption",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 88,
+        "tabName": "Dreadnought",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 66,
+        "tabName": "Heretic",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 26,
+    "className": "Starcaller",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 67,
+        "tabName": "Moon Guard",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 69,
+        "tabName": "Sentinel",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 68,
+        "tabName": "Moon Priest",
+        "sortOrder": 3
+      },
+      {
+        "tabId": 89,
+        "tabName": "Warden",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 27,
+    "className": "Sun Cleric",
+    "tabCount": 6,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 1,
+        "tabName": "None",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 70,
+        "tabName": "Piety",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 90,
+        "tabName": "Valkyrie",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 71,
+        "tabName": "Blessings",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 72,
+        "tabName": "Seraphim",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 28,
+    "className": "Tinker",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 73,
+        "tabName": "Demolition",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 74,
+        "tabName": "Invention",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 75,
+        "tabName": "Mechanics",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 31,
+    "className": "Primalist",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 84,
+        "tabName": "Life",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 83,
+        "tabName": "Geomancy",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 82,
+        "tabName": "Primal",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 91,
+        "tabName": "Mountain King",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      }
+    ]
+  },
+  {
+    "classId": 30,
+    "className": "Reaper",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 79,
+        "tabName": "Harvest",
+        "sortOrder": 1
+      },
+      {
+        "tabId": 80,
+        "tabName": "Soul",
+        "sortOrder": 2
+      },
+      {
+        "tabId": 81,
+        "tabName": "Domination",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "classId": 29,
+    "className": "Venomancer",
+    "tabCount": 5,
+    "tabs": [
+      {
+        "tabId": 92,
+        "tabName": "Vizier",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 76,
+        "tabName": "Venom",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 77,
+        "tabName": "Stalking",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 78,
+        "tabName": "Fortitude",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      }
+    ]
+  },
+  {
+    "classId": 32,
+    "className": "Runemaster",
+    "tabCount": 4,
+    "tabs": [
+      {
+        "tabId": 85,
+        "tabName": "Runic",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 11,
+        "tabName": "Arcane",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 86,
+        "tabName": "Riftblade",
+        "sortOrder": 0
+      },
+      {
+        "tabId": 87,
+        "tabName": "Class",
+        "sortOrder": 0
+      }
+    ]
+  }
+]

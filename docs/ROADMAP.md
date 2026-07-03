@@ -1,0 +1,248 @@
+# Development Roadmap
+
+This roadmap defines production-sized phases. A phase is ready to ship only when every milestone in that phase is complete, documented, tested, and usable by a non-author through the public CLI, API, addon, or web interface for that phase.
+
+## Phase 1: Theorycrafting Meta Release
+
+Purpose: produce a production-usable theorycrafting tool that ranks projected builds and rotations from structured Ascension CoA builder data. This phase must prioritize the scraped/HAR-analyzed JSON and reports as the source of truth. It must not claim observed DPS or definitive live meta.
+
+Primary output: projected meta reports with legal top builds, rotation scaffolds, confidence labels, assumptions, and machine-readable JSON.
+
+### Milestone 1.1: Reproducible Builder Data Pipeline
+
+Requirements:
+
+- Convert `coa_scraper/` into a reproducible capture and extraction module.
+- Keep Playwright/HAR capture out of the optimizer.
+- Document the full command sequence from browser capture to `coa_entries.jsonl`.
+- Produce an artifact manifest for each capture with builder slug, builder id, max level, capture date, source URL, script versions, and checksum of each generated artifact.
+- Preserve raw payload data alongside normalized records.
+- Add schema drift checks for the Next Flight extraction and builder payload shape.
+
+Exit criteria:
+
+- A fresh capture can regenerate `coa_builder_payload.json`, `coa_classes.json`, `coa_entries.jsonl`, `coa_essence_caps.json`, and reports without manual edits.
+- Missing class, missing tab, and unknown essence-kind counts are explicitly reported.
+- A future agent can identify whether a change is from Ascension data drift or local parser changes.
+
+### Milestone 1.2: Versioned Normalized Domain Schema
+
+Requirements:
+
+- Define a JSON schema for normalized class, tab, node, essence cap, and payload provenance records.
+- Include required fields for build legality: `class_id`, `class_name`, `tab_id`, `tab_name`, `entry_id`, `spell_id`, `entry_type`, `essence_kind`, `ae_cost`, `te_cost`, `required_tab_ae`, `required_tab_te`, `required_level`, `max_rank`, `required_ids`, `connected_node_ids`, row/column, passive/start state, tags, damage schools, resources, and raw record.
+- Split inferred fields from source fields. Tags, damage schools, resources, coefficients, target caps, and role hints must record how they were inferred.
+- Add validation tests using the currently captured Vol'Jin Alpha data.
+
+Exit criteria:
+
+- The optimizer refuses invalid or unversioned normalized data unless explicitly run in an unsafe inspection mode.
+- Schema docs describe which fields are source-provided and which are inferred.
+
+### Milestone 1.3: Legal Build Engine
+
+Requirements:
+
+- Split build legality out of `coa_optimizer_extensible.py` into a dedicated package module.
+- Model AE/TE budgets, required level, required node IDs, tab AE/TE gates, free starting/passive closure, class-tab ownership, and rank spending.
+- Validate build legality against exported builder data and spot-checked builder UI examples.
+- Represent legal build state as serializable data, not CLI text.
+
+Exit criteria:
+
+- Given a selected build, the engine can explain why it is legal or list every failed rule.
+- Beam search and direct build validation use the same legality implementation.
+- Tests cover prerequisite failures, tab-gate failures, budget failures, zero-cost closure, and multi-rank spending.
+
+### Milestone 1.4: Theory Scoring Engine
+
+Requirements:
+
+- Replace hard-coded Stalker-only scoring with data-driven scoring profiles.
+- Add role and encounter profile templates: single-target DPS, 2-target cleave, 5-target AoE, solo, tank, healer/support.
+- Score source features separately: tab investment, role tags, damage schools, resources, explicit named synergies, inferred coefficients, cooldowns, DoTs, target count, summon/pet behavior, defensive value, and utility value.
+- Produce a projected DPS index, not raw DPS.
+- Produce confidence and uncertainty fields for every result.
+- Include score explanations so users can see why a node or build ranked highly.
+
+Exit criteria:
+
+- Every class/spec profile can be scored without custom code.
+- Stalker Venomancer can still have a curated profile, but that profile is data plus rules, not logic embedded in the optimizer.
+- Reports label results as "theorycraft projection" and print assumptions.
+
+### Milestone 1.5: Rotation and APL Scaffold Generator
+
+Requirements:
+
+- Model rotations as priority lists, following the SimulationCraft APL idea: check actions from top to bottom and execute the first action whose conditions are true.
+- Generate baseline APLs from ability features: maintain DoTs, use cooldowns, build resources or marks, avoid overcapping, spend at thresholds, respect execute windows, and branch for target count.
+- Keep APL generation separate from simulation. APLs should be serializable, inspectable, and editable.
+- Support SimC-like text export and JSON export.
+
+Exit criteria:
+
+- For every generated meta build, the report includes an APL scaffold.
+- Single-target and AoE APLs are generated independently.
+- APL output includes confidence notes when a condition was inferred from tooltip text rather than source fields.
+
+### Milestone 1.6: Meta Report Runner
+
+Requirements:
+
+- Add a `meta` command that runs all classes, all discovered spec tabs, and all supported encounter profiles.
+- Rank builds by projected DPS index and confidence.
+- Emit JSON, Markdown, and a static HTML report.
+- Include top builds, selected nodes, projected score breakdown, APL, assumptions, data provenance, and warnings.
+- Separate "spec ranking" from "build ranking" so the tool can show the best build per spec and also class-wide top builds.
+
+Exit criteria:
+
+- A single command can generate a complete theorycraft meta report from `coa_entries.jsonl`.
+- Reports make it impossible to confuse theorycraft index with observed DPS.
+
+### Milestone 1.7: Packaging, CLI, and Tests
+
+Requirements:
+
+- Split the Python prototype into an installable package.
+- Keep CLI commands thin. The library should own business logic.
+- Add unit tests for schema loading, legality, scoring, APL generation, and report output.
+- Add fixture data from a small subset of current normalized records.
+- Add a smoke test that runs the full Phase 1 pipeline against the current captured dist.
+
+Exit criteria:
+
+- `python -m coa_meta meta ...` or equivalent runs the release path.
+- Tests pass without requiring browser automation.
+- Browser capture tests are separate and can be skipped when Chromium is unavailable.
+
+## Phase 2: Data-Driven Calibration Release
+
+Purpose: make the tool learn from real combat data. Phase 2 uses combat logs and addon snapshots to calibrate the Phase 1 theorycraft model. It still should not require a full simulator, but it should correct weights, proc assumptions, uptime assumptions, and target-count behavior from evidence.
+
+Primary output: data-calibrated meta reports labeled by data source, sample size, encounter type, build version, gear/stat profile, and confidence.
+
+### Milestone 2.1: Addon Data Collection v1
+
+Requirements:
+
+- Expand `CoADataLogger/` into a supported addon module.
+- Capture sessions with player, realm, timestamp, level, current build identifier if available, selected talents if exposed by the client, gear links, base/effective stats, combat ratings, AP/RAP/SP/crit, and combat events.
+- Capture player pets and guardians when they can be reliably attributed to the player.
+- Add event sampling controls and session labels so users can run repeatable target dummy tests.
+- Document install, commands, SavedVariables path, and privacy considerations.
+
+Exit criteria:
+
+- A user can capture one labeled fight, reload/logout, and produce a parseable SavedVariables export.
+- The exported data can be mapped to Phase 1 normalized spells by spell ID or normalized spell name.
+
+### Milestone 2.2: Combat Log and SavedVariables Ingestion
+
+Requirements:
+
+- Split log parsing into dedicated adapters.
+- Parse `WoWCombatLog.txt` and addon JSON/SavedVariables exports into a common event schema.
+- Segment fights by combat boundaries, target dummy labels, boss encounters, or manual session labels.
+- Normalize spell names, spell IDs, source GUIDs, pet ownership, damage events, aura applications/removals, misses, interrupts, absorbs, crits, periodic ticks, and resource events when present.
+- Preserve raw event references for auditability.
+
+Exit criteria:
+
+- The same analysis code can consume built-in combat logs and addon exports.
+- Parser output has tests for spell damage, periodic damage, swings, misses, aura events, and pet attribution.
+
+### Milestone 2.3: Empirical Metrics Store
+
+Requirements:
+
+- Add a local data store for parsed fights, actor snapshots, spell summaries, build selections, and provenance.
+- Track data by CoA builder version, capture date, class, spec/tab, selected build, gear/stat profile, encounter label, target count, and source type.
+- Support import, deduplication, and re-analysis.
+- Keep personally identifying data optional or redacted.
+
+Exit criteria:
+
+- Multiple logs can be imported without overwriting each other.
+- Reports can filter by class, spec, encounter, player, target count, and date.
+
+### Milestone 2.4: Calibration Engine
+
+Requirements:
+
+- Calibrate Phase 1 theory features from observed logs: spell damage share, cast frequency, crit rate, DoT uptime, tick interval, proc rate, target hits, resource starvation, cooldown usage, and dead-time.
+- Distinguish model corrections from player execution quality.
+- Produce per-spell and per-build confidence scores based on sample size and variance.
+- Keep calibration additive: theorycraft results still work when no data is available.
+
+Exit criteria:
+
+- A build scored with logs shows which theory assumptions were corrected by evidence.
+- The tool can explain when a result is data-poor rather than silently overfitting.
+
+### Milestone 2.5: Data-Driven Meta Reports
+
+Requirements:
+
+- Extend the `meta` command to support `--source theory`, `--source logs`, and `--source blended`.
+- Generate rankings stratified by encounter type, target count, fight duration bucket, gear/stat band, and player execution quality.
+- Include sample size, median, mean, variance, confidence interval or equivalent uncertainty, and outlier handling notes.
+- Keep theory, simulation, and empirical rankings visually and semantically distinct.
+
+Exit criteria:
+
+- The user can generate a data-driven Stalker Venomancer report from local logs.
+- The same report format can later scale to all classes and specs.
+
+## Phase 3: Event-Driven Simulator Release
+
+Purpose: add a deterministic and Monte Carlo-capable simulator for projected DPS numbers. This phase should model mechanics directly instead of relying only on tooltip heuristics or logs.
+
+Milestones:
+
+- Ability parser for coefficients, flat damage, weapon damage, duration, tick interval, cooldown, cost, cast time, charges, target caps, and proc text.
+- Combat state engine for time, GCD, cooldowns, resources, buffs, debuffs, DoT ticks, pets, target count, movement assumptions, and encounter events.
+- APL interpreter compatible with Phase 1 generated APL JSON and SimC-like text output.
+- Repeated simulation iterations with variance reporting.
+- Rotation search that mutates priorities, thresholds, cooldown alignment, and opener rules.
+- Calibration bridge that uses Phase 2 data to correct tooltip-derived assumptions.
+
+Exit criteria:
+
+- Reports can emit simulated DPS under stated gear/stat and encounter assumptions.
+- Simulated DPS remains labeled separately from empirical DPS.
+
+## Phase 4: Web Product and Workflow Release
+
+Purpose: provide a usable UI for browsing data, running reports, comparing builds, importing logs, and sharing outputs.
+
+Milestones:
+
+- Web frontend for class/spec exploration, build graph inspection, APL display, and meta reports.
+- Backend API for normalized data, legal build validation, meta runs, imports, and report retrieval.
+- Build import/export support for Ascension builder links if the format can be extracted.
+- Static report publishing for shareable theorycraft and data-driven reports.
+- User workflow docs for "I have only followed guides" use cases.
+
+Exit criteria:
+
+- A non-developer can inspect Stalker Venomancer, compare single-target versus AoE builds, and understand why the tool recommends each build.
+
+## Phase 5: Community Meta Operations Release
+
+Purpose: make the project sustainable as CoA data changes and community logs grow.
+
+Milestones:
+
+- Scheduled capture jobs or documented manual recapture process for each Ascension builder update.
+- Regression dashboard for schema drift, class counts, missing fields, and score shifts.
+- Community log import workflow with consent and anonymization.
+- Versioned release notes for model changes and data changes.
+- Reviewer workflow for curated spec profiles and APL corrections.
+
+Exit criteria:
+
+- New builder data can be ingested without breaking historical reports.
+- Meta shifts can be traced to data changes, model changes, or empirical evidence.
+

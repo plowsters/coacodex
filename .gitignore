@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Python cache / envs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local env files
+.env
+.env.*
+
+# Large/generated scraper artifacts
+coa_scraper/coa_capture_report.txt
+coa_scraper/rg_report.txt
+coa_scraper/rg
+coa_scraper/data/raw/
+
+# Usually do not commit HAR captures unless you intentionally need them
+*.har
+
+# Usually do not commit generated archives
+*.zip
