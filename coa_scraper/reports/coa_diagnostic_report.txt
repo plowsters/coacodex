@@ -1,30 +1,34 @@
 ===== CoA capture diagnostic report =====
-Generated: 2026-06-29T22:14:27-07:00
+Generated: 2026-07-03T11:20:03-07:00
 Root: data
 
 ===== File inventory summary =====
 SIZE         PATH
 13.4M        data/coa.har
-11.4M        data/snapshots/initial-page-content.html
+11.5M        data/snapshots/initial-page-content.html
 11.4M        data/snapshots/final-page-content.html
 11.2M        data/raw/200_ascension.gg_en_v2_coa-builder_voljin-alpha.html
 5.6M         data/raw/ascension.gg_icon_coa-builder-icon.webp
 5.6M         data/raw/200_ascension.gg_icon_coa-builder-icon.webp.body
 5.6M         data/raw/200_ascension.gg_icon_coa-builder-icon.webp
-763.1K       data/snapshots/runtime-dump.json
-566.1K       data/raw/200_www.googletagmanager.com_gtag_js_id_G-4RBG93QXQ4.js
+763.2K       data/snapshots/runtime-dump.json
+570.9K       data/raw/200_www.googletagmanager.com_gtag_js_id_G-4RBG93QXQ4.js
+414.3K       data/raw/200_ascension.gg__next_static_chunks_32ojjlri4xwxn.js.js
 414.2K       data/raw/ascension.gg__next_static_chunks_0n0xo6yohv0xr.js
 414.2K       data/raw/200_ascension.gg__next_static_chunks_0n0xo6yohv0xr.js.js
+397.1K       data/raw/200_ascension.gg__next_static_chunks_1paf431u6e3pu.js.js
 397.0K       data/raw/ascension.gg__next_static_chunks_26b_kzjl-l6fr.js
 397.0K       data/raw/200_ascension.gg__next_static_chunks_26b_kzjl-l6fr.js.js
 372.4K       data/raw/200_connect.facebook.net_en_US_fbevents.js.js
 324.1K       data/raw/ascension.gg__next_static_chunks_0-badhl2-vz8q.css
 324.1K       data/raw/200_ascension.gg__next_static_chunks_0-badhl2-vz8q.css.css
 324.1K       data/raw/200_ascension.gg__next_static_chunks_0-badhl2-vz8q.css.body
+233.4K       data/raw/200_connect.facebook.net_signals_config_774178333691332_v_2.9.349_r_stable_domain_ascension.gg_hme_f29d86973612db0f0627890a64bdc8c47b471189050b33f2680b7d76997afc9a_ex_m_107_2C208_2C158_2C22_2C73_2C74_2C149_2C69_2C68_2C11_2C1.js
 230.4K       data/raw/200_connect.facebook.net_signals_config_774178333691332_v_2.9.347_r_stable_domain_ascension.gg_hme_f29d86973612db0f0627890a64bdc8c47b471189050b33f2680b7d76997afc9a_ex_m_107_2C208_2C158_2C22_2C73_2C74_2C149_2C69_2C68_2C11_2C1.js
 220.9K       data/raw/ascension.gg__next_static_chunks_14lktf2j72ks5.css
 220.9K       data/raw/200_ascension.gg__next_static_chunks_14lktf2j72ks5.css.css
 220.9K       data/raw/200_ascension.gg__next_static_chunks_14lktf2j72ks5.css.body
+216.4K       data/raw/200_ascension.gg__next_static_chunks_0xb4p8kw0630u.js.js
 216.4K       data/raw/ascension.gg__next_static_chunks_417e8dy2uio8e.js
 216.4K       data/raw/200_ascension.gg__next_static_chunks_417e8dy2uio8e.js.js
 200.7K       data/raw/ascension.gg__next_static_chunks_1riwr86-d4ji_.js
@@ -32,11 +36,13 @@ SIZE         PATH
 182.2K       data/raw/ascension.gg__next_static_chunks_2pye45xd2v3jy.css
 182.2K       data/raw/200_ascension.gg__next_static_chunks_2pye45xd2v3jy.css.css
 182.2K       data/raw/200_ascension.gg__next_static_chunks_2pye45xd2v3jy.css.body
+172.3K       data/raw/200_ascension.gg__next_static_chunks_3mjidvcp8_t-t.js.js
 171.8K       data/raw/ascension.gg__next_static_chunks_0jckz0avlcsmf.js
 171.8K       data/raw/200_ascension.gg__next_static_chunks_0jckz0avlcsmf.js.js
 162.5K       data/raw/ascension.gg__next_static_chunks_03t3t24982pwp.css
 162.5K       data/raw/200_ascension.gg__next_static_chunks_03t3t24982pwp.css.css
 162.5K       data/raw/200_ascension.gg__next_static_chunks_03t3t24982pwp.css.body
+149.3K       data/raw/200_browser.sentry-cdn.com_10.63.0_replay.min.js.js
 149.3K       data/raw/200_browser.sentry-cdn.com_10.62.0_replay.min.js.js
 101.3K       data/raw/ascension.gg__next_static_chunks_2imss0c9ru3as.js
 101.3K       data/raw/200_ascension.gg__next_static_chunks_2imss0c9ru3as.js.js
@@ -44,6 +50,7 @@ SIZE         PATH
 80.8K        data/raw/200_ascension.gg__next_static_chunks_0iqtocl_hfsyo.js.js
 76.9K        data/raw/ascension.gg__next_static_chunks_02lmnzkkt79rp.js
 76.9K        data/raw/200_ascension.gg__next_static_chunks_02lmnzkkt79rp.js.js
+72.9K        data/raw/200_ascension.gg__next_static_chunks_0s9n-7w-8okeb.js.js
 72.5K        data/raw/ascension.gg__next_static_chunks_127mfj9bkobo8.js
 72.5K        data/raw/200_ascension.gg__next_static_chunks_127mfj9bkobo8.js.js
 65.9K        data/raw/ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fsuncleric.webp_w_1920_q_75
@@ -58,8 +65,10 @@ SIZE         PATH
 60.3K        data/raw/200_ascension.gg__next_static_chunks_0g--focqz8333.js.js
 53.8K        data/raw/ascension.gg__next_static_chunks_2lideha_3gtfl.js
 53.8K        data/raw/200_ascension.gg__next_static_chunks_2lideha_3gtfl.js.js
+53.8K        data/raw/200_ascension.gg__next_static_chunks_2kzp11e-hgsxx.js.js
 51.5K        data/raw/ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js
 51.5K        data/raw/200_ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js.js
+51.5K        data/raw/200_ascension.gg__next_static_chunks_0ors_-_vptsa9.js.js
 48.0K        data/raw/ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fpyromancer.webp_w_1920_q_75
 48.0K        data/raw/200_ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fpyromancer.webp_w_1920_q_75.body
 48.0K        data/raw/200_ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fpyromancer.webp_w_1920_q_75
@@ -74,12 +83,3 @@ SIZE         PATH
 43.0K        data/raw/200_ascension.gg__next_static_chunks_3_v1w4jujbc_s.js.js
 39.0K        data/raw/ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fchronomancer.webp_w_1920_q_75
 39.0K        data/raw/200_ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fchronomancer.webp_w_1920_q_75.body
-39.0K        data/raw/200_ascension.gg__next_image_url_2Ftextures_2Fcoa_2Ftrees_2Fchronomancer.webp_w_1920_q_75
-38.4K        data/raw/ascension.gg__next_static_chunks_3jl2l73eu0_rn.js
-38.4K        data/raw/200_ascension.gg__next_static_chunks_3jl2l73eu0_rn.js.js
-37.9K        data/raw/ascension.gg__next_static_chunks_1x4y7uwp664b4.js
-37.9K        data/raw/200_ascension.gg__next_static_chunks_1x4y7uwp664b4.js.js
-37.3K        data/raw/ascension.gg__next_static_chunks_0pg5a13mqmojt.js
-37.3K        data/raw/200_ascension.gg__next_static_chunks_0pg5a13mqmojt.js.js
-35.7K        data/raw/ascension.gg__next_static_media_Beaufort_Italic-s.p.26ccpec1k96dq.woff2
-35.7K        data/raw/200_ascension.gg__next_static_media_Beaufort_Italic-s.p.26ccpec1k96dq.woff2.body

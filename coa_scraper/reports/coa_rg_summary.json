@@ -1,7 +1,293 @@
 [
   {
+    "file": "dist/coa_entries.pretty.json",
+    "count": 29477,
+    "samples": [
+      {
+        "line": 52,
+        "text": "\"tabId\": 7,"
+      },
+      {
+        "line": 53,
+        "text": "\"aeCost\": 0,"
+      },
+      {
+        "line": 54,
+        "text": "\"teCost\": 1,"
+      },
+      {
+        "line": 55,
+        "text": "\"classId\": 18,"
+      },
+      {
+        "line": 59,
+        "text": "\"reqTabAE\": 0,"
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_builder_payload.json",
+    "count": 29243,
+    "samples": [
+      {
+        "line": 8,
+        "text": "\"runtimeBuildProcess\": \"api/v3 builder CoA parser\","
+      },
+      {
+        "line": 15,
+        "text": "\"tabId\": 31,"
+      },
+      {
+        "line": 16,
+        "text": "\"tabName\": \"Brutality\","
+      },
+      {
+        "line": 20,
+        "text": "\"tabId\": 32,"
+      },
+      {
+        "line": 21,
+        "text": "\"tabName\": \"Headhunting\","
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_payload_shape.json",
+    "count": 5193,
+    "samples": [
+      {
+        "line": 11,
+        "text": "\"entriesByTab\": \"object\","
+      },
+      {
+        "line": 12,
+        "text": "\"essenceByClass\": \"object\""
+      },
+      {
+        "line": 15,
+        "text": "\"entriesByTabCount\": 91,"
+      },
+      {
+        "line": 16,
+        "text": "\"essenceByClass\": {"
+      },
+      {
+        "line": 104,
+        "text": "\"tabId\": null,"
+      }
+    ]
+  },
+  {
+    "file": "dist/coa_entries.jsonl",
+    "count": 3612,
+    "samples": [
+      {
+        "line": 1,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":7,\"tab_name\":\"Vanguard\",\"tab_sort_order\":1,\"entry_type\":\"Talent\",\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29213,\"spell_id\":705346,\"spell_ids\":[705346],\"name"
+      },
+      {
+        "line": 2,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":7,\"tab_name\":\"Vanguard\",\"tab_sort_order\":1,\"entry_type\":\"Talent\",\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29219,\"spell_id\":582933,\"spell_ids\":[582933],\"name"
+      },
+      {
+        "line": 3,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":7,\"tab_name\":\"Vanguard\",\"tab_sort_order\":1,\"entry_type\":\"Talent\",\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29220,\"spell_id\":503837,\"spell_ids\":[503837],\"name"
+      },
+      {
+        "line": 4,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":7,\"tab_name\":\"Vanguard\",\"tab_sort_order\":1,\"entry_type\":\"Ability\",\"essence_kind\":\"ability\",\"essence_type\":\"abilityEssence\",\"entry_id\":12710,\"spell_id\":707621,\"spell_ids\":[707621],\"n"
+      },
+      {
+        "line": 5,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":7,\"tab_name\":\"Vanguard\",\"tab_sort_order\":1,\"entry_type\":\"Talent\",\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":19218,\"spell_id\":582937,\"spell_ids\":[582937],\"name"
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_payload_shape_report.txt",
+    "count": 1005,
+    "samples": [
+      {
+        "line": 8,
+        "text": "entriesByTab: object"
+      },
+      {
+        "line": 9,
+        "text": "essenceByClass: object"
+      },
+      {
+        "line": 29,
+        "text": "29 Venomancer {\"maxTalentEssence\":25,\"maxAbilityEssence\":26}"
+      },
+      {
+        "line": 34,
+        "text": "===== entriesByTab summary ====="
+      },
+      {
+        "line": 39,
+        "text": "aeCost: 38"
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_builder_summary.json",
+    "count": 237,
+    "samples": [
+      {
+        "line": 7,
+        "text": "\"runtimeBuildProcess\": \"api/v3 builder CoA parser\","
+      },
+      {
+        "line": 13,
+        "text": "\"entriesByTab\": \"object\","
+      },
+      {
+        "line": 14,
+        "text": "\"essenceByClass\": \"object\""
+      },
+      {
+        "line": 19,
+        "text": "\"classId\": 12,"
+      },
+      {
+        "line": 20,
+        "text": "\"className\": \"Barbarian\","
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_classes.json",
+    "count": 234,
+    "samples": [
+      {
+        "line": 3,
+        "text": "\"classId\": 12,"
+      },
+      {
+        "line": 4,
+        "text": "\"className\": \"Barbarian\","
+      },
+      {
+        "line": 8,
+        "text": "\"tabId\": 87,"
+      },
+      {
+        "line": 9,
+        "text": "\"tabName\": \"Class\","
+      },
+      {
+        "line": 13,
+        "text": "\"tabId\": 31,"
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_counts_by_class_tab_kind.txt",
+    "count": 201,
+    "samples": [
+      {
+        "line": 3062,
+        "text": "Venomancer Class ability"
+      },
+      {
+        "line": 3063,
+        "text": "Venomancer Class ability"
+      },
+      {
+        "line": 3064,
+        "text": "Venomancer Class ability"
+      },
+      {
+        "line": 3065,
+        "text": "Venomancer Class ability"
+      },
+      {
+        "line": 3066,
+        "text": "Venomancer Class ability"
+      }
+    ]
+  },
+  {
+    "file": "dist/coa_class_profile_input.json",
+    "count": 76,
+    "samples": [
+      {
+        "line": 9247,
+        "text": "\"name\": \"Demonic Fortitude\","
+      },
+      {
+        "line": 33449,
+        "text": "\"description_text\": \"Doubles the healing done to you by Testament of Fortitude and Testament of Faith .\""
+      },
+      {
+        "line": 33677,
+        "text": "\"name\": \"Testament of Fortitude\","
+      },
+      {
+        "line": 39329,
+        "text": "\"name\": \"Venom-Coated Seeds\","
+      },
+      {
+        "line": 74838,
+        "text": "\"class_name\": \"Venomancer\","
+      }
+    ]
+  },
+  {
+    "file": "reports/rendered_node_labels.json",
+    "count": 46,
+    "samples": [
+      {
+        "line": 2,
+        "text": "\"Bearskin. requires 9 Ability Essence in class tree; requires one connected node: Stone Cold\","
+      },
+      {
+        "line": 3,
+        "text": "\"Bestial Wrath. requires 8 Talent Essence in spec tree; requires one connected node: Sharpened Claws or Bloody Claws or Spinebreaker or 1 more\","
+      },
+      {
+        "line": 6,
+        "text": "\"Bring Me Their Bones. requires 8 Talent Essence in spec tree; requires one connected node: Raptor Talons or Torn to Shreds\","
+      },
+      {
+        "line": 7,
+        "text": "\"Dreamslip. requires 9 Ability Essence in class tree; requires one connected node: Nature's Call\","
+      },
+      {
+        "line": 8,
+        "text": "\"Earthmother's Blessing. requires 24 Ability Essence in class tree; requires one connected node: Mineralization or Natural Efficiency\","
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_normalized_sample_report.txt",
+    "count": 29,
+    "samples": [
+      {
+        "line": 2,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":null,\"tab_name\":null,\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29213,\"spell_id\":705346,\"name\":\"Forceful Impact\",\"icon\":\"Interface\\\\icons\\\\novart_passivemaste"
+      },
+      {
+        "line": 3,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":null,\"tab_name\":null,\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29219,\"spell_id\":582933,\"name\":\"Valiant Defender\",\"icon\":\"Interface\\\\Icons\\\\Spell_Holy_DivineI"
+      },
+      {
+        "line": 4,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":null,\"tab_name\":null,\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":29220,\"spell_id\":503837,\"name\":\"Unscuffable\",\"icon\":\"Interface\\\\Icons\\\\creatureportrait_blackr"
+      },
+      {
+        "line": 5,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":null,\"tab_name\":null,\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":12710,\"spell_id\":707621,\"name\":\"High Guard\",\"icon\":\"Interface\\\\icons\\\\custom_Warriorskill_03_B"
+      },
+      {
+        "line": 6,
+        "text": "{\"build_id\":39,\"build_slug\":\"voljin-alpha\",\"build_name\":\"Vol'Jin Alpha\",\"class_id\":18,\"class_name\":\"Guardian\",\"tab_id\":null,\"tab_name\":null,\"essence_kind\":\"talent\",\"essence_type\":\"talentEssence\",\"entry_id\":19218,\"spell_id\":582937,\"name\":\"Valiant Knight\",\"icon\":\"Interface\\\\Icons\\\\5_archerskill48_Bord"
+      }
+    ]
+  },
+  {
     "file": "data/snapshots/runtime-dump.json",
-    "count": 4,
+    "count": 14,
     "samples": [
       {
         "line": 268,
@@ -12,12 +298,148 @@
         "text": "\"textStart\": \"self.__next_f.push([1,\\\"17:I[343828,[\\\\\\\"/_next/static/chunks/056pv8qydwanf.js\\\\\\\",\\\\\\\"/_next/static/chunks/3ds1b-shmuee1.js\\\\\\\",\\\\\\\"/_next/static/chunks/3jl2l73eu0_rn.js\\\\\\\",\\\\\\\"/_next/static/chunks/38mdgat8cy0cq.js\\\\\\\",\\\\\\\"/_next/static/chunks/2rsfwd2bz9948.js\\\\\\\",\\\\\\\"/_next/static/c"
       },
       {
-        "line": 2347,
-        "text": "\"textStart\": \"self.__next_f.push([1,\\\"5:[\\\\\\\"$\\\\\\\",\\\\\\\"$L32\\\\\\\",null,{\\\\\\\"value\\\\\\\":[{\\\\\\\"id\\\\\\\":39,\\\\\\\"slug\\\\\\\":\\\\\\\"voljin-alpha\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"Vol'Jin Alpha\\\\\\\",\\\\\\\"max_level\\\\\\\":60,\\\\\\\"talents\\\\\\\":{\\\\\\\"meta\\\\\\\":{\\\\\\\"runtimeBuildProcess\\\\\\\":\\\\\\\"api/v3 builder CoA parser\\\\\\\",\\\\\\\"runtimeDescri"
+        "line": 1108,
+        "text": "\"textStart\": \"self.__next_f.push([1,\\\"em-number\\\\\\\"\\\\u003e%\\\\u003c/span\\\\u003e, and giving periodic damage dealt a \\\\u003cspan class=\\\\\\\"item-number\\\\\\\"\\\\u003e5\\\\u003c/span\\\\u003e\\\\u003cspan class=\\\\\\\"item-number\\\\\\\"\\\\u003e%\\\\u003c/span\\\\u003e chance to restore \\\\u003cspan class=\\\\\\\"item-number\\\\\\\"\\"
       },
       {
-        "line": 2354,
-        "text": "\"textStart\": \"self.__next_f.push([1,\\\"18c:I[64807,[\\\\\\\"/_next/static/chunks/056pv8qydwanf.js\\\\\\\",\\\\\\\"/_next/static/chunks/3ds1b-shmuee1.js\\\\\\\",\\\\\\\"/_next/static/chunks/3jl2l73eu0_rn.js\\\\\\\",\\\\\\\"/_next/static/chunks/38mdgat8cy0cq.js\\\\\\\",\\\\\\\"/_next/static/chunks/2rsfwd2bz9948.js\\\\\\\",\\\\\\\"/_next/static/c"
+        "line": 1115,
+        "text": "\"textStart\": \"self.__next_f.push([1,\\\"Augments \\\\u003cspan style=\\\\\\\"color: #ffffff; display: inline\\\\\\\"\\\\u003eSpider Form\\\\u003c/span\\\\u003e into a \\\\u003cspan style=\\\\\\\"color: #ffffff; display: inline\\\\\\\"\\\\u003eSerpent Lord\\\\u003c/span\\\\u003e, giving some of your Spider Form abilities a \\\\u003cspa"
+      },
+      {
+        "line": 1129,
+        "text": "\"textStart\": \"self.__next_f.push([1,\\\"Augments \\\\u003cspan style=\\\\\\\"color: #ffffff; display: inline\\\\\\\"\\\\u003eSpider Form\\\\u003c/span\\\\u003e into a \\\\u003cspan style=\\\\\\\"color: #ffffff; display: inline\\\\\\\"\\\\u003eSerpent Lord\\\\u003c/span\\\\u003e, giving some of your Spider Form abilities a \\\\u003cspa"
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_payload_report.txt",
+    "count": 6,
+    "samples": [
+      {
+        "line": 10,
+        "text": "entriesByTab: object"
+      },
+      {
+        "line": 11,
+        "text": "essenceByClass: object"
+      },
+      {
+        "line": 33,
+        "text": "29 Venomancer Vizier#92, Venom#76, Stalking#77, Fortitude#78, Class#87"
+      },
+      {
+        "line": 37,
+        "text": "{\"tabs\":[{\"tabId\":31,\"tabName\":\"Brutality\",\"sortOrder\":1},{\"tabId\":32,\"tabName\":\"Headhunting\",\"sortOrder\":2},{\"tabId\":33,\"tabName\":\"Ancestry\",\"sortOrder\":3},{\"tabId\":87,\"tabName\":\"Class\",\"sortOrder\":0}],\"classId\":12,\"className\":\"Barbarian\"}"
+      },
+      {
+        "line": 38,
+        "text": "{\"tabs\":[{\"tabId\":36,\"tabName\":\"Shadowhunting\",\"sortOrder\":3},{\"tabId\":34,\"tabName\":\"Voodoo\",\"sortOrder\":1},{\"tabId\":35,\"tabName\":\"Brewing\",\"sortOrder\":2},{\"tabId\":87,\"tabName\":\"Class\",\"sortOrder\":0}],\"classId\":13,\"className\":\"Witch Doctor\"}"
+      }
+    ]
+  },
+  {
+    "file": "dist/coa_classes.json",
+    "count": 5,
+    "samples": [
+      {
+        "line": 716,
+        "text": "\"class_name\": \"Venomancer\","
+      },
+      {
+        "line": 726,
+        "text": "\"tab_name\": \"Fortitude\","
+      },
+      {
+        "line": 732,
+        "text": "\"tab_name\": \"Stalking\","
+      },
+      {
+        "line": 738,
+        "text": "\"tab_name\": \"Venom\","
+      },
+      {
+        "line": 744,
+        "text": "\"tab_name\": \"Vizier\","
+      }
+    ]
+  },
+  {
+    "file": "reports/coa_normalization_report.txt",
+    "count": 5,
+    "samples": [
+      {
+        "line": 177,
+        "text": "Venomancer"
+      },
+      {
+        "line": 181,
+        "text": "76:Venom: 39"
+      },
+      {
+        "line": 182,
+        "text": "77:Stalking: 42"
+      },
+      {
+        "line": 183,
+        "text": "78:Fortitude: 43"
+      },
+      {
+        "line": 185,
+        "text": "92:Vizier: 40"
+      }
+    ]
+  },
+  {
+    "file": "reports/next_flight_stream.txt",
+    "count": 5,
+    "samples": [
+      {
+        "line": 20,
+        "text": "0:{\"P\":null,\"c\":[\"\",\"en\",\"v2\",\"coa-builder\",\"voljin-alpha\"],\"q\":\"\",\"i\":false,\"f\":[[[\"\",{\"children\":[[\"lang\",\"en\",\"d\",null],{\"children\":[\"v2\",{\"children\":[\"coa-builder\",{\"children\":[[\"slug\",\"voljin-alpha\",\"d\",null],{\"children\":[\"__PAGE__\",{}]}]}]}]},\"$undefined\",\"$undefined\",16]}],[[\"$\",\"$1\",\"c\",{\"ch"
+      },
+      {
+        "line": 32,
+        "text": "14:T490,{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"@id\":\"https://ascension.gg/#organization\",\"name\":\"Ascension\",\"alternateName\":\"Project Ascension\",\"description\":\"Project Ascension is the #1 Classless Game. Create your Own Class with any Abilities and Talents and play through the best "
+      },
+      {
+        "line": 34,
+        "text": "16:[\"$\",\"$L19\",null,{\"formats\":\"$undefined\",\"locale\":\"en\",\"messages\":{\"common\":{\"error\":{\"error_cmn_1\":\"Something went wrong. Please try again.\",\"error_email_1\":\"Please specify a valid email address.\",\"form_errors\":{\"invalid_email\":\"Invalid email address.\",\"invalid_password\":\"Your password must be i"
+      },
+      {
+        "line": 60,
+        "text": "33:T5c1,Blocking an attack grants you a stack of <span style=\"color: #ffffff; display: inline\">Paragon</span> for <span class=\"item-number\">10</span> seconds. Can only occur once every <span class=\"item-number\">0.5</span> sec.<br /><br />At <span class=\"item-number\">10</span> stacks, your <span styl"
+      },
+      {
+        "line": 62,
+        "text": "18b:[\"$\",\"$L1f\",null,{\"value\":\"$1a:props:children:props:children:props:children:props:children:props:value\",\"slug\":\"voljin-alpha\",\"children\":[\"$\",\"div\",null,{\"className\":\"text-foreground mx-auto mb-10 mt-36 w-full max-w-[96rem] px-4 md:mt-32 2xl:max-w-none\",\"children\":[[[\"$\",\"script\",\"0\",{\"type\":\"ap"
+      }
+    ]
+  },
+  {
+    "file": "data/snapshots/initial-page-content.html",
+    "count": 2,
+    "samples": [
+      {
+        "line": 723,
+        "text": "</style><!--$--><!--/$--><nav id=\"navbar\" class=\"fixed top-0 w-full z-10\" data-aria-hidden=\"true\" aria-hidden=\"true\"><div class=\"bg-secondary h-16 shadow-[0_1px_0_0_#525252]\"><div class=\"flex flex-col h-full width-before-scroll-bar\"><div class=\"flex h-full w-full p-1 items-center justify-center lg:j"
+      },
+      {
+        "line": 761,
+        "text": "</script><div data-state=\"open\" class=\"fixed inset-0 z-50 pb-32 pt-6 lg:pb-24 bg-black/30 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 overflow-y-scroll overflow-x-hidden max-h-screen grid place-items-center\" style=\"pointer-e"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_34rp9cr_-el7e.css.css",
+    "count": 2,
+    "samples": [
+      {
+        "line": 2,
+        "text": "@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;src:url(../media/2c55a0e60120577a-s.0-dom-5bn10r2.woff2)format(\"woff2\");unicode-range:U+460-52F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F}@font-face{font-family:Inter;font-style:normal;font-weight:100 9"
+      },
+      {
+        "line": 3,
+        "text": "@font-face{font-family:beaufort;src:url(../media/Beaufort_Regular-s.p.1--zb66b6_b-z.woff2)format(\"woff2\");font-display:swap;font-weight:400;font-style:normal}@font-face{font-family:beaufort;src:url(../media/Beaufort_Italic-s.p.26ccpec1k96dq.woff2)format(\"woff2\");font-display:swap;font-weight:400;fon"
       }
     ]
   },
@@ -50,41 +472,17 @@
     ]
   },
   {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_34rp9cr_-el7e.css.css",
-    "count": 2,
-    "samples": [
-      {
-        "line": 2,
-        "text": "@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;src:url(../media/2c55a0e60120577a-s.0-dom-5bn10r2.woff2)format(\"woff2\");unicode-range:U+460-52F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F}@font-face{font-family:Inter;font-style:normal;font-weight:100 9"
-      },
-      {
-        "line": 3,
-        "text": "@font-face{font-family:beaufort;src:url(../media/Beaufort_Regular-s.p.1--zb66b6_b-z.woff2)format(\"woff2\");font-display:swap;font-weight:400;font-style:normal}@font-face{font-family:beaufort;src:url(../media/Beaufort_Italic-s.p.26ccpec1k96dq.woff2)format(\"woff2\");font-display:swap;font-weight:400;fon"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_2rsfwd2bz9948.js",
+    "file": "reports/coa_class_profile_summary.json",
     "count": 1,
     "samples": [
       {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,639372,180046,e=>{\"use strict\";let t,r,n={get url(){return`file://${e.P(\"node_modules/jotai/esm/vanilla/internals.mjs\")}`}};try{var a=\"u\">typeof window?window:e.g;a._sentryModuleMetadata=a"
+        "line": 1754,
+        "text": "\"class_name\": \"Venomancer\","
       }
     ]
   },
   {
-    "file": "data/raw/ascension.gg__next_static_chunks_3jl2l73eu0_rn.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,474324,e=>{\"use strict\";var t=e.i(120786),a=e.i(92808),n=e.i(233027),r=e.i(843476),s=e.i(975157);e.i(732832);var o=e.i(872395),i=e.i(550526);try{var l=window;l._sentryModuleMetadata=l._sen"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_connect.facebook.net_signals_config_774178333691332_v_2.9.347_r_stable_domain_ascension.gg_hme_f29d86973612db0f0627890a64bdc8c47b471189050b33f2680b7d76997afc9a_ex_m_107_2C208_2C158_2C22_2C73_2C74_2C149_2C69_2C68_2C11_2C1.js",
+    "file": "data/raw/200_connect.facebook.net_signals_config_774178333691332_v_2.9.349_r_stable_domain_ascension.gg_hme_f29d86973612db0f0627890a64bdc8c47b471189050b33f2680b7d76997afc9a_ex_m_107_2C208_2C158_2C22_2C73_2C74_2C149_2C69_2C68_2C11_2C1.js",
     "count": 1,
     "samples": [
       {
@@ -94,147 +492,7 @@
     ]
   },
   {
-    "file": "data/raw/ascension.gg__next_static_chunks_1elkmjuuu17_4.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,898879,(e,t,r)=>{\"use strict\";try{var n=\"u\">typeof window?window:e.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack]=Object.assign({},n._se"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_17apsjpmrgaho.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64928,e=>{\"use strict\";var t=e.i(843476);e.i(633999);var r=e.i(854264),i=e.i(371066),s=e.i(120266);e.i(164485);var a=e.i(594745),n=e.i(556696),l=e.i(732898),c=e.i(271645);try{var o=window;"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_43wewvodl0s5b.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,857680,t=>{\"use strict\";var e=t.i(639372);t.i(606368);try{var n=\"u\">typeof window?window:t.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_0n0xo6yohv0xr.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,423755,(e,t,n)=>{\"use strict\";try{var r=\"u\">typeof window?window:e.g;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._se"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_0pg5a13mqmojt.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,108466,e=>{\"use strict\";var t=e.i(843476),a=e.i(347782);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_www.googletagmanager.com_gtag_js_id_G-4RBG93QXQ4.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 895,
-        "text": "var RG=function(a){return typeof a===\"string\"?a:String(Zn())},UG=function(a,b){SG(a,\"init\",!1)||(TG(a,\"init\",!0),b())},SG=function(a,b,c){var d=VG(a);return Qb(d,b,c)},WG=function(a,b,c,d){var e=VG(a),f=Qb(e,b,d),g=c(f);return e[b]=g},TG=function(a,b,c){VG(a)[b]=c},VG=function(a){var b=Sn(\"autoEvent"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_2imss0c9ru3as.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,922737,(e,t,r)=>{\"use strict\";try{var a=\"u\">typeof window?window:e.g;a._sentryModuleMetadata=a._sentryModuleMetadata||{},a._sentryModuleMetadata[(new a.Error).stack]=Object.assign({},a._se"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_browser.sentry-cdn.com_10.62.0_replay.min.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "!function(t){var e={};const n=globalThis,r=\"10.62.0\";function s(){return i(n),n}function i(t){const e=t.__SENTRY__=t.__SENTRY__||{};return e.version=e.version||r,e[r]=e[r]||{}}function o(t,e,s=n){const i=s.__SENTRY__=s.__SENTRY__||{},o=i[r]=i[r]||{};return o[t]||(o[t]=e())}const a={};function c(){re"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_2lideha_3gtfl.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,247976,e=>{e.q(\"/_next/static/media/cryptomus.3vaiwlbcpkh_c.png\")},384170,e=>{e.q(\"/_next/static/media/coinbase.1bav20ekyalu7.png\")},818138,e=>{e.q(\"/_next/static/media/tbank.1f7g8nsaerx3g"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,784919,e=>{\"use strict\";var t=e.i(843476);e.i(46815);var a=e.i(255402);e.i(732832);var r=e.i(872395);try{var n=window;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMet"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_20kskj_vv5-xk.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,308727,(t,e,n)=>{e.exports={description:\"The iconic font, CSS, and SVG framework\",keywords:[\"font\",\"awesome\",\"fontawesome\",\"icon\",\"svg\",\"bootstrap\"],homepage:\"https://fontawesome.com\",bugs"
-      }
-    ]
-  },
-  {
-    "file": "data/coa.har",
-    "count": 1,
-    "samples": [
-      {
-        "line": 1,
-        "text": "{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"Playwright\",\"version\":\"1.61.1\"},\"browser\":{\"name\":\"chromium\",\"version\":\"149.0.7827.200\"},\"pages\":[{\"startedDateTime\":\"2026-06-30T05:02:52.191Z\",\"id\":\"page@f15e60f6709aec855cbf57ab75d6ee4e\",\"title\":\"Talent & Build Calculator (Voljin Alpha CoA Builder) | Asce"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_connect.facebook.net_en_US_fbevents.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 300,
-        "text": "return(function(e,t,n,r){var o={exports:{}},a=o.exports;return(function(){(function(){\"use strict\";var n={3:function(t,n,r){var e=r(2640);t.exports=e},182:function(t,n,r){var e=r(2073),o=r(4003),a=TypeError;t.exports=function(t){if(e(t))return t;throw a(o(t)+\" is not a function\")}},235:function(t,n,"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_0iqtocl_hfsyo.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,544837,a=>{\"use strict\";var e=a.i(755631),i=a.i(17351);try{var t=window;t._sentryModuleMetadata=t._sentryModuleMetadata||{},t._sentryModuleMetadata[(new t.Error).stack]=Object.assign({},t."
-      }
-    ]
-  },
-  {
-    "file": "data/raw/ascension.gg__next_static_chunks_26b_kzjl-l6fr.js",
+    "file": "data/raw/200_ascension.gg__next_static_chunks_26b_kzjl-l6fr.js.js",
     "count": 1,
     "samples": [
       {
@@ -254,12 +512,22 @@
     ]
   },
   {
-    "file": "data/raw/ascension.gg__next_static_chunks_02lmnzkkt79rp.js",
+    "file": "data/raw/200_connect.facebook.net_signals_config_774178333691332_v_2.9.347_r_stable_domain_ascension.gg_hme_f29d86973612db0f0627890a64bdc8c47b471189050b33f2680b7d76997afc9a_ex_m_107_2C208_2C158_2C22_2C73_2C74_2C149_2C69_2C68_2C11_2C1.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 160,
+        "text": "return(function(e,t,n,r){var o={exports:{}},l=o.exports;return(function(){\"use strict\";var n=a.getFbeventsModules(\"smartSetupProcessContent\"),r=n.processContent,l=n.DEFAULT_MAX_VALUE_LENGTH,s=a.getFbeventsModules(\"SignalsFBEventsUtils\"),u=s.each,c=s.keys,d=a.getFbeventsModules(\"signalsFBEventsWarnin"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_browser.sentry-cdn.com_10.63.0_replay.min.js.js",
     "count": 1,
     "samples": [
       {
         "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64807,e=>{\"use strict\";e.i(247167);var t=e.i(120786),a=e.i(92808),r=e.i(843476);e.i(31390);var n=e.i(863937),l=e.i(944254);e.i(732832);var s=e.i(872395),o=e.i(788699),i=e.i(672464),c=e.i(6"
+        "text": "!function(t){var e={};const n=globalThis,r=\"10.63.0\";function s(){return i(n),n}function i(t){const e=t.__SENTRY__=t.__SENTRY__||{};return e.version=e.version||r,e[r]=e[r]||{}}function o(t,e,s=n){const i=s.__SENTRY__=s.__SENTRY__||{},o=i[r]=i[r]||{};return o[t]||(o[t]=e())}const a={};function c(){re"
       }
     ]
   },
@@ -274,52 +542,32 @@
     ]
   },
   {
-    "file": "data/raw/ascension.gg__next_static_chunks_417e8dy2uio8e.js",
+    "file": "data/raw/200_ascension.gg__next_static_chunks_2lideha_3gtfl.js.js",
     "count": 1,
     "samples": [
       {
         "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,394849,e=>{\"use strict\";var t=e.i(271645);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._sentryModule"
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,247976,e=>{e.q(\"/_next/static/media/cryptomus.3vaiwlbcpkh_c.png\")},384170,e=>{e.q(\"/_next/static/media/coinbase.1bav20ekyalu7.png\")},818138,e=>{e.q(\"/_next/static/media/tbank.1f7g8nsaerx3g"
       }
     ]
   },
   {
-    "file": "data/snapshots/initial-page-content.html",
-    "count": 1,
-    "samples": [
-      {
-        "line": 686,
-        "text": "</style><!--$--><!--/$--><nav id=\"navbar\" class=\"fixed top-0 w-full z-10\"><div class=\"bg-secondary h-16 shadow-[0_1px_0_0_#525252]\"><div class=\"flex flex-col h-full width-before-scroll-bar\"><div class=\"flex h-full w-full p-1 items-center justify-center lg:justify-normal lg:px-6 lg:gap-3\"><button typ"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_3jl2l73eu0_rn.js.js",
+    "file": "data/raw/200_browser.sentry-cdn.com_10.62.0_replay.min.js.js",
     "count": 1,
     "samples": [
       {
         "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,474324,e=>{\"use strict\";var t=e.i(120786),a=e.i(92808),n=e.i(233027),r=e.i(843476),s=e.i(975157);e.i(732832);var o=e.i(872395),i=e.i(550526);try{var l=window;l._sentryModuleMetadata=l._sen"
+        "text": "!function(t){var e={};const n=globalThis,r=\"10.62.0\";function s(){return i(n),n}function i(t){const e=t.__SENTRY__=t.__SENTRY__||{};return e.version=e.version||r,e[r]=e[r]||{}}function o(t,e,s=n){const i=s.__SENTRY__=s.__SENTRY__||{},o=i[r]=i[r]||{};return o[t]||(o[t]=e())}const a={};function c(){re"
       }
     ]
   },
   {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_0pg5a13mqmojt.js.js",
+    "file": "data/raw/200_connect.facebook.net_en_US_fbevents.js.js",
     "count": 1,
     "samples": [
       {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,108466,e=>{\"use strict\";var t=e.i(843476),a=e.i(347782);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,784919,e=>{\"use strict\";var t=e.i(843476);e.i(46815);var a=e.i(255402);e.i(732832);var r=e.i(872395);try{var n=window;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMet"
+        "line": 300,
+        "text": "return(function(e,t,n,r){var o={exports:{}},a=o.exports;return(function(){(function(){\"use strict\";var n={3:function(t,n,r){var e=r(2640);t.exports=e},182:function(t,n,r){var e=r(2073),o=r(4003),a=TypeError;t.exports=function(t){if(e(t))return t;throw a(o(t)+\" is not a function\")}},235:function(t,n,"
       }
     ]
   },
@@ -334,22 +582,12 @@
     ]
   },
   {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_43wewvodl0s5b.js.js",
+    "file": "data/raw/200_www.googletagmanager.com_gtag_js_id_G-4RBG93QXQ4.js",
     "count": 1,
     "samples": [
       {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,857680,t=>{\"use strict\";var e=t.i(639372);t.i(606368);try{var n=\"u\">typeof window?window:t.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_17apsjpmrgaho.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64928,e=>{\"use strict\";var t=e.i(843476);e.i(633999);var r=e.i(854264),i=e.i(371066),s=e.i(120266);e.i(164485);var a=e.i(594745),n=e.i(556696),l=e.i(732898),c=e.i(271645);try{var o=window;"
+        "line": 900,
+        "text": "var PG=function(a){return typeof a===\"string\"?a:String(Zn())},SG=function(a,b){QG(a,\"init\",!1)||(RG(a,\"init\",!0),b())},QG=function(a,b,c){var d=TG(a);return Qb(d,b,c)},UG=function(a,b,c,d){var e=TG(a),f=Qb(e,b,d),g=c(f);return e[b]=g},RG=function(a,b,c){TG(a)[b]=c},TG=function(a){var b=Sn(\"autoEvent"
       }
     ]
   },
@@ -360,36 +598,6 @@
       {
         "line": 2,
         "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,394849,e=>{\"use strict\";var t=e.i(271645);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._sentryModule"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_02lmnzkkt79rp.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64807,e=>{\"use strict\";e.i(247167);var t=e.i(120786),a=e.i(92808),r=e.i(843476);e.i(31390);var n=e.i(863937),l=e.i(944254);e.i(732832);var s=e.i(872395),o=e.i(788699),i=e.i(672464),c=e.i(6"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_20kskj_vv5-xk.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,308727,(t,e,n)=>{e.exports={description:\"The iconic font, CSS, and SVG framework\",keywords:[\"font\",\"awesome\",\"fontawesome\",\"icon\",\"svg\",\"bootstrap\"],homepage:\"https://fontawesome.com\",bugs"
-      }
-    ]
-  },
-  {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_1elkmjuuu17_4.js.js",
-    "count": 1,
-    "samples": [
-      {
-        "line": 2,
-        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,898879,(e,t,r)=>{\"use strict\";try{var n=\"u\">typeof window?window:e.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack]=Object.assign({},n._se"
       }
     ]
   },
@@ -424,7 +632,157 @@
     ]
   },
   {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_2lideha_3gtfl.js.js",
+    "file": "data/raw/200_ascension.gg__next_static_chunks_02lmnzkkt79rp.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64807,e=>{\"use strict\";e.i(247167);var t=e.i(120786),a=e.i(92808),r=e.i(843476);e.i(31390);var n=e.i(863937),l=e.i(944254);e.i(732832);var s=e.i(872395),o=e.i(788699),i=e.i(672464),c=e.i(6"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_17apsjpmrgaho.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64928,e=>{\"use strict\";var t=e.i(843476);e.i(633999);var r=e.i(854264),i=e.i(371066),s=e.i(120266);e.i(164485);var a=e.i(594745),n=e.i(556696),l=e.i(732898),c=e.i(271645);try{var o=window;"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,784919,e=>{\"use strict\";var t=e.i(843476);e.i(46815);var a=e.i(255402);e.i(732832);var r=e.i(872395);try{var n=window;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMet"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_20kskj_vv5-xk.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,308727,(t,e,n)=>{e.exports={description:\"The iconic font, CSS, and SVG framework\",keywords:[\"font\",\"awesome\",\"fontawesome\",\"icon\",\"svg\",\"bootstrap\"],homepage:\"https://fontawesome.com\",bugs"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_0pg5a13mqmojt.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,108466,e=>{\"use strict\";var t=e.i(843476),a=e.i(347782);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_0xb4p8kw0630u.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,394849,e=>{\"use strict\";var t=e.i(271645);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._sentryModule"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_3jl2l73eu0_rn.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,474324,e=>{\"use strict\";var t=e.i(120786),a=e.i(92808),n=e.i(233027),r=e.i(843476),s=e.i(975157);e.i(732832);var o=e.i(872395),i=e.i(550526);try{var l=window;l._sentryModuleMetadata=l._sen"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_43wewvodl0s5b.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,857680,t=>{\"use strict\";var e=t.i(639372);t.i(606368);try{var n=\"u\">typeof window?window:t.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_1elkmjuuu17_4.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,898879,(e,t,r)=>{\"use strict\";try{var n=\"u\">typeof window?window:e.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack]=Object.assign({},n._se"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_2rsfwd2bz9948.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,639372,180046,e=>{\"use strict\";let t,r,n={get url(){return`file://${e.P(\"node_modules/jotai/esm/vanilla/internals.mjs\")}`}};try{var a=\"u\">typeof window?window:e.g;a._sentryModuleMetadata=a"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_1elkmjuuu17_4.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,898879,(e,t,r)=>{\"use strict\";try{var n=\"u\">typeof window?window:e.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack]=Object.assign({},n._se"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_0pg5a13mqmojt.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,108466,e=>{\"use strict\";var t=e.i(843476),a=e.i(347782);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_0iqtocl_hfsyo.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,544837,a=>{\"use strict\";var e=a.i(755631),i=a.i(17351);try{var t=window;t._sentryModuleMetadata=t._sentryModuleMetadata||{},t._sentryModuleMetadata[(new t.Error).stack]=Object.assign({},t."
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_0ors_-_vptsa9.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,784919,e=>{\"use strict\";var t=e.i(843476);e.i(46815);var a=e.i(255402);e.i(732832);var r=e.i(872395);try{var n=window;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMet"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_417e8dy2uio8e.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,394849,e=>{\"use strict\";var t=e.i(271645);try{var r=window;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._sentryModule"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_2lideha_3gtfl.js",
     "count": 1,
     "samples": [
       {
@@ -434,12 +792,122 @@
     ]
   },
   {
-    "file": "data/raw/200_ascension.gg__next_static_chunks_26b_kzjl-l6fr.js.js",
+    "file": "data/raw/ascension.gg__next_static_chunks_17apsjpmrgaho.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64928,e=>{\"use strict\";var t=e.i(843476);e.i(633999);var r=e.i(854264),i=e.i(371066),s=e.i(120266);e.i(164485);var a=e.i(594745),n=e.i(556696),l=e.i(732898),c=e.i(271645);try{var o=window;"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_20kskj_vv5-xk.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,308727,(t,e,n)=>{e.exports={description:\"The iconic font, CSS, and SVG framework\",keywords:[\"font\",\"awesome\",\"fontawesome\",\"icon\",\"svg\",\"bootstrap\"],homepage:\"https://fontawesome.com\",bugs"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_2imss0c9ru3as.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,922737,(e,t,r)=>{\"use strict\";try{var a=\"u\">typeof window?window:e.g;a._sentryModuleMetadata=a._sentryModuleMetadata||{},a._sentryModuleMetadata[(new a.Error).stack]=Object.assign({},a._se"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_43wewvodl0s5b.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,857680,t=>{\"use strict\";var e=t.i(639372);t.i(606368);try{var n=\"u\">typeof window?window:t.g;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMetadata[(new n.Error).stack"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_3jl2l73eu0_rn.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,474324,e=>{\"use strict\";var t=e.i(120786),a=e.i(92808),n=e.i(233027),r=e.i(843476),s=e.i(975157);e.i(732832);var o=e.i(872395),i=e.i(550526);try{var l=window;l._sentryModuleMetadata=l._sen"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_02lmnzkkt79rp.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,64807,e=>{\"use strict\";e.i(247167);var t=e.i(120786),a=e.i(92808),r=e.i(843476);e.i(31390);var n=e.i(863937),l=e.i(944254);e.i(732832);var s=e.i(872395),o=e.i(788699),i=e.i(672464),c=e.i(6"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_1wjjh1pq1aa-y.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,784919,e=>{\"use strict\";var t=e.i(843476);e.i(46815);var a=e.i(255402);e.i(732832);var r=e.i(872395);try{var n=window;n._sentryModuleMetadata=n._sentryModuleMetadata||{},n._sentryModuleMet"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_26b_kzjl-l6fr.js",
     "count": 1,
     "samples": [
       {
         "line": 2,
         "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,540091,e=>{\"use strict\";var t=e.i(843476);e.i(732832);var r=e.i(872395),n=e.i(271645);e.i(164485);var a=e.i(413446);try{var o=window;o._sentryModuleMetadata=o._sentryModuleMetadata||{},o._"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/ascension.gg__next_static_chunks_0n0xo6yohv0xr.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,423755,(e,t,n)=>{\"use strict\";try{var r=\"u\">typeof window?window:e.g;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._se"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_2kzp11e-hgsxx.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,247976,e=>{e.q(\"/_next/static/media/cryptomus.3vaiwlbcpkh_c.png\")},384170,e=>{e.q(\"/_next/static/media/coinbase.1bav20ekyalu7.png\")},818138,e=>{e.q(\"/_next/static/media/tbank.1f7g8nsaerx3g"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_1paf431u6e3pu.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,540091,e=>{\"use strict\";var t=e.i(843476);e.i(732832);var r=e.i(872395),n=e.i(271645);e.i(164485);var a=e.i(413446);try{var o=window;o._sentryModuleMetadata=o._sentryModuleMetadata||{},o._"
+      }
+    ]
+  },
+  {
+    "file": "data/raw/200_ascension.gg__next_static_chunks_32ojjlri4xwxn.js.js",
+    "count": 1,
+    "samples": [
+      {
+        "line": 2,
+        "text": "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([\"object\"==typeof document?document.currentScript:void 0,423755,(e,t,n)=>{\"use strict\";try{var r=\"u\">typeof window?window:e.g;r._sentryModuleMetadata=r._sentryModuleMetadata||{},r._sentryModuleMetadata[(new r.Error).stack]=Object.assign({},r._se"
       }
     ]
   }
