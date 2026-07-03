@@ -19,3 +19,7 @@ def validation_to_dict(result: BuildValidationResult) -> dict:
         "issues": [issue_to_dict(issue) for issue in result.issues],
         "warnings": [issue_to_dict(issue) for issue in result.warnings],
     }
+
+
+def scored_build_to_dict(scored) -> dict:
+    return scored.to_dict()
