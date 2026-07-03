@@ -1,0 +1,22 @@
+[
+  {
+    "name": "valid minimal class ability",
+    "class_name": "Testclass",
+    "level": 60,
+    "max_ae": 2,
+    "max_te": 3,
+    "selected": [{"node_id": 101, "rank": 1}],
+    "expected_valid": true,
+    "expected_issue_codes": []
+  },
+  {
+    "name": "invalid missing prerequisite",
+    "class_name": "Testclass",
+    "level": 60,
+    "max_ae": 2,
+    "max_te": 3,
+    "selected": [{"node_id": 103, "rank": 1}],
+    "expected_valid": false,
+    "expected_issue_codes": ["tab_te_gate_unmet", "required_node_missing"]
+  }
+]
