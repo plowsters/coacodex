@@ -14,6 +14,7 @@ const scriptPaths = [
   "scripts/export-coa-normalized.mjs",
   "scripts/build-class-profile-input.mjs",
   "scripts/lib/ascensiondb.mjs",
+  "scripts/lib/capture-options.mjs",
   "scripts/lib/source-level.mjs",
   "scripts/enrich-ascensiondb.mjs",
   "scripts/apply-db-enrichment.mjs",

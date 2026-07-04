@@ -255,6 +255,7 @@ test("manifest writer records builder, validation, artifact hashes, and missing 
   assert.equal(manifest.builder.slug, "voljin-alpha");
   assert.equal(manifest.validation.status, "pass");
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_entries.jsonl" && artifact.sha256));
+  assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/capture-options.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.missing === true));
 });
 
@@ -462,4 +463,14 @@ test("capture options support unattended headless mode", () => {
   assert.equal(options.waitMs, 250);
   assert.equal(options.headless, true);
   assert.equal(options.interactive, false);
+});
+
+test("M1.8 pipeline refreshes manifest after DB enrichment artifacts", () => {
+  const packageJson = JSON.parse(
+    fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")
+  );
+
+  assert.match(packageJson.scripts["pipeline:m1.8"], /enrich-db/);
+  assert.match(packageJson.scripts["pipeline:m1.8"], /apply-db-enrichment/);
+  assert.match(packageJson.scripts["pipeline:m1.8"], /write-artifact-manifest/);
 });

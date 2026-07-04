@@ -13,7 +13,7 @@
     "enrich-db": "node scripts/enrich-ascensiondb.mjs dist/coa_entries.jsonl dist reports",
     "apply-db-enrichment": "node scripts/apply-db-enrichment.mjs dist/coa_entries.jsonl dist/coa_db_spell_tooltips.jsonl dist/coa_entries.enriched.jsonl",
     "source-level-report": "node scripts/write-source-level-report.mjs dist/coa_entries.jsonl dist/coa_classes.json reports",
-    "pipeline:m1.8": "npm run pipeline && npm run enrich-db && npm run apply-db-enrichment",
+    "pipeline:m1.8": "npm run pipeline && npm run enrich-db && npm run apply-db-enrichment && node scripts/write-artifact-manifest.mjs reports dist reports/coa_artifact_manifest.json",
     "unit-test": "node --test tests/*.test.mjs",
     "test": "npm run unit-test && npm run validate"
   },
