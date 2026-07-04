@@ -1,0 +1,15 @@
+[
+  {
+    "schema_version": "coa-normalized-class-v1",
+    "class_id": 1,
+    "class_name": "Testclass",
+    "tabs": [
+      {"tab_id": 10, "tab_name": "Class", "sort_order": 0, "nominal_essence_kind": "ability"},
+      {"tab_id": 11, "tab_name": "Damage", "sort_order": 1, "nominal_essence_kind": "talent"},
+      {"tab_id": 12, "tab_name": "Support", "sort_order": 2, "nominal_essence_kind": "talent"},
+      {"tab_id": 13, "tab_name": "Empty", "sort_order": 3, "nominal_essence_kind": "talent"},
+      {"tab_id": 1, "tab_name": "None", "sort_order": 4, "nominal_essence_kind": "talent"}
+    ],
+    "essence_caps": {"max_level": 60, "ability": 26, "talent": 25}
+  }
+]
