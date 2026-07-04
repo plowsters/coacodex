@@ -232,7 +232,10 @@ def _uses_inferred_condition(node: TalentNode, rule: APLRuleProfile) -> bool:
 def _dedupe_actions(actions: list[APLAction]) -> list[APLAction]:
     seen: set[tuple[str, str, str]] = set()
     output: list[APLAction] = []
+    specific_action_keys = {action.action_key for action in actions if action.category != "filler"}
     for action in sorted(actions, key=_action_sort_key):
+        if action.category == "filler" and action.action_key in specific_action_keys:
+            continue
         key = (action.action_key, action.condition, action.category)
         if key in seen:
             continue
