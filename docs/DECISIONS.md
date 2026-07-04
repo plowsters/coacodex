@@ -115,3 +115,14 @@ Reasoning:
 - CoA data can change.
 - Meta rankings without provenance are hard to reproduce or debug.
 
+## Decision 11: Rank Spending Uses Linear Cost Until Builder UI Proves Otherwise
+
+Status: accepted.
+
+Selected rank cost is modeled as node cost multiplied by selected rank. If official builder examples show a different per-rank model, the legal build engine should change and this decision should be superseded.
+
+## Decision 12: Theory Scoring Profiles Are JSON Data
+
+Status: accepted.
+
+M1.4 scoring profiles live as JSON files so class/spec tuning can change without editing scoring code. The scorer owns mechanics for applying profile data, not individual class hard-coding.

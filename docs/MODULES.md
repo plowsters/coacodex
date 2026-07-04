@@ -223,6 +223,12 @@ Target package:
 
 - `coa_meta/scoring/`
 
+M1.4 implementation files:
+
+- `coa_meta/profiles.py`
+- `coa_meta/scoring.py`
+- `coa_meta/data/scoring_profiles/*.json`
+
 Responsibilities:
 
 - Convert build features into projected score components.
