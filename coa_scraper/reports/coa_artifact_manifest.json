@@ -1,6 +1,6 @@
 {
   "schema_version": "coa-artifact-manifest-v1",
-  "generated_at": "2026-07-04T20:36:49.439Z",
+  "generated_at": "2026-07-04T20:54:58.727Z",
   "builder": {
     "id": 39,
     "slug": "voljin-alpha",
@@ -15,8 +15,8 @@
   "scripts": [
     {
       "path": "scrape-coa-network.mjs",
-      "bytes": 6037,
-      "sha256": "98374bcfb0231e3d15b5539dd68b6a5c565da698ac3cab6deed4c0d932d6ef2b"
+      "bytes": 6364,
+      "sha256": "fa307ede1ec0321677ca2d19a89a628ffba4ffa0c533a211834df64df8137ce1"
     },
     {
       "path": "scripts/extract-coa-builder-payload.mjs",
@@ -45,8 +45,13 @@
     },
     {
       "path": "scripts/lib/ascensiondb.mjs",
-      "bytes": 5823,
-      "sha256": "7c74044fb5433175e92c97938526f83459fcedb5b29e83fc8779001aa3211ce5"
+      "bytes": 6917,
+      "sha256": "6a4a65b092122f7fc8d22faf14739236b7446ec2d58456a30318b9cacbd882ed"
+    },
+    {
+      "path": "scripts/lib/capture-options.mjs",
+      "bytes": 751,
+      "sha256": "391d804034d21be455c36e288177367adb987a20935799eb805d064ac09885c6"
     },
     {
       "path": "scripts/lib/source-level.mjs",
@@ -55,8 +60,8 @@
     },
     {
       "path": "scripts/enrich-ascensiondb.mjs",
-      "bytes": 1364,
-      "sha256": "fa2c39c2a3ad49dcf07387bdb5163c74af43914733a957426712e45cefd9988c"
+      "bytes": 1799,
+      "sha256": "90867ef45dd6a6f36259f07cce6d90611b2fe89bc96b732a129ba97821f0f28f"
     },
     {
       "path": "scripts/apply-db-enrichment.mjs",
@@ -75,8 +80,8 @@
     },
     {
       "path": "scripts/write-artifact-manifest.mjs",
-      "bytes": 3626,
-      "sha256": "62ca6a8183c876dd4485505a8a0141ac5184d21ca62b227576a8049b126be9e6"
+      "bytes": 3663,
+      "sha256": "534c42f2e8e773590c0ef9a3f4d979628d9bb6efa75baa367f3ddebfffe4338d"
     },
     {
       "path": "scripts/run-normalization-pipeline.mjs",
@@ -157,8 +162,8 @@
     },
     {
       "path": "reports/coa_db_enrichment_summary.json",
-      "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coa_meta_analyzer/coa_scraper/reports/coa_db_enrichment_summary.json"
+      "bytes": 417,
+      "sha256": "65fef305e3051a4f7908a24f3bea9d8c135bf10ea9b9e1c1fda2018f7b2bad30"
     },
     {
       "path": "dist/coa_entries.jsonl",
@@ -187,13 +192,13 @@
     },
     {
       "path": "dist/coa_db_spell_tooltips.jsonl",
-      "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coa_meta_analyzer/coa_scraper/dist/coa_db_spell_tooltips.jsonl"
+      "bytes": 6069622,
+      "sha256": "880d812a1b6b487ac84d535b3e95cd393b1e20aecad18f1b07966fb8bb009118"
     },
     {
       "path": "dist/coa_entries.enriched.jsonl",
-      "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coa_meta_analyzer/coa_scraper/dist/coa_entries.enriched.jsonl"
+      "bytes": 17720688,
+      "sha256": "637810d250e347cb801a1b7c39589c7b331bd86314a03dc53f1f24c96b6ab4b5"
     }
   ],
   "validation": {

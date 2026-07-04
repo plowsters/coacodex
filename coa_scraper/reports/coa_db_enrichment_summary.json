@@ -1,0 +1,16 @@
+{
+  "schema_version": "coa-db-enrichment-summary-v1",
+  "fetched_at": "2026-07-04T20:54:13.074Z",
+  "entries_path": "dist/coa_entries.jsonl",
+  "concurrency": 32,
+  "timeout_ms": 10000,
+  "spell_count": 3611,
+  "status_counts": {
+    "matched": 3605,
+    "fetch_failed": 2,
+    "empty_registration": 4
+  },
+  "name_mismatch_count": 1201,
+  "tooltip_level_count": 155,
+  "output": "dist/coa_db_spell_tooltips.jsonl"
+}
