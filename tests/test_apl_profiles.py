@@ -132,3 +132,17 @@ def test_profile_by_role_falls_back_to_generic_profile():
 
     assert profile.profile_id == "generic_dps"
     assert warnings == ["specific_apl_profile_missing"]
+
+
+def test_loads_venomancer_stalker_profile_without_python_special_case():
+    profile, warnings = load_apl_profile_by_role(
+        class_name="Venomancer",
+        spec_key="stalker",
+        role="dps",
+    )
+
+    assert profile.profile_id == "venomancer_stalker"
+    assert profile.class_name == "Venomancer"
+    assert profile.spec_key == "stalker"
+    assert warnings == []
+    assert any(rule.id == "stalker_spenders" for rule in profile.rules)

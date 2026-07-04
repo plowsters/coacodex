@@ -1,0 +1,91 @@
+{
+  "schema_version": "coa-apl-profile-v1",
+  "profile_id": "venomancer_stalker",
+  "class_name": "Venomancer",
+  "spec_key": "stalker",
+  "role": "dps",
+  "supported_encounters": ["single_target", "aoe_5"],
+  "resources": [{"name": "Energy", "aliases": ["energy"], "default_pool": null}],
+  "thresholds": {"spender": 80, "execute_health_pct": 35, "aoe_min_enemies": 3},
+  "condition_templates": {
+    "always": "",
+    "maintain_dot": "dot.{action_key}.remains<gcd",
+    "cooldown_ready": "cooldown.{action_key}.ready",
+    "brood_spender": "brood_marks>=5",
+    "brood_builder": "brood_marks<5",
+    "execute": "target.health.pct<{execute_health_pct}",
+    "aoe": "active_enemies>={aoe_min_enemies}"
+  },
+  "rules": [
+    {
+      "id": "stalker_dot_maintenance",
+      "category": "maintenance",
+      "match": {"name_contains_any": ["Withering Venom", "Nerubian Sting"], "active_only": true},
+      "condition_template": "maintain_dot",
+      "priority": 20,
+      "confidence": "medium",
+      "note": "maintain Stalker poison or sting effect"
+    },
+    {
+      "id": "stalker_cooldowns",
+      "category": "cooldown",
+      "match": {"name_contains_any": ["Noxious Empowerment"], "active_only": true},
+      "condition_template": "cooldown_ready",
+      "priority": 40,
+      "confidence": "medium",
+      "note": "use Stalker burst window when ready"
+    },
+    {
+      "id": "stalker_execute",
+      "category": "execute",
+      "match": {"name_contains_any": ["Widowmaker"], "active_only": true},
+      "condition_template": "execute",
+      "priority": 50,
+      "confidence": "medium",
+      "note": "execute if selected"
+    },
+    {
+      "id": "stalker_aoe",
+      "category": "aoe",
+      "match": {"name_contains_any": ["Contagion", "Brood Lord"], "active_only": true},
+      "condition_template": "aoe",
+      "priority": 60,
+      "confidence": "medium",
+      "note": "Stalker AoE package"
+    },
+    {
+      "id": "stalker_spenders",
+      "category": "spender",
+      "match": {"name_contains_any": ["Facemelter"], "active_only": true},
+      "condition_template": "brood_spender",
+      "priority": 70,
+      "confidence": "medium",
+      "note": "spend Brood Marks"
+    },
+    {
+      "id": "stalker_generic_builders",
+      "category": "builder",
+      "match": {"tags_any": ["builder"], "active_only": true},
+      "condition_template": "brood_builder",
+      "priority": 80,
+      "confidence": "low",
+      "note": "build Stalker resource package when detected"
+    },
+    {
+      "id": "stalker_filler",
+      "category": "filler",
+      "match": {"entry_type_in": ["Ability", "Talent"], "active_only": true},
+      "condition_template": "always",
+      "priority": 200,
+      "confidence": "low",
+      "note": "fallback selected active node"
+    }
+  ],
+  "branches": [
+    {"encounter": "single_target", "include_categories": ["maintenance", "cooldown", "execute", "spender", "builder", "filler"]},
+    {"encounter": "aoe_5", "include_categories": ["maintenance", "cooldown", "execute", "aoe", "spender", "builder", "filler"]}
+  ],
+  "assumptions": ["Generated from normalized builder data and Stalker APL profile rules."],
+  "future_inputs": ["combat_log_metrics", "saved_variables_snapshot", "sim_state"],
+  "confidence": {"base": "medium"}
+}
