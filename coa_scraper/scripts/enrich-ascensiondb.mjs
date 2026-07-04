@@ -13,14 +13,27 @@ import { writeJson } from "./lib/artifacts.mjs";
 const entriesPath = process.argv[2] || "dist/coa_entries.jsonl";
 const distDir = process.argv[3] || "dist";
 const reportsDir = process.argv[4] || "reports";
+const concurrency = Number(process.env.ASCENSIONDB_CONCURRENCY || "32");
+const timeoutMs = Number(process.env.ASCENSIONDB_TIMEOUT_MS || "10000");
 
 const entries = readJsonl(entriesPath);
 const fetchedAt = new Date().toISOString();
+let completed = 0;
 const rows = await buildEnrichmentRows({
   entries,
   kind: "spell",
   fetchedAt,
-  fetchPower: ({ url }) => fetchText(url)
+  concurrency,
+  fetchPower: async ({ url }) => {
+    try {
+      return await fetchText(url, { timeoutMs });
+    } finally {
+      completed++;
+      if (completed % 250 === 0) {
+        console.error(`Fetched ${completed} AscensionDB spell payloads`);
+      }
+    }
+  }
 });
 
 const outPath = path.join(distDir, "coa_db_spell_tooltips.jsonl");
@@ -35,6 +48,8 @@ const summary = {
   schema_version: "coa-db-enrichment-summary-v1",
   fetched_at: fetchedAt,
   entries_path: entriesPath,
+  concurrency,
+  timeout_ms: timeoutMs,
   spell_count: rows.length,
   status_counts: statusCounts,
   name_mismatch_count: rows.filter(row => row.status === "matched" && !row.name_match).length,
