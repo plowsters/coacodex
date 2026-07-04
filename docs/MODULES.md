@@ -453,3 +453,10 @@ Outputs:
 Non-responsibilities:
 
 - Owning legality, scoring, or simulation logic.
+
+## Meta Report Runner
+
+- `coa_meta.reporting`: expands class/spec scopes, applies eligibility rules, runs legal search, scoring, APL generation, and writes canonical report data.
+- `coa_meta.report_assets`: resolves optional local scraper assets for static HTML output.
+
+M1.6 reports use `coa-meta-report-v1`. JSON is canonical; Markdown and HTML are derived views.

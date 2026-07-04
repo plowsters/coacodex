@@ -139,3 +139,13 @@ Reasoning:
 - Class/spec behavior belongs in data profiles, not hard-coded Python branches.
 - Phase 1 can generate theorycraft rotation scaffolds without SavedVariables, combat logs, gear snapshots, or simulator state.
 - Structured APLs can later be edited, rendered, and executed by a simulator.
+
+## Decision 14: M1.6 Meta Report Scope
+
+Status: accepted.
+
+- Default reports rank top 3 builds per reportable class/spec for one `baseline_single_target` encounter profile.
+- Reportable specs are normalized non-shared talent trees with nodes.
+- `Class` is a shared class pool included in each spec's legal node set.
+- `None` and metadata-only tabs are not standalone report rows.
+- Lower-level runs filter known `required_level` data and warn when class/trainer source data is incomplete.
