@@ -2,6 +2,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  classifySourceCategory,
+  deriveAvailability,
+  sourceConfidenceFor
+} from "./lib/source-level.mjs";
+
 const input = process.argv[2] || "reports/coa_builder_payload.json";
 const outDir = process.argv[3] || "dist";
 
@@ -333,6 +339,14 @@ for (const [_bucketKey, value] of Object.entries(entriesByTab)) {
     const tags = detectTags(combinedText);
     const damageSchools = detectSchools(combinedText);
     const resources = detectResources(combinedText);
+    const requiredLevel = discoverNumeric(entry, ["requiredLevel", "required_level", "level"]);
+    const sourceCategory = classifySourceCategory({
+      tab_name: ownerTab?.tabName ?? null
+    });
+    const builderAvailability = deriveAvailability({
+      builderRequiredLevel: requiredLevel,
+      builderTooltipText: description
+    });
 
     const aeCost = Number(entry.aeCost ?? 0);
     const teCost = Number(entry.teCost ?? 0);
@@ -374,7 +388,7 @@ for (const [_bucketKey, value] of Object.entries(entriesByTab)) {
       description_html: rawDescription ?? null,
       description_text: description,
 
-      required_level: discoverNumeric(entry, ["requiredLevel", "required_level", "level"]),
+      required_level: requiredLevel,
       max_rank: discoverNumeric(entry, ["maxPoints", "max_points", "maxRank", "max_rank", "ranks"]),
 
       row: discoverNumeric(entry, ["y", "row", "position.y", "gridY"]),
@@ -406,7 +420,10 @@ for (const [_bucketKey, value] of Object.entries(entriesByTab)) {
         }
       },
 
-      raw: entry
+      raw: entry,
+      source_category: sourceCategory,
+      source_confidence: sourceConfidenceFor(sourceCategory),
+      availability: builderAvailability
     };
 
     records.push(rec);

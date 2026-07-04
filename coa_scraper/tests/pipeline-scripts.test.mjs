@@ -17,6 +17,11 @@ import {
   parsePowerPayload,
   stripTooltipHtml
 } from "../scripts/lib/ascensiondb.mjs";
+import {
+  classifySourceCategory,
+  deriveAvailability,
+  summarizeMetadataTabs
+} from "../scripts/lib/source-level.mjs";
 import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs";
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
 
@@ -287,4 +292,49 @@ test("DB enrichment rows use fetch results and classify name differences", async
   assert.equal(rows[0].name_match, true);
   assert.equal(rows[1].status, "empty_registration");
   assert.equal(rows[1].name_match, false);
+});
+
+test("source category distinguishes spec tree, class pool, and unknown nodes", () => {
+  assert.equal(classifySourceCategory(validNode({ tab_name: "Stalking" })), "spec_tree");
+  assert.equal(classifySourceCategory(validNode({ tab_name: "Class" })), "class_pool");
+  assert.equal(classifySourceCategory(validNode({ tab_name: "" })), "unknown");
+});
+
+test("availability uses builder level when explicit", () => {
+  const availability = deriveAvailability({
+    builderRequiredLevel: 40,
+    builderTooltipText: "Level 40 Passive",
+    dbTooltipLevel: null
+  });
+
+  assert.equal(availability.effective_required_level, 40);
+  assert.equal(availability.level_source, "builder_required_level");
+  assert.equal(availability.level_confidence, "high");
+});
+
+test("availability upgrades zero builder level when tooltip has level text", () => {
+  const availability = deriveAvailability({
+    builderRequiredLevel: 0,
+    builderTooltipText: "Level 10 Passive",
+    dbTooltipLevel: 10
+  });
+
+  assert.equal(availability.effective_required_level, 10);
+  assert.equal(availability.level_source, "db_tooltip");
+  assert.equal(availability.level_confidence, "medium");
+  assert(availability.notes.includes("builder_required_level_zero_but_tooltip_has_level"));
+});
+
+test("metadata summary reports tabs without node rows", () => {
+  const classes = [
+    validClass({
+      tabs: [
+        { tab_id: 77, tab_name: "Stalking", sort_order: 2, nominal_essence_kind: "talent" },
+        { tab_id: 1, tab_name: "None", sort_order: 0, nominal_essence_kind: "talent" }
+      ]
+    })
+  ];
+  const rows = summarizeMetadataTabs(classes, [validNode({ tab_id: 77, tab_name: "Stalking" })]);
+
+  assert.deepEqual(rows.tabs_without_nodes.map(row => row.tab_name), ["None"]);
 });
