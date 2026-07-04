@@ -126,3 +126,16 @@ Selected rank cost is modeled as node cost multiplied by selected rank. If offic
 Status: accepted.
 
 M1.4 scoring profiles live as JSON files so class/spec tuning can change without editing scoring code. The scorer owns mechanics for applying profile data, not individual class hard-coding.
+
+## Decision 13: APL Generation Uses Structured Profiles
+
+Status: accepted.
+
+M1.5 APL generation uses `coa-apl-profile-v1` JSON profile data and emits `coa-apl-v1` structured JSON as the canonical artifact. SimC-like text is an export derived from structured APL data.
+
+Reasoning:
+
+- Every class/spec should use the same production APL generation engine.
+- Class/spec behavior belongs in data profiles, not hard-coded Python branches.
+- Phase 1 can generate theorycraft rotation scaffolds without SavedVariables, combat logs, gear snapshots, or simulator state.
+- Structured APLs can later be edited, rendered, and executed by a simulator.

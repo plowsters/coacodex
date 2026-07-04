@@ -264,6 +264,12 @@ Target package:
 
 - `coa_meta/apl/`
 
+M1.5 implementation files:
+
+- `coa_meta/apl.py`
+- `coa_meta/apl_profiles.py`
+- `coa_meta/data/apl_profiles/*.json`
+
 Responsibilities:
 
 - Generate baseline priority lists for selected builds.
