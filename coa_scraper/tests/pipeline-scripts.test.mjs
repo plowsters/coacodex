@@ -117,6 +117,30 @@ function writeValidationFixture(dir, nodeOverrides = {}) {
   return { dist, reports };
 }
 
+function enrichedSpellRow(overrides = {}) {
+  return {
+    kind: "spell",
+    id: 92117,
+    entry_id: 123,
+    builder_name: "Test Node",
+    status: "matched",
+    name: "Test Node",
+    name_match: true,
+    icon: "inv_test",
+    tooltip_html: "<span>Level 10 Passive</span>",
+    tooltip_text: "Level 10 Passive",
+    tooltip_level: 10,
+    required_level: 10,
+    linked_spell_ids: [],
+    linked_item_ids: [],
+    provenance: {
+      url: "https://db.ascension.gg/?spell=92117&power",
+      fetched_at: "2026-07-04T00:00:00Z"
+    },
+    ...overrides
+  };
+}
+
 const SPELL_POWER_FIXTURE = `$WowheadPower.registerSpell(92117, 0, {
     "name_enus": "Dream Flowers",
     "icon": "inv_legion_faction_dreamweavers",
@@ -337,4 +361,16 @@ test("metadata summary reports tabs without node rows", () => {
   const rows = summarizeMetadataTabs(classes, [validNode({ tab_id: 77, tab_name: "Stalking" })]);
 
   assert.deepEqual(rows.tabs_without_nodes.map(row => row.tab_name), ["None"]);
+});
+
+test("DB enrichment can be joined into normalized entries", async () => {
+  const { applyDbEnrichmentToEntries } = await import("../scripts/apply-db-enrichment.mjs");
+  const rows = applyDbEnrichmentToEntries(
+    [validNode({ spell_id: 92117, required_level: 0, description_text: "Level 10 Passive" })],
+    [enrichedSpellRow()]
+  );
+
+  assert.equal(rows[0].db_enrichment.status, "matched");
+  assert.equal(rows[0].availability.effective_required_level, 10);
+  assert.equal(rows[0].availability.level_source, "db_tooltip");
 });
