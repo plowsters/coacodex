@@ -66,6 +66,15 @@ def slugify_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", lowered).strip("_")
 
 
+def effective_required_level(node: TalentNode) -> int:
+    availability = node.availability or node.raw.get("availability") or {}
+    confidence = availability.get("level_confidence")
+    level = availability.get("effective_required_level")
+    if confidence in {"high", "medium"} and type(level) is int:
+        return level
+    return node.required_level
+
+
 def load_class_metadata(path: Path | str) -> tuple[ClassTabMetadata, ...]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     tabs: list[ClassTabMetadata] = []
@@ -113,7 +122,7 @@ class EligibilityPolicy:
     def eligible_node_ids(self, repository: TalentRepository, scope: BuildScope) -> tuple[int, ...]:
         eligible: list[int] = []
         for node in repository.nodes_for_class(scope.class_name):
-            if node.required_level > scope.level:
+            if effective_required_level(node) > scope.level:
                 continue
             if node.tab_id == scope.spec_id or node.tab_name == "Class":
                 eligible.append(node.entry_id)
@@ -139,7 +148,12 @@ class EligibilityPolicy:
 
     def scope_warnings(self, repository: TalentRepository, scope: BuildScope) -> tuple[str, ...]:
         warnings: list[str] = []
-        if scope.level < 60 and any(node.tab_name == "Class" for node in repository.nodes_for_class(scope.class_name)):
+        class_pool_nodes = [
+            node for node in repository.nodes_for_class(scope.class_name)
+            if node.tab_name == "Class"
+        ]
+        if scope.level < 60 and any(not (node.availability or node.raw.get("availability")) for node in class_pool_nodes):
+            warnings.append("class_pool_level_gating_incomplete")
             warnings.append("shared_class_level_gating_incomplete")
         return tuple(warnings)
 

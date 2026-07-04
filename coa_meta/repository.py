@@ -64,6 +64,8 @@ def node_from_raw(raw: dict[str, Any], source: str) -> TalentNode:
         damage_schools=tuple(raw.get("damage_schools") or []),
         resources=tuple(raw.get("resources") or []),
         description_text=raw.get("description_text") or "",
+        source_category=raw.get("source_category") or "",
+        availability=dict(raw.get("availability") or {}),
         raw=raw,
     )
 

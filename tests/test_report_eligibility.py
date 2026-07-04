@@ -108,3 +108,30 @@ def test_level_filtering_excludes_known_high_level_shared_nodes():
 
     assert eligible == (100, 101, 201, 202)
     assert "shared_class_level_gating_incomplete" in warnings
+
+
+def test_level_filtering_uses_medium_confidence_effective_required_level():
+    repo = TalentRepository.from_entries(META_NODES)
+    node = repo.node_by_id(202)
+    node.raw["availability"] = {
+        "effective_required_level": 50,
+        "level_confidence": "medium",
+        "level_source": "db_tooltip",
+        "notes": [],
+    }
+    policy = EligibilityPolicy()
+    scope = BuildScope(
+        class_name="Testclass",
+        spec_id=11,
+        spec_name="Damage",
+        level=15,
+        encounter_profile_id="baseline_single_target",
+        search_profile_id="default",
+        scoring_profile_id="auto",
+        apl_profile_id="auto",
+        top=3,
+    )
+
+    eligible = policy.eligible_node_ids(repo, scope)
+
+    assert 202 not in eligible

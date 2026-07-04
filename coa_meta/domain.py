@@ -34,6 +34,8 @@ class TalentNode:
     damage_schools: tuple[str, ...]
     resources: tuple[str, ...]
     description_text: str
+    source_category: str = ""
+    availability: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
     raw: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     @property
