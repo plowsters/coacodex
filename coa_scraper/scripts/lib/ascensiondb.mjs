@@ -156,14 +156,14 @@ export async function buildEnrichmentRows({
   entries,
   kind,
   fetchPower,
+  concurrency = 8,
   fetchedAt = new Date().toISOString()
 }) {
   const idField = kind === "spell" ? "spell_id" : "item_id";
   const ids = kind === "spell" ? uniqueSpellIds(entries) : uniqueItemIds(entries);
   const byId = new Map(entries.map(entry => [Number(entry[idField]), entry]));
-  const rows = [];
 
-  for (const id of ids) {
+  return mapWithConcurrency(ids, concurrency, async id => {
     const url = powerUrl(kind, id);
     let parsed;
 
@@ -193,21 +193,59 @@ export async function buildEnrichmentRows({
       parsed.name && entry && normalizeName(parsed.name) === normalizeName(entry.name)
     );
 
-    rows.push({
+    return {
       ...parsed,
       entry_id: entry?.entry_id ?? null,
       builder_name: entry?.name ?? null,
       name_match: nameMatch
-    });
-  }
-
-  return rows;
+    };
+  });
 }
 
-export async function fetchText(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} for ${url}`);
+export async function mapWithConcurrency(items, concurrency, mapper) {
+  const limit = Math.max(1, Math.floor(Number(concurrency) || 1));
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
   }
-  return response.text();
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+export async function fetchTextWithTimeout(url, {
+  fetchImpl = fetch,
+  timeoutMs = 15000
+} = {}) {
+  const controller = new AbortController();
+  const timer = timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+    return response.text();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Timed out after ${timeoutMs}ms for ${url}`);
+    }
+    throw error;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+export async function fetchText(url, options = {}) {
+  return fetchTextWithTimeout(url, options);
 }

@@ -14,6 +14,8 @@ import {
 import {
   buildEnrichmentRows,
   extractLinkedIds,
+  fetchTextWithTimeout,
+  mapWithConcurrency,
   parsePowerPayload,
   stripTooltipHtml
 } from "../scripts/lib/ascensiondb.mjs";
@@ -340,6 +342,36 @@ test("DB enrichment rows use fetch results and classify name differences", async
   assert.equal(rows[0].name_match, true);
   assert.equal(rows[1].status, "empty_registration");
   assert.equal(rows[1].name_match, false);
+});
+
+test("DB enrichment utilities bound concurrency and preserve order", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const results = await mapWithConcurrency([1, 2, 3, 4], 2, async value => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    active--;
+    return value * 10;
+  });
+
+  assert.deepEqual(results, [10, 20, 30, 40]);
+  assert.equal(maxActive, 2);
+});
+
+test("DB enrichment fetches time out slow requests", async () => {
+  const fetchImpl = async (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      reject(error);
+    });
+  });
+
+  await assert.rejects(
+    () => fetchTextWithTimeout("https://example.test/slow", { fetchImpl, timeoutMs: 1 }),
+    /Timed out after 1ms/
+  );
 });
 
 test("source category distinguishes spec tree, class pool, and unknown nodes", () => {
