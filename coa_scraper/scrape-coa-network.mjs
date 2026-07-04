@@ -3,10 +3,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
-const URL = "https://ascension.gg/en/v2/coa-builder/voljin-alpha";
-const OUT = "data/raw";
-const SNAP = "data/snapshots";
-const HAR = "data/coa.har";
+import { parseCaptureOptions } from "./scripts/lib/capture-options.mjs";
+
+const options = parseCaptureOptions();
+const URL = options.url;
+const OUT = options.outDir;
+const SNAP = options.snapshotDir;
+const HAR = options.harPath;
+const WAIT_MS = options.waitMs;
+const HEADLESS = options.headless;
+const INTERACTIVE = options.interactive;
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.mkdir(SNAP, { recursive: true });
@@ -30,7 +36,7 @@ const looksInteresting = (url, contentType = "") => {
 };
 
 const browser = await chromium.launch({
-  headless: false,
+  headless: HEADLESS,
   executablePath: "/usr/bin/chromium"
 });
 
@@ -134,7 +140,7 @@ page.on("console", msg => {
 });
 
 await page.goto(URL, { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(8000);
+await page.waitForTimeout(WAIT_MS);
 
 await fs.writeFile(
   path.join(SNAP, "initial-page-content.html"),
@@ -190,12 +196,7 @@ await fs.writeFile(
   "utf8"
 );
 
-console.log("Initial capture complete.");
-console.log("Now manually click class tabs and essence/talent panels in the browser.");
-console.log("When finished, press Enter here.");
-
-process.stdin.resume();
-process.stdin.once("data", async () => {
+async function finalizeCapture() {
   await page.waitForTimeout(2000);
 
   await fs.writeFile(
@@ -235,5 +236,19 @@ process.stdin.once("data", async () => {
 
   console.log("Saved HAR:", HAR);
   console.log("Saved snapshots:", SNAP);
+}
+
+if (!INTERACTIVE) {
+  await finalizeCapture();
+  process.exit(0);
+}
+
+console.log("Initial capture complete.");
+console.log("Now manually click class tabs and essence/talent panels in the browser.");
+console.log("When finished, press Enter here.");
+
+process.stdin.resume();
+process.stdin.once("data", async () => {
+  await finalizeCapture();
   process.exit(0);
 });

@@ -5,6 +5,7 @@
   "main": "scrape-coa-network.js",
   "scripts": {
     "capture": "node scrape-coa-network.mjs",
+    "capture:headless": "node scrape-coa-network.mjs --headless --finalize-on-load",
     "extract": "node scripts/extract-coa-builder-payload.mjs data/snapshots/final-page-content.html reports",
     "normalize": "node scripts/export-coa-normalized.mjs reports/coa_builder_payload.json dist",
     "validate": "node scripts/validate-normalized.mjs dist reports",

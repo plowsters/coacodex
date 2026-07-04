@@ -22,6 +22,7 @@ import {
   deriveAvailability,
   summarizeMetadataTabs
 } from "../scripts/lib/source-level.mjs";
+import { parseCaptureOptions } from "../scripts/lib/capture-options.mjs";
 import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs";
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
 
@@ -436,4 +437,29 @@ test("source level report summarizes metadata tabs and level quality", async () 
   assert.deepEqual(metadata.tabs_without_nodes.map(row => row.tab_name), ["None"]);
   assert.equal(report.required_level_zero_with_tooltip_level_count, 1);
   assert.equal(report.class_pool_unknown_level_count, 1);
+});
+
+test("capture options support unattended headless mode", () => {
+  const options = parseCaptureOptions([
+    "--headless",
+    "--finalize-on-load",
+    "--wait-ms",
+    "250",
+    "--url",
+    "https://example.test/builder",
+    "--out-dir",
+    "tmp/raw",
+    "--snapshot-dir",
+    "tmp/snap",
+    "--har",
+    "tmp/capture.har"
+  ]);
+
+  assert.equal(options.url, "https://example.test/builder");
+  assert.equal(options.outDir, "tmp/raw");
+  assert.equal(options.snapshotDir, "tmp/snap");
+  assert.equal(options.harPath, "tmp/capture.har");
+  assert.equal(options.waitMs, 250);
+  assert.equal(options.headless, true);
+  assert.equal(options.interactive, false);
 });
