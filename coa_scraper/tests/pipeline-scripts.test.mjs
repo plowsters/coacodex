@@ -27,6 +27,11 @@ import {
 import { parseCaptureOptions } from "../scripts/lib/capture-options.mjs";
 import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs";
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
+import {
+  buildItemRows,
+  buildMechanicsRows,
+  summarizeMechanicsArtifacts
+} from "../scripts/build-mechanics-artifacts.mjs";
 
 function tempProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "coa-pipeline-test-"));
@@ -257,6 +262,9 @@ test("manifest writer records builder, validation, artifact hashes, and missing 
   assert.equal(manifest.builder.slug, "voljin-alpha");
   assert.equal(manifest.validation.status, "pass");
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_entries.jsonl" && artifact.sha256));
+  assert(manifest.scripts.some(artifact => artifact.path === "scripts/build-mechanics-artifacts.mjs" && artifact.missing === true));
+  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_mechanics.jsonl" && artifact.missing === true));
+  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_items.jsonl" && artifact.missing === true));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/capture-options.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.missing === true));
 });
@@ -431,6 +439,51 @@ test("DB enrichment can be joined into normalized entries", async () => {
   assert.equal(rows[0].availability.level_source, "db_tooltip");
 });
 
+test("mechanics artifact builder emits spell mechanics and linked item rows", () => {
+  const entry = validNode({
+    entry_id: 501,
+    spell_id: 92117,
+    name: "Dream Flowers",
+    tags: ["dot"],
+    damage_schools: ["nature"],
+    resources: ["Energy"],
+    description_text: "Deals Nature damage over 12 sec."
+  });
+  const spellRow = enrichedSpellRow({
+    id: 92117,
+    entry_id: 501,
+    tooltip_text: "Deals 120 Nature damage over 12 sec.",
+    linked_item_ids: [23887],
+    provenance: {
+      url: "https://db.ascension.gg/?spell=92117&power",
+      fetched_at: "2026-07-05T00:00:00.000Z"
+    }
+  });
+  const itemPayload = parsePowerPayload(ITEM_POWER_FIXTURE, {
+    kind: "item",
+    id: 23887,
+    url: "https://db.ascension.gg/?item=23887&power",
+    fetchedAt: "2026-07-05T00:00:00.000Z"
+  });
+
+  const mechanicsRows = buildMechanicsRows({ entries: [entry], spellRows: [spellRow] });
+  const itemRows = buildItemRows({ itemPayloadRows: [itemPayload] });
+  const summary = summarizeMechanicsArtifacts({ mechanicsRows, itemRows });
+
+  assert.equal(mechanicsRows[0].schema_version, "coa-mechanics-v1");
+  assert.equal(mechanicsRows[0].spell_id, 92117);
+  assert.deepEqual(mechanicsRows[0].source_node_ids, [501]);
+  assert.equal(mechanicsRows[0].effects[0].effect_type, "damage");
+  assert.equal(mechanicsRows[0].effects[0].school, "nature");
+  assert.equal(mechanicsRows[0].provenance[0].source, "ascension_db");
+  assert.equal(itemRows[0].schema_version, "coa-item-v1");
+  assert.equal(itemRows[0].item_id, 23887);
+  assert.equal(itemRows[0].required_level, 58);
+  assert.deepEqual(itemRows[0].linked_spell_ids, [30556]);
+  assert.equal(summary.mechanics_count, 1);
+  assert.equal(summary.item_count, 1);
+});
+
 test("source level report summarizes metadata tabs and level quality", async () => {
   const { buildSourceLevelReport } = await import("../scripts/write-source-level-report.mjs");
   const classes = [
@@ -505,4 +558,6 @@ test("M1.8 pipeline refreshes manifest after DB enrichment artifacts", () => {
   assert.match(packageJson.scripts["pipeline:m1.8"], /enrich-db/);
   assert.match(packageJson.scripts["pipeline:m1.8"], /apply-db-enrichment/);
   assert.match(packageJson.scripts["pipeline:m1.8"], /write-artifact-manifest/);
+  assert.match(packageJson.scripts["build-mechanics"], /build-mechanics-artifacts/);
+  assert.match(packageJson.scripts["pipeline:m1.9"], /build-mechanics/);
 });

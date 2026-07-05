@@ -18,6 +18,8 @@ const scriptPaths = [
   "scripts/lib/source-level.mjs",
   "scripts/enrich-ascensiondb.mjs",
   "scripts/apply-db-enrichment.mjs",
+  "scripts/enrich-linked-items.mjs",
+  "scripts/build-mechanics-artifacts.mjs",
   "scripts/write-source-level-report.mjs",
   "scripts/validate-normalized.mjs",
   "scripts/write-artifact-manifest.mjs",
@@ -40,13 +42,18 @@ const artifactPaths = [
   "reports/coa_source_level_report.json",
   "reports/coa_metadata_tab_report.json",
   "reports/coa_db_enrichment_summary.json",
+  "reports/coa_item_enrichment_summary.json",
+  "reports/coa_mechanics_enrichment_summary.json",
   "dist/coa_entries.jsonl",
   "dist/coa_entries.pretty.json",
   "dist/coa_classes.json",
   "dist/coa_essence_caps.json",
   "dist/coa_class_profile_input.json",
   "dist/coa_db_spell_tooltips.jsonl",
-  "dist/coa_entries.enriched.jsonl"
+  "dist/coa_db_item_tooltips.jsonl",
+  "dist/coa_entries.enriched.jsonl",
+  "dist/coa_mechanics.jsonl",
+  "dist/coa_items.jsonl"
 ];
 
 function optionalRecord(relativePath, rootDir) {
