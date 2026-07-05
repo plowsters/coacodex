@@ -56,6 +56,15 @@ def test_meta_cli_dispatches_to_runner_and_writers(monkeypatch, tmp_path):
             "0.5",
             "--role",
             "tank",
+            "--simulate",
+            "--simulation-duration",
+            "60",
+            "--simulation-iterations",
+            "2",
+            "--simulation-seed",
+            "99",
+            "--gear-profile",
+            "gear.json",
             "--format",
             "json",
             "--format",
@@ -76,6 +85,11 @@ def test_meta_cli_dispatches_to_runner_and_writers(monkeypatch, tmp_path):
     assert DummyRunner.last_config.branch_width == 8
     assert DummyRunner.last_config.require_budget_fraction == 0.5
     assert DummyRunner.last_config.role == "tank"
+    assert DummyRunner.last_config.simulate is True
+    assert DummyRunner.last_config.simulation_duration_ms == 60_000
+    assert DummyRunner.last_config.simulation_iterations == 2
+    assert DummyRunner.last_config.simulation_seed == 99
+    assert DummyRunner.last_config.gear_profile_path == Path("gear.json")
     assert written["formats"] == ("json", "html")
     assert written["out_dir"] == tmp_path
 

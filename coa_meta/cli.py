@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--branch-width", type=int, default=10)
     meta.add_argument("--require-budget-fraction", type=float, default=0.7)
     meta.add_argument("--role", choices=tuple(sorted(SUPPORTED_META_ROLES)), default="auto")
+    meta.add_argument("--simulate", action="store_true")
+    meta.add_argument("--simulation-duration", type=float, default=60.0, help="Simulation duration in seconds")
+    meta.add_argument("--simulation-iterations", type=int, default=1)
+    meta.add_argument("--simulation-seed", type=int, default=1)
+    meta.add_argument("--gear-profile", type=Path, default=None)
     meta.add_argument("--workers", type=int, default=1)
     meta.add_argument("--format", dest="formats", action="append", choices=("json", "md", "html"), default=[])
     meta.add_argument("--out", type=Path, default=Path("reports/meta"))
@@ -58,6 +63,11 @@ def run_meta(args: argparse.Namespace) -> int:
         branch_width=args.branch_width,
         require_budget_fraction=args.require_budget_fraction,
         role=args.role,
+        simulate=args.simulate,
+        simulation_duration_ms=int(args.simulation_duration * 1000),
+        simulation_iterations=args.simulation_iterations,
+        simulation_seed=args.simulation_seed,
+        gear_profile_path=args.gear_profile,
     )
     report = MetaReportRunner(config).run()
     formats = tuple(args.formats) if args.formats else ("json", "md", "html")

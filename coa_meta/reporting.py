@@ -16,6 +16,7 @@ from .profiles import load_profile_by_role
 from .repository import TalentRepository
 from .scoring import TheoryScorer
 from .search import BuildSearchConfig, BuildSearcher
+from .simulation import SimulationConfig, simulate_build
 
 META_REPORT_SCHEMA_VERSION = "coa-meta-report-v1"
 DEFAULT_PUBLIC_ENCOUNTER = "baseline_single_target"
@@ -252,6 +253,11 @@ class MetaRunConfig:
     require_budget_fraction: float = 0.7
     max_ae: int = 26
     max_te: int = 25
+    simulate: bool = False
+    simulation_duration_ms: int = 60_000
+    simulation_iterations: int = 1
+    simulation_seed: int = 1
+    gear_profile_path: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -271,6 +277,11 @@ class MetaRunConfig:
             "require_budget_fraction": self.require_budget_fraction,
             "max_ae": self.max_ae,
             "max_te": self.max_te,
+            "simulate": self.simulate,
+            "simulation_duration_ms": self.simulation_duration_ms,
+            "simulation_iterations": self.simulation_iterations,
+            "simulation_seed": self.simulation_seed,
+            "gear_profile_path": str(self.gear_profile_path) if self.gear_profile_path else None,
         }
 
 
@@ -282,6 +293,7 @@ class BuildReport:
     selected_nodes: tuple[dict[str, Any], ...]
     score_breakdown: dict[str, Any]
     generated_apl: dict[str, Any]
+    simulation_result: dict[str, Any] | None
     explanation: dict[str, Any]
     provenance: dict[str, Any]
     warnings: tuple[str, ...]
@@ -294,6 +306,7 @@ class BuildReport:
             "selected_nodes": list(self.selected_nodes),
             "score_breakdown": self.score_breakdown,
             "generated_apl": self.generated_apl,
+            "simulation_result": self.simulation_result,
             "explanation": self.explanation,
             "provenance": self.provenance,
             "warnings": list(self.warnings),
@@ -477,6 +490,18 @@ class MetaReportRunner:
                 encounter=scope.scoring_encounter,
                 profile_warnings=apl_warnings,
             )
+            simulation_result = None
+            if self.config.simulate:
+                simulation_result = simulate_build(
+                    result.state,
+                    repository,
+                    apl_doc,
+                    SimulationConfig(
+                        duration_ms=self.config.simulation_duration_ms,
+                        iterations=self.config.simulation_iterations,
+                        seed=self.config.simulation_seed,
+                    ),
+                ).to_dict()
             selected_nodes = tuple(_node_to_report(repository.node_by_id(node_id)) for node_id in sorted(result.state.selected_ids))
             top_builds.append(
                 BuildReport(
@@ -486,6 +511,7 @@ class MetaReportRunner:
                     selected_nodes=selected_nodes,
                     score_breakdown=scored.to_dict(),
                     generated_apl=apl_doc.to_dict(),
+                    simulation_result=simulation_result,
                     explanation={"score_components": [component.__dict__ for component in scored.components]},
                     provenance={
                         "normalized_schema": "coa-normalized-v1",
@@ -586,12 +612,13 @@ def render_markdown_report(report: MetaReport) -> str:
         if result["warnings"]:
             lines.extend(f"- Warning: `{warning}`" for warning in result["warnings"])
         lines.append("")
-        lines.append("| Rank | Projected DPS Index | Confidence | Selected Nodes |")
-        lines.append("| --- | ---: | --- | --- |")
+        lines.append("| Rank | Projected DPS Index | Sim DPS | Confidence | Selected Nodes |")
+        lines.append("| --- | ---: | ---: | --- | --- |")
         for build in result["top_builds"]:
             nodes = ", ".join(node["name"] for node in build["selected_nodes"])
+            sim_dps = build["simulation_result"]["dps"] if build.get("simulation_result") else ""
             lines.append(
-                f"| {build['rank']} | {build['projected_dps_index']} | {build['confidence_label']} | {nodes} |"
+                f"| {build['rank']} | {build['projected_dps_index']} | {sim_dps} | {build['confidence_label']} | {nodes} |"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
@@ -605,10 +632,12 @@ def render_html_report(report: MetaReport, asset_resolver: Any | None = None) ->
         rows: list[str] = []
         for build in result["top_builds"]:
             nodes = ", ".join(_html_escape(node["name"]) for node in build["selected_nodes"])
+            sim_dps = build["simulation_result"]["dps"] if build.get("simulation_result") else ""
             rows.append(
                 "<tr>"
                 f"<td>{build['rank']}</td>"
                 f"<td>{build['projected_dps_index']}</td>"
+                f"<td>{sim_dps}</td>"
                 f"<td>{_html_escape(build['confidence_label'])}</td>"
                 f"<td>{nodes}</td>"
                 "</tr>"
@@ -617,7 +646,7 @@ def render_html_report(report: MetaReport, asset_resolver: Any | None = None) ->
             "<section>"
             f"<h2>{_html_escape(result['class_name'])} - {_html_escape(result['spec_name'])}</h2>"
             f"<p><strong>Role:</strong> <code>{_html_escape(result['role'])}</code></p>"
-            "<table><thead><tr><th>Rank</th><th>Projected DPS Index</th><th>Confidence</th><th>Selected Nodes</th></tr></thead>"
+            "<table><thead><tr><th>Rank</th><th>Projected DPS Index</th><th>Sim DPS</th><th>Confidence</th><th>Selected Nodes</th></tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table>"
             "</section>"
         )

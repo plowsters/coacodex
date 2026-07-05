@@ -103,3 +103,27 @@ def test_meta_report_runner_falls_back_when_budget_floor_is_unreachable():
 
     assert result.top_builds
     assert "budget_floor_unreachable_with_current_gates" in result.warnings
+
+
+def test_meta_report_runner_can_attach_simulation_results():
+    config = MetaRunConfig(
+        entries_path=FIXTURES / "meta_report_fixture.jsonl",
+        classes_path=FIXTURES / "meta_classes.json",
+        class_names=("Testclass",),
+        spec_names_or_ids=("Damage",),
+        top=1,
+        beam_width=2,
+        branch_width=2,
+        require_budget_fraction=0.0,
+        simulate=True,
+        simulation_duration_ms=5000,
+        simulation_iterations=1,
+        simulation_seed=13,
+    )
+
+    report = MetaReportRunner(config).run()
+    simulation = report.spec_results[0].top_builds[0].simulation_result
+
+    assert simulation is not None
+    assert simulation["schema_version"] == "coa-simulation-result-v1"
+    assert simulation["source"] == "simulated"
