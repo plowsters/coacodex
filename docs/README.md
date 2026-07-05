@@ -58,7 +58,7 @@ python -m coa_meta meta \
   --format html
 ```
 
-This writes `index.html`, `meta-report.html`, `specs/*.html`, and static assets under `reports/meta/assets/`.
+This writes `index.html`, `meta-report.html`, `specs/*.html`, and static assets under `reports/meta/assets/`. Spec pages include static talent trees, level snapshots, diverse recommended builds, and player-facing core rotation loops when the corresponding report fields are available.
 
 The legacy prototype can also be run from the repository root. Prefer the scraper artifact path:
 

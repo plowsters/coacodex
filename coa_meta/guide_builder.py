@@ -131,7 +131,10 @@ def _build_cards(
     guide_nodes_by_id = {node.entry_id: node for node in guide_nodes}
     for build in result.get("top_builds", []):
         node_ids = tuple(node["node_id"] for node in build.get("selected_nodes", []))
-        label = f"Build {build['rank']}"
+        playstyle = dict(build.get("playstyle_fingerprint") or {})
+        selection = dict(build.get("selection_reason") or {})
+        rotation_loop = dict(build.get("rotation_loop") or {})
+        label = str(playstyle.get("label") or f"Build {build['rank']}")
         tree = build_guide_tree(
             repository=repository,
             class_name=str(result["class_name"]),
@@ -156,10 +159,21 @@ def _build_cards(
                 projected_dps_index=float(build["projected_dps_index"]),
                 node_ids=node_ids,
                 warnings=tuple(build.get("warnings", [])),
+                playstyle_label=label,
+                selection_reason=str(selection.get("reason") or "Strongest current theorycraft result for this spec."),
+                performance_band=str(selection.get("performance_band") or "top theorycraft band"),
+                reliability_label=str(selection.get("reliability_label") or _reliability_from_confidence(build["confidence_label"])),
+                rotation_loop=rotation_loop,
                 tree=tree,
             )
         )
     return cards
+
+
+def _reliability_from_confidence(confidence: str) -> str:
+    if confidence in {"high", "medium", "low"}:
+        return confidence
+    return "medium"
 
 
 def _summary_text(result: dict) -> str:

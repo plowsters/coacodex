@@ -204,9 +204,9 @@ def render_spec_html(site: GuideSite, spec: GuideSpec) -> str:
         f"<h1>{_e(spec.class_name)} - {_e(spec.spec_name)}</h1><p>{_e(spec.summary)}</p>"
         f'<span class="chip">{_e(_label(spec.role))}</span> <span class="chip">{_e(spec.confidence_label)} confidence</span></section>'
         f'<nav class="guide-nav">{nav}</nav>'
-        f'<section class="panel" id="recommended-builds"><h2>Recommended Builds</h2><p>Early theorycraft picks.</p>{builds}</section>'
+        f'<section class="panel" id="recommended-builds"><h2>Recommended Builds</h2>{builds}</section>'
         f"{_render_talent_tree_section(spec)}"
-        '<section class="panel" id="rotation"><h2>Rotation</h2><p>Use the generated priority notes as an early rotation scaffold.</p></section>'
+        f"{_render_rotation_section(spec)}"
         '<section class="panel warning" id="stats"><h2>Stats</h2><p>Stat priorities are early theorycraft until simulations or combat logs are available.</p></section>'
         '<section class="panel" id="weapons-and-armor"><h2>Weapons and Armor</h2><p>Gear targeting is low confidence until item data is complete.</p></section>'
         f'<section class="panel" id="abilities-and-talents"><h2>Abilities and Talents</h2><div class="node-list">{nodes}</div></section>'
@@ -228,12 +228,47 @@ def _render_spec_card(spec: GuideSpec) -> str:
 
 
 def _render_build(build: Any) -> str:
+    warning = '<span class="chip warning">Warnings</span>' if build.warnings else ""
     return (
         '<article class="guide-card">'
-        f"<h3>{_e(build.label)}</h3><p><span class=\"chip\">{_e(build.confidence_label)} confidence</span> "
-        f"<span class=\"chip\" data-tooltip-id=\"metric:projected_dps_index\">Projected Index {build.projected_dps_index:.1f}</span></p>"
+        f"<h3>{_e(build.playstyle_label or build.label)}</h3>"
+        f"<p>{_e(build.selection_reason or 'Strong current theorycraft result for this spec.')}</p>"
+        f"<p><span class=\"chip\">{_e(build.reliability_label or build.confidence_label)} reliability</span> "
+        f"<span class=\"chip\">{_e(build.performance_band or 'top theorycraft band')}</span> "
+        f"<span class=\"chip\" data-tooltip-id=\"metric:projected_dps_index\">Projected Index {build.projected_dps_index:.1f}</span> {warning}</p>"
+        '<p><a href="#talents">View tree</a></p>'
         "</article>"
     )
+
+
+def _render_rotation_section(spec: GuideSpec) -> str:
+    build = spec.builds[0] if spec.builds else None
+    loop = dict(build.rotation_loop or {}) if build else {}
+    if not loop:
+        return '<section class="panel" id="rotation"><h2>Rotation</h2><p>Use the generated priority notes as an early rotation scaffold.</p></section>'
+    sections = [f'<p>{_e(loop.get("objective", ""))}</p>']
+    sections.append(_render_loop_list("Core Loop", loop.get("core_loop", [])))
+    sections.append(_render_loop_list("Opener and Setup", loop.get("opener", [])))
+    sections.append(_render_loop_list("Cooldowns", loop.get("cooldowns", [])))
+    role_steps = loop.get("defensive_or_support", [])
+    if role_steps:
+        sections.append(_render_loop_list("Defensive, Healing, or Support Priorities", role_steps))
+    if loop.get("resource_rule"):
+        sections.append(f'<p><strong>Resource Rule:</strong> {_e(loop["resource_rule"])}</p>')
+    if loop.get("maintenance_rule"):
+        sections.append(f'<p><strong>Maintenance Rule:</strong> {_e(loop["maintenance_rule"])}</p>')
+    reliability = loop.get("reliability_label")
+    if reliability:
+        sections.append(f'<p><span class="chip">{_e(reliability)} rotation reliability</span></p>')
+    return f'<section class="panel" id="rotation"><h2>Rotation</h2>{"".join(sections)}</section>'
+
+
+def _render_loop_list(title: str, items: Any) -> str:
+    values = [str(item) for item in items or [] if str(item)]
+    if not values:
+        return ""
+    body = "".join(f"<li>{_e(item)}</li>" for item in values)
+    return f"<h3>{_e(title)}</h3><ol>{body}</ol>"
 
 
 def _render_talent_tree_section(spec: GuideSpec) -> str:

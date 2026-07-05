@@ -68,3 +68,12 @@ def test_guide_build_cards_include_static_tree_payloads():
     assert build.tree.class_name == "Testclass"
     assert any(node.entry_id == 201 for node in build.tree.nodes)
     assert any(snapshot.level == 60 for snapshot in build.tree.snapshots)
+
+
+def test_guide_build_cards_include_playstyle_metadata():
+    site = build_guide_site(_report(), entries_path=FIXTURES / "meta_report_fixture.jsonl")
+    build = site.specs[0].builds[0]
+
+    assert build.playstyle_label
+    assert build.selection_reason
+    assert build.rotation_loop

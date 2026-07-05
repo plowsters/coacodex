@@ -71,6 +71,17 @@ def test_render_spec_html_includes_static_talent_tree():
     assert "TE" in html
 
 
+def test_spec_html_renders_build_playstyle_and_core_loop():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+
+    html = render_spec_html(site, spec)
+
+    assert "Recommended Builds" in html
+    assert "Core Loop" in html
+    assert "Early theorycraft picks" not in html
+
+
 def test_static_assets_have_fel_void_theme_and_no_network_fetch():
     assert "#65f06b" in GUIDE_CSS
     assert "#8f5cff" in GUIDE_CSS

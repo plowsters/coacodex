@@ -202,6 +202,11 @@ class GuideBuildCard:
     projected_dps_index: float
     node_ids: tuple[int, ...]
     warnings: tuple[str, ...]
+    playstyle_label: str = ""
+    selection_reason: str = ""
+    performance_band: str = ""
+    reliability_label: str = ""
+    rotation_loop: dict[str, Any] | None = None
     tree: GuideTree | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -212,6 +217,11 @@ class GuideBuildCard:
             "projected_dps_index": self.projected_dps_index,
             "node_ids": list(self.node_ids),
             "warnings": list(self.warnings),
+            "playstyle_label": self.playstyle_label,
+            "selection_reason": self.selection_reason,
+            "performance_band": self.performance_band,
+            "reliability_label": self.reliability_label,
+            "rotation_loop": dict(self.rotation_loop or {}),
             "tree": self.tree.to_dict() if self.tree else None,
         }
 
