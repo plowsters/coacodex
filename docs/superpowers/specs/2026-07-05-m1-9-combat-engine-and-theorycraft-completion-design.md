@@ -11,7 +11,7 @@ This spec also captures deferred Phase 1 report work that should land before or 
 - stat priorities
 - ideal weapon and armor type recommendations
 - class/spec summaries
-- image/icon-backed static HTML and later frontend UX
+- image/icon-backed static HTML, GitHub Pages publishing, and later frontend UX
 
 ## Research Notes
 
@@ -39,7 +39,7 @@ Source priority for mechanics:
   - Healer/support specs: HPS/effective healing proxy, overheal proxy when possible, buff uptime, group utility uptime, damage contribution.
 - Generate stat priorities by perturbing stat profiles and rerunning scoring/simulation.
 - Recommend weapons and armor by slot/type from item data and the resolved role.
-- Upgrade HTML reports from basic tables to a static frontend-style report with filters, icons, role badges, build cards, rotation panels, stat priority panels, and class/spec summaries.
+- Upgrade HTML reports from basic tables to a GitHub Pages-friendly static guide site with filters, icons, role badges, build cards, rotation panels, stat priority panels, and class/spec summaries.
 
 ## Non-Goals
 
@@ -188,17 +188,29 @@ Before simulation, stat priorities can use weighted feature profiles. After M1.9
 
 Recommendations should come from item/gear data, not talent text alone. Until item data is complete, report only role-derived preferences with warnings. Once `coa-item-v1` exists, rank weapon and armor types by role score, supported spell/resource scaling, weapon damage scaling, armor type, and item stat budget.
 
-### Static HTML Frontend
+### Static Guide Frontend
 
-The first frontend step should remain a generated static HTML report, but it should behave like a small app:
+The first frontend step should remain a generated static site that can be published to GitHub Pages. Each spec should get a guide-like page with the practical structure players expect from retail WoW class/spec resources, while using distinct branding, layout, color, menus, and interaction patterns rather than copying Icy Veins or any other existing guide site.
+
+Per-spec pages should include:
+
+- overview and role identity
+- recommended builds by encounter profile
+- talent and ability selection cards with icons
+- opener and steady-state rotation sections
+- defensive/support sections for non-DPS roles
+- stat priority panels
+- weapon and armor recommendation panels
+- strengths, weaknesses, and assumptions
+- warnings and provenance visible without inspecting JSON
+
+The index and comparison views should include:
 
 - role/spec/class filters
+- class and spec navigation menus
 - build cards with icons and selected node groups
-- expandable rotation panels
-- stat priority panels
-- weapon/armor recommendation panels
-- class/spec summary panels
-- warnings and provenance visible without inspecting JSON
+- expandable rotation/stat/gear panels
+- static assets that work from relative GitHub Pages paths
 
 Do not require a dev server for static report generation. A later web app can reuse the same JSON schema.
 

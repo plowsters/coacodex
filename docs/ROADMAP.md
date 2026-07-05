@@ -200,6 +200,23 @@ Exit criteria:
 - The user can generate a data-driven Stalker Venomancer report from local logs.
 - The same report format can later scale to all classes and specs.
 
+### Milestone 2.6: Personal Simulation Upload API
+
+Requirements:
+
+- Add a serverless API target suitable for Vercel free-tier deployment.
+- Accept uploaded SimC-style text exports for a user's own character, gear, build, and APL inputs.
+- Parse uploads into the same local profile/build/gear DTOs used by the CLI.
+- Run bounded personal simulations with strict request size, duration, iteration, timeout, and concurrency limits.
+- Return JSON results that the GitHub Pages frontend can render without requiring account state.
+- Keep uploads ephemeral by default; do not persist character text, combat logs, or personally identifying data unless a later explicit consent workflow is added.
+
+Exit criteria:
+
+- A user can paste or upload SimC-style text in the web UI and receive a bounded personal simulation result from a Vercel-hosted function.
+- The backend rejects oversized, malformed, or unsupported inputs with clear machine-readable errors.
+- Free-tier constraints are documented, including expected timeout and iteration limits.
+
 ## Phase 3: Event-Driven Simulator Release
 
 Purpose: add a deterministic and Monte Carlo-capable simulator for projected DPS numbers. This phase should model mechanics directly instead of relying only on tooltip heuristics or logs.

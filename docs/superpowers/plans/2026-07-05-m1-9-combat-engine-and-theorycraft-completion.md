@@ -277,8 +277,11 @@ Tasks:
   - constraints/warnings
   - data confidence
 - Upgrade static HTML:
+  - GitHub Pages-compatible relative links and assets
+  - per-spec guide pages inspired by retail WoW guide structure without copying any site design
   - role filters
   - class/spec filters
+  - class/spec navigation menus
   - icons
   - build cards
   - expandable rotation/stat/gear panels
