@@ -32,7 +32,7 @@ from .search import BuildSearchConfig, BuildSearcher
 from .simulation import SimulationConfig, simulate_build
 from .gear import recommend_weapon_and_armor
 from .rotation_loops import build_rotation_loop
-from .stats import stat_priority_for_role
+from .stats import stat_priority_for_role, stat_priority_report_for_role
 
 META_REPORT_SCHEMA_VERSION = "coa-meta-report-v1"
 DEFAULT_PUBLIC_ENCOUNTER = "baseline_single_target"
@@ -253,6 +253,7 @@ class BuildReport:
     simulation_result: dict[str, Any] | None
     rotation_summary: dict[str, Any]
     stat_priority: tuple[dict[str, Any], ...]
+    stat_priority_report: dict[str, Any]
     gear_recommendation: dict[str, Any]
     explanation: dict[str, Any]
     provenance: dict[str, Any]
@@ -272,6 +273,7 @@ class BuildReport:
             "simulation_result": self.simulation_result,
             "rotation_summary": self.rotation_summary,
             "stat_priority": list(self.stat_priority),
+            "stat_priority_report": self.stat_priority_report,
             "gear_recommendation": self.gear_recommendation,
             "explanation": self.explanation,
             "provenance": self.provenance,
@@ -529,6 +531,7 @@ class MetaReportRunner:
             apl_payload = apl_doc.to_dict()
             rotation_summary = _rotation_summary(apl_payload, role)
             stat_priority = tuple(priority.to_dict() for priority in stat_priority_for_role(engine_role))
+            stat_priority_report = stat_priority_report_for_role(role, engine_role=engine_role).to_dict()
             gear_recommendation = recommend_weapon_and_armor(engine_role, tuple())
             selected_nodes = tuple(_node_to_report(repository.node_by_id(node_id)) for node_id in sorted(result.state.selected_ids))
             selection_reason = candidate.selection_reason
@@ -543,6 +546,7 @@ class MetaReportRunner:
                     simulation_result=simulation_result,
                     rotation_summary=rotation_summary,
                     stat_priority=stat_priority,
+                    stat_priority_report=stat_priority_report,
                     gear_recommendation=gear_recommendation,
                     explanation={"score_components": [component.__dict__ for component in scored.components]},
                     provenance={

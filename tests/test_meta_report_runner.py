@@ -77,7 +77,10 @@ def test_meta_report_exposes_guide_role_engine_role_and_provenance():
     assert by_spec["Support"]["role"] == "healer"
     assert by_spec["Support"]["engine_role"] == "healer_support"
     assert by_spec["Support"]["role_provenance"]["source"] == "curated"
-    assert by_spec["Support"]["top_builds"][0]["provenance"]["engine_role"] == "healer_support"
+    build = by_spec["Support"]["top_builds"][0]
+    assert build["provenance"]["engine_role"] == "healer_support"
+    assert build["stat_priority_report"]["schema_version"] == "coa-stat-priority-v2"
+    assert build["stat_priority_report"]["role"] == "healer"
 
 
 def test_meta_report_runner_allows_explicit_role_override():
