@@ -27,6 +27,10 @@ def test_meta_report_runner_generates_spec_results_from_fixture():
     assert data["spec_results"][0]["top_builds"]
     assert data["spec_results"][0]["top_builds"][0]["projected_dps_index"] > 0
     assert data["spec_results"][0]["top_builds"][0]["generated_apl"]["schema_version"] == "coa-apl-v1"
+    assert data["spec_results"][0]["summary"]["role"] == "dps"
+    assert data["spec_results"][0]["top_builds"][0]["rotation_summary"]["sections"]
+    assert data["spec_results"][0]["top_builds"][0]["stat_priority"]
+    assert "item_data_missing" in data["spec_results"][0]["top_builds"][0]["gear_recommendation"]["warnings"]
 
 
 def test_meta_report_runner_infers_roles_for_specs():

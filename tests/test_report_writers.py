@@ -4,7 +4,14 @@ import json
 from pathlib import Path
 
 from coa_meta.report_assets import AssetResolver
-from coa_meta.reporting import MetaReportRunner, MetaRunConfig, render_html_report, render_markdown_report, write_report_outputs
+from coa_meta.reporting import (
+    MetaReportRunner,
+    MetaRunConfig,
+    render_html_report,
+    render_markdown_report,
+    render_spec_guide_html,
+    write_report_outputs,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -28,7 +35,8 @@ def test_writes_json_markdown_and_html_outputs(tmp_path):
 
     written = write_report_outputs(report, tmp_path, formats=("json", "md", "html"))
 
-    assert {path.name for path in written} == {"meta-report.json", "meta-report.md", "meta-report.html"}
+    assert {"meta-report.json", "meta-report.md", "meta-report.html"}.issubset({path.name for path in written})
+    assert (tmp_path / "specs" / "testclass-damage.html").exists()
     data = json.loads((tmp_path / "meta-report.json").read_text(encoding="utf-8"))
     assert data["schema_version"] == "coa-meta-report-v1"
     assert "Projected DPS Index" in (tmp_path / "meta-report.md").read_text(encoding="utf-8")
@@ -45,6 +53,20 @@ def test_markdown_and_html_include_warnings_and_theorycraft_label():
     assert "metadata_tab_has_no_nodes:Testclass:Empty" in markdown
     assert "Observed DPS" not in markdown
     assert "Projected DPS Index" in html
+    assert "guide-grid" in html
+
+
+def test_spec_guide_html_has_rotation_stat_and_gear_sections():
+    report = _report()
+    result = report.spec_results[0]
+
+    html = render_spec_guide_html(report, result)
+
+    assert "spec-guide" in html
+    assert "Rotation" in html
+    assert "Stat Priority" in html
+    assert "Weapon and Armor" in html
+    assert "Icy" not in html
 
 
 def test_asset_resolver_returns_none_for_missing_assets(tmp_path):

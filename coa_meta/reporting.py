@@ -17,6 +17,8 @@ from .repository import TalentRepository
 from .scoring import TheoryScorer
 from .search import BuildSearchConfig, BuildSearcher
 from .simulation import SimulationConfig, simulate_build
+from .gear import recommend_weapon_and_armor
+from .stats import stat_priority_for_role
 
 META_REPORT_SCHEMA_VERSION = "coa-meta-report-v1"
 DEFAULT_PUBLIC_ENCOUNTER = "baseline_single_target"
@@ -294,6 +296,9 @@ class BuildReport:
     score_breakdown: dict[str, Any]
     generated_apl: dict[str, Any]
     simulation_result: dict[str, Any] | None
+    rotation_summary: dict[str, Any]
+    stat_priority: tuple[dict[str, Any], ...]
+    gear_recommendation: dict[str, Any]
     explanation: dict[str, Any]
     provenance: dict[str, Any]
     warnings: tuple[str, ...]
@@ -307,6 +312,9 @@ class BuildReport:
             "score_breakdown": self.score_breakdown,
             "generated_apl": self.generated_apl,
             "simulation_result": self.simulation_result,
+            "rotation_summary": self.rotation_summary,
+            "stat_priority": list(self.stat_priority),
+            "gear_recommendation": self.gear_recommendation,
             "explanation": self.explanation,
             "provenance": self.provenance,
             "warnings": list(self.warnings),
@@ -324,6 +332,7 @@ class SpecResult:
     search_profile_id: str
     scoring_profile_id: str
     apl_profile_id: str
+    summary: dict[str, Any]
     top_builds: tuple[BuildReport, ...]
     warnings: tuple[str, ...]
 
@@ -338,6 +347,7 @@ class SpecResult:
             "search_profile_id": self.search_profile_id,
             "scoring_profile_id": self.scoring_profile_id,
             "apl_profile_id": self.apl_profile_id,
+            "summary": self.summary,
             "top_builds": [build.to_dict() for build in self.top_builds],
             "warnings": list(self.warnings),
         }
@@ -502,6 +512,10 @@ class MetaReportRunner:
                         seed=self.config.simulation_seed,
                     ),
                 ).to_dict()
+            apl_payload = apl_doc.to_dict()
+            rotation_summary = _rotation_summary(apl_payload, role)
+            stat_priority = tuple(priority.to_dict() for priority in stat_priority_for_role(role))
+            gear_recommendation = recommend_weapon_and_armor(role, tuple())
             selected_nodes = tuple(_node_to_report(repository.node_by_id(node_id)) for node_id in sorted(result.state.selected_ids))
             top_builds.append(
                 BuildReport(
@@ -510,8 +524,11 @@ class MetaReportRunner:
                     confidence_label=scored.confidence,
                     selected_nodes=selected_nodes,
                     score_breakdown=scored.to_dict(),
-                    generated_apl=apl_doc.to_dict(),
+                    generated_apl=apl_payload,
                     simulation_result=simulation_result,
+                    rotation_summary=rotation_summary,
+                    stat_priority=stat_priority,
+                    gear_recommendation=gear_recommendation,
                     explanation={"score_components": [component.__dict__ for component in scored.components]},
                     provenance={
                         "normalized_schema": "coa-normalized-v1",
@@ -534,9 +551,67 @@ class MetaReportRunner:
             search_profile_id=scope.search_profile_id,
             scoring_profile_id=scoring_profile.profile_id,
             apl_profile_id=apl_profile.profile_id,
+            summary=_spec_summary(scope, role, top_builds, warnings),
             top_builds=tuple(top_builds),
             warnings=tuple(warnings),
         )
+
+
+def _rotation_summary(apl_payload: dict[str, Any], role: str) -> dict[str, Any]:
+    sections = {
+        "opener": [],
+        "maintenance": [],
+        "cooldowns": [],
+        "builder_spender": [],
+        "defensive_support": [],
+    }
+    for action in apl_payload.get("actions", []):
+        item = {
+            "action_name": action.get("action_name"),
+            "condition": action.get("condition", ""),
+            "confidence": action.get("confidence", "low"),
+        }
+        category = action.get("category")
+        if category == "maintenance":
+            sections["maintenance"].append(item)
+        elif category == "cooldown":
+            sections["cooldowns"].append(item)
+        elif category in {"builder", "spender", "filler", "execute", "aoe"}:
+            sections["builder_spender"].append(item)
+        elif category == "utility" or role in {"tank", "healer_support"}:
+            sections["defensive_support"].append(item)
+        else:
+            sections["opener"].append(item)
+    return {
+        "schema_version": "coa-rotation-summary-v1",
+        "source": "generated_apl",
+        "sections": {key: value for key, value in sections.items() if value},
+        "warnings": list(apl_payload.get("warnings", [])),
+    }
+
+
+def _spec_summary(scope: BuildScope, role: str, top_builds: list[BuildReport], warnings: list[str]) -> dict[str, Any]:
+    best = top_builds[0] if top_builds else None
+    return {
+        "schema_version": "coa-spec-summary-v1",
+        "class_name": scope.class_name,
+        "spec_name": scope.spec_name,
+        "role": role,
+        "best_projected_dps_index": best.projected_dps_index if best else None,
+        "data_confidence": best.confidence_label if best else "low",
+        "strengths": _summary_strengths(best, role),
+        "constraints": list(warnings),
+    }
+
+
+def _summary_strengths(best: BuildReport | None, role: str) -> list[str]:
+    if best is None:
+        return ["No legal build found with current gates."]
+    if role == "tank":
+        return ["Prioritizes defensive, mitigation, and control features from normalized tags."]
+    if role == "healer_support":
+        return ["Prioritizes healing, aura, and group utility features from normalized tags."]
+    return ["Prioritizes damage, resource, cooldown, and proc features from normalized tags."]
 
 
 def _build_key(state: Any) -> str:
@@ -630,6 +705,7 @@ def render_html_report(report: MetaReport, asset_resolver: Any | None = None) ->
     sections: list[str] = []
     for result in data["spec_results"]:
         rows: list[str] = []
+        spec_href = f"specs/{_html_escape(_spec_page_name(result))}"
         for build in result["top_builds"]:
             nodes = ", ".join(_html_escape(node["name"]) for node in build["selected_nodes"])
             sim_dps = build["simulation_result"]["dps"] if build.get("simulation_result") else ""
@@ -643,9 +719,10 @@ def render_html_report(report: MetaReport, asset_resolver: Any | None = None) ->
                 "</tr>"
             )
         sections.append(
-            "<section>"
+            "<section class=\"guide-card\">"
             f"<h2>{_html_escape(result['class_name'])} - {_html_escape(result['spec_name'])}</h2>"
             f"<p><strong>Role:</strong> <code>{_html_escape(result['role'])}</code></p>"
+            f"<p><a href=\"{spec_href}\">Open spec guide</a></p>"
             "<table><thead><tr><th>Rank</th><th>Projected DPS Index</th><th>Sim DPS</th><th>Confidence</th><th>Selected Nodes</th></tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table>"
             "</section>"
@@ -653,14 +730,93 @@ def render_html_report(report: MetaReport, asset_resolver: Any | None = None) ->
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<title>CoA Phase 1 Meta Report</title>"
-        "<style>body{font-family:system-ui,sans-serif;margin:24px;}table{border-collapse:collapse;width:100%;margin-bottom:24px;}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#f4f4f4;}code{background:#eee;padding:1px 4px;}</style>"
+        "<style>body{font-family:Inter,system-ui,sans-serif;margin:0;background:#101820;color:#eef6f8;}a{color:#7bdff2;}header{padding:28px 32px;background:#162633;border-bottom:3px solid #34c6a4;}main{padding:24px 32px;}table{border-collapse:collapse;width:100%;margin-bottom:16px;}th,td{border:1px solid #34515f;padding:6px 8px;text-align:left;}th{background:#1f3848;}code{background:#243b4a;padding:1px 4px;border-radius:4px;}.guide-grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));}.guide-card{border:1px solid #34515f;border-radius:8px;padding:16px;background:#142430;}</style>"
         "</head><body>"
-        "<h1>CoA Phase 1 Meta Report</h1>"
-        "<p>This report is a theorycraft projection. Projected DPS Index is not observed DPS.</p>"
+        "<header><h1>CoA Meta Guides</h1>"
+        "<p>This report is a theorycraft projection. Projected DPS Index is not observed DPS.</p></header>"
+        "<main class=\"guide-grid\">"
         f"<h2>Warnings</h2><ul>{warning_items}</ul>"
         f"{''.join(sections)}"
-        "</body></html>"
+        "</main></body></html>"
     )
+
+
+def render_spec_guide_html(report: MetaReport, result: SpecResult, asset_resolver: Any | None = None) -> str:
+    data = result.to_dict()
+    best = data["top_builds"][0] if data["top_builds"] else None
+    rotation = _render_rotation_sections(best["rotation_summary"] if best else {})
+    stat_priority = _render_stat_priority(best["stat_priority"] if best else [])
+    gear = _render_gear_recommendation(best["gear_recommendation"] if best else {})
+    warnings = "".join(f"<li><code>{_html_escape(warning)}</code></li>" for warning in data["warnings"])
+    nodes = ""
+    if best:
+        nodes = "".join(
+            f"<li>{_html_escape(node['name'])} <small>{_html_escape(node['tab_name'])}</small></li>"
+            for node in best["selected_nodes"]
+        )
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        f"<title>{_html_escape(data['class_name'])} { _html_escape(data['spec_name']) } Guide</title>"
+        "<style>body{font-family:Inter,system-ui,sans-serif;margin:0;background:#0f171d;color:#eef6f8;}a{color:#7bdff2}.spec-guide{max-width:1120px;margin:0 auto;padding:28px;}nav{margin-bottom:20px}.hero{border-left:5px solid #34c6a4;padding:18px 22px;background:#172632;border-radius:8px}.panel{margin:18px 0;padding:18px;border:1px solid #34515f;border-radius:8px;background:#13222d}.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));}code{background:#243b4a;padding:1px 4px;border-radius:4px}li{margin:6px 0}</style>"
+        "</head><body><main class=\"spec-guide\">"
+        "<nav><a href=\"../meta-report.html\">Back to index</a></nav>"
+        "<section class=\"hero\">"
+        f"<h1>{_html_escape(data['class_name'])} - {_html_escape(data['spec_name'])}</h1>"
+        f"<p>Role: <code>{_html_escape(data['role'])}</code></p>"
+        f"<p>{_html_escape(data['summary']['strengths'][0])}</p>"
+        "</section>"
+        "<section class=\"grid\">"
+        f"<div class=\"panel\"><h2>Recommended Build</h2><ul>{nodes}</ul></div>"
+        f"<div class=\"panel\"><h2>Stat Priority</h2>{stat_priority}</div>"
+        f"<div class=\"panel\"><h2>Weapon and Armor</h2>{gear}</div>"
+        "</section>"
+        f"<section class=\"panel\"><h2>Rotation</h2>{rotation}</section>"
+        f"<section class=\"panel\"><h2>Warnings</h2><ul>{warnings}</ul></section>"
+        "</main></body></html>"
+    )
+
+
+def _render_rotation_sections(summary: dict[str, Any]) -> str:
+    sections = summary.get("sections", {})
+    if not sections:
+        return "<p>No generated rotation actions were available.</p>"
+    html: list[str] = []
+    for name, actions in sections.items():
+        items = "".join(
+            f"<li>{_html_escape(action['action_name'])}"
+            f"{' when ' + _html_escape(action['condition']) if action.get('condition') else ''}</li>"
+            for action in actions
+        )
+        html.append(f"<h3>{_html_escape(name.replace('_', ' ').title())}</h3><ol>{items}</ol>")
+    return "".join(html)
+
+
+def _render_stat_priority(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<p>Stat priority is unavailable.</p>"
+    items = "".join(
+        f"<li><strong>{_html_escape(row['stat'].replace('_', ' ').title())}</strong> "
+        f"<small>{_html_escape(row['reason'])}</small></li>"
+        for row in rows[:8]
+    )
+    return f"<ol>{items}</ol>"
+
+
+def _render_gear_recommendation(recommendation: dict[str, Any]) -> str:
+    if not recommendation:
+        return "<p>Gear recommendation is unavailable.</p>"
+    weapons = ", ".join(recommendation.get("weapon_types", [])) or "unknown"
+    armor = ", ".join(recommendation.get("armor_types", [])) or "unknown"
+    warnings = "".join(f"<li><code>{_html_escape(warning)}</code></li>" for warning in recommendation.get("warnings", []))
+    return (
+        f"<p><strong>Weapons:</strong> {_html_escape(weapons)}</p>"
+        f"<p><strong>Armor:</strong> {_html_escape(armor)}</p>"
+        f"<ul>{warnings}</ul>"
+    )
+
+
+def _spec_page_name(result: dict[str, Any]) -> str:
+    return f"{slugify_key(result['class_name'])}-{slugify_key(result['spec_name'])}.html"
 
 
 def write_report_outputs(
@@ -682,6 +838,12 @@ def write_report_outputs(
         elif fmt == "html":
             path = output_dir / "meta-report.html"
             path.write_text(render_html_report(report, asset_resolver=asset_resolver), encoding="utf-8")
+            spec_dir = output_dir / "specs"
+            spec_dir.mkdir(parents=True, exist_ok=True)
+            for result in report.spec_results:
+                spec_path = spec_dir / _spec_page_name(result.to_dict())
+                spec_path.write_text(render_spec_guide_html(report, result, asset_resolver=asset_resolver), encoding="utf-8")
+                written.append(spec_path)
         else:
             raise ValueError(f"Unsupported report format {fmt}")
         written.append(path)
