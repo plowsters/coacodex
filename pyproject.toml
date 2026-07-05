@@ -22,5 +22,6 @@ packages = ["coa_meta", "coa_meta.combat"]
 [tool.setuptools.package-data]
 coa_meta = [
   "data/scoring_profiles/*.json",
-  "data/apl_profiles/*.json"
+  "data/apl_profiles/*.json",
+  "data/role_overrides.json"
 ]

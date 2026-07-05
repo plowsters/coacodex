@@ -37,6 +37,7 @@ def test_pyproject_declares_package_data_and_console_script():
     package_data = data["tool"]["setuptools"]["package-data"]["coa_meta"]
     assert "data/scoring_profiles/*.json" in package_data
     assert "data/apl_profiles/*.json" in package_data
+    assert "data/role_overrides.json" in package_data
 
 
 def test_root_package_json_delegates_scraper_pipeline_commands():

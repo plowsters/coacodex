@@ -1,0 +1,30 @@
+{
+  "schema_version": "coa-role-overrides-v1",
+  "overrides": [
+    {"class_name": "Testclass", "spec_name": "Support", "role": "healer", "confidence": "high", "evidence": ["fixture support spec"]},
+    {"spec_key": "black_knight", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "defiance", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "dreadnought", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "fortitude", "role": "tank", "confidence": "medium", "evidence": ["curated tank-leaning spec key"]},
+    {"spec_key": "moon_guard", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "mountain_king", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "oathkeeper", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "seraphim", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "vanguard", "role": "tank", "confidence": "high", "evidence": ["curated tank spec key"]},
+    {"spec_key": "blessings", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "brewing", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "fleshweaver", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "flameweaving", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "invention", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "life", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "moon_priest", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "time", "role": "healer", "confidence": "medium", "evidence": ["curated healer spec key"]},
+    {"spec_key": "vizier", "role": "healer", "confidence": "high", "evidence": ["curated healer spec key"]},
+    {"spec_key": "voodoo", "role": "support", "confidence": "medium", "evidence": ["curated support-leaning spec key"]},
+    {"spec_key": "inspiration", "role": "support", "confidence": "medium", "evidence": ["curated support-leaning spec key"]},
+    {"spec_key": "artificer", "role": "support", "confidence": "medium", "evidence": ["curated support-leaning spec key"]},
+    {"spec_key": "heretic", "role": "healer", "confidence": "medium", "evidence": ["curated healer/support hybrid key"]},
+    {"spec_key": "piety", "role": "caster_dps", "confidence": "medium", "evidence": ["curated holy caster damage key"]},
+    {"spec_key": "stalking", "role": "melee_dps", "confidence": "high", "evidence": ["curated Venomancer Stalking damage key"]}
+  ]
+}
