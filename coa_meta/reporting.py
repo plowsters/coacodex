@@ -798,9 +798,10 @@ def render_spec_guide_html(report: MetaReport, result: SpecResult, asset_resolve
     data = result.to_dict()
     best = data["top_builds"][0] if data["top_builds"] else None
     rotation = _render_rotation_sections(best["rotation_summary"] if best else {})
-    stat_priority = _render_stat_priority(best["stat_priority"] if best else [])
-    gear = _render_gear_recommendation(best["gear_recommendation"] if best else {})
+    stat_priority = _render_stat_priority_report(best.get("stat_priority_report") or {}) if best else _render_stat_priority([])
+    gear = _render_gear_recommendation_report(best.get("gear_recommendation_report") or {}) if best else _render_gear_recommendation({})
     warnings = "".join(f"<li><code>{_html_escape(warning)}</code></li>" for warning in data["warnings"])
+    warning_section = f'<section class="panel"><h2>Warnings</h2><ul>{warnings}</ul></section>' if warnings else ""
     nodes = ""
     if best:
         nodes = "".join(
@@ -824,7 +825,7 @@ def render_spec_guide_html(report: MetaReport, result: SpecResult, asset_resolve
         f"<div class=\"panel\"><h2>Weapon and Armor</h2>{gear}</div>"
         "</section>"
         f"<section class=\"panel\"><h2>Rotation</h2>{rotation}</section>"
-        f"<section class=\"panel\"><h2>Warnings</h2><ul>{warnings}</ul></section>"
+        f"{warning_section}"
         "</main></body></html>"
     )
 
@@ -855,6 +856,25 @@ def _render_stat_priority(rows: list[dict[str, Any]]) -> str:
     return f"<ol>{items}</ol>"
 
 
+def _render_stat_priority_report(report: dict[str, Any]) -> str:
+    if not report:
+        return _render_stat_priority([])
+    disclaimer = report.get("disclaimer")
+    disclaimer_html = f"<p><strong>Warning:</strong> {_html_escape(disclaimer)}</p>" if disclaimer else ""
+    groups: list[str] = []
+    for group in report.get("groups", []):
+        entries = "".join(
+            f"<li><strong>{_html_escape(str(entry.get('stat', '')).replace('_', ' ').title())}</strong> "
+            f"<small>{_html_escape(entry.get('reason', ''))}</small></li>"
+            for entry in group.get("entries", [])
+        )
+        if entries:
+            groups.append(f"<h3>{_html_escape(group.get('label') or group.get('group_id'))}</h3><ol>{entries}</ol>")
+    if not groups:
+        return _render_stat_priority([])
+    return disclaimer_html + "".join(groups)
+
+
 def _render_gear_recommendation(recommendation: dict[str, Any]) -> str:
     if not recommendation:
         return "<p>Gear recommendation is unavailable.</p>"
@@ -866,6 +886,29 @@ def _render_gear_recommendation(recommendation: dict[str, Any]) -> str:
         f"<p><strong>Armor:</strong> {_html_escape(armor)}</p>"
         f"<ul>{warnings}</ul>"
     )
+
+
+def _render_gear_recommendation_report(report: dict[str, Any]) -> str:
+    if not report:
+        return _render_gear_recommendation({})
+    best_values = tuple(report.get("best_weapon_types", [])) + tuple(report.get("best_armor_types", []))
+    available_values = tuple(report.get("available_weapon_types", [])) + tuple(report.get("available_armor_types", []))
+    best = _render_inline_type_list(best_values)
+    available = _render_inline_type_list(available_values)
+    warnings = "".join(f"<li><code>{_html_escape(warning)}</code></li>" for warning in report.get("warnings", []))
+    warnings_html = f"<ul>{warnings}</ul>" if warnings else ""
+    return (
+        f"<h3>Best targets for this spec</h3><p>{best}</p>"
+        f"<h3>Available to this class</h3><p>{available}</p>"
+        f"{warnings_html}"
+    )
+
+
+def _render_inline_type_list(values: tuple[str, ...]) -> str:
+    unique_values = tuple(dict.fromkeys(value for value in values if value))
+    if not unique_values:
+        return "unknown"
+    return _html_escape(", ".join(value.replace("_", " ").title() for value in unique_values))
 
 
 def _spec_page_name(result: dict[str, Any]) -> str:

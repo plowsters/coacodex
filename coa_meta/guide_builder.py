@@ -102,6 +102,7 @@ def build_guide_site(
                 builds=builds,
                 nodes=tuple(guide_nodes),
                 warnings=warnings,
+                role_provenance=dict(result.get("role_provenance") or {}),
             )
         )
 
@@ -164,6 +165,8 @@ def _build_cards(
                 performance_band=str(selection.get("performance_band") or "top theorycraft band"),
                 reliability_label=str(selection.get("reliability_label") or _reliability_from_confidence(build["confidence_label"])),
                 rotation_loop=rotation_loop,
+                stat_priority_report=dict(build.get("stat_priority_report") or {}),
+                gear_recommendation_report=dict(build.get("gear_recommendation_report") or {}),
                 tree=tree,
             )
         )

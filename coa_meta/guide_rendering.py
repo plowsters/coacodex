@@ -27,6 +27,8 @@ a { color: var(--fel); }
 .guide-card, .panel { border: 1px solid var(--border); background: rgba(19,11,30,.92); border-radius: 8px; padding: 18px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .85rem; }
 .warning { border-color: rgba(245,197,66,.55); color: var(--warning); }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.section-note { border: 1px solid rgba(245,197,66,.55); color: var(--warning); border-radius: 8px; padding: 10px; background: rgba(245,197,66,.08); }
 .guide-nav { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; position: sticky; top: 0; padding: 10px 0; background: rgba(9,5,15,.9); backdrop-filter: blur(8px); }
 .node-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .node-card { display: grid; grid-template-columns: 42px 1fr; gap: 10px; align-items: center; border: 1px solid rgba(101,240,107,.18); border-radius: 8px; padding: 10px; background: rgba(255,255,255,.03); }
@@ -202,13 +204,14 @@ def render_spec_html(site: GuideSite, spec: GuideSpec) -> str:
         "<link rel=\"stylesheet\" href=\"../assets/guide.css\"></head><body><main class=\"site-shell\">"
         f'<p><a href="../index.html">Back to guides</a></p><section class="hero" id="overview">'
         f"<h1>{_e(spec.class_name)} - {_e(spec.spec_name)}</h1><p>{_e(spec.summary)}</p>"
-        f'<span class="chip">{_e(_label(spec.role))}</span> <span class="chip">{_e(spec.confidence_label)} confidence</span></section>'
+        f'<span class="chip" data-tooltip-id="role:{_e(spec.slug)}">{_e(_label(spec.role))}</span> '
+        f'<span class="chip">{_e(spec.confidence_label)} confidence</span></section>'
         f'<nav class="guide-nav">{nav}</nav>'
         f'<section class="panel" id="recommended-builds"><h2>Recommended Builds</h2>{builds}</section>'
         f"{_render_talent_tree_section(spec)}"
         f"{_render_rotation_section(spec)}"
-        '<section class="panel warning" id="stats"><h2>Stats</h2><p>Stat priorities are early theorycraft until simulations or combat logs are available.</p></section>'
-        '<section class="panel" id="weapons-and-armor"><h2>Weapons and Armor</h2><p>Gear targeting is low confidence until item data is complete.</p></section>'
+        f"{_render_stats_section(spec)}"
+        f"{_render_gear_section(spec)}"
         f'<section class="panel" id="abilities-and-talents"><h2>Abilities and Talents</h2><div class="node-list">{nodes}</div></section>'
         f"{warnings}<section class=\"panel\" id=\"data-notes\"><h2>Data Notes</h2><p>Generated: {_e(site.generated_at)}</p></section>"
         f"{_tooltip_script(site)}<script src=\"../assets/guide.js\"></script>"
@@ -261,6 +264,59 @@ def _render_rotation_section(spec: GuideSpec) -> str:
     if reliability:
         sections.append(f'<p><span class="chip">{_e(reliability)} rotation reliability</span></p>')
     return f'<section class="panel" id="rotation"><h2>Rotation</h2>{"".join(sections)}</section>'
+
+
+def _render_stats_section(spec: GuideSpec) -> str:
+    build = spec.builds[0] if spec.builds else None
+    report = dict(build.stat_priority_report or {}) if build else {}
+    if not report:
+        return '<section class="panel warning" id="stats"><h2>Stats</h2><p>Stat priority is unavailable.</p></section>'
+    disclaimer = report.get("disclaimer")
+    warning = f'<p class="section-note">{_e(disclaimer)}</p>' if disclaimer else ""
+    groups = []
+    for group in report.get("groups", []):
+        entries = "".join(
+            f'<span class="chip" title="{_e(entry.get("reason", ""))}">'
+            f'{_e(str(entry.get("stat", "")).replace("_", " ").title())}</span>'
+            for entry in group.get("entries", [])
+        )
+        if entries:
+            groups.append(
+                f'<div><h3>{_e(group.get("label") or group.get("group_id") or "Stats")}</h3>'
+                f'<div class="chip-row">{entries}</div></div>'
+            )
+    if not groups:
+        groups.append("<p>Stat priority is unavailable.</p>")
+    return f'<section class="panel" id="stats"><h2>Stats</h2>{warning}{"".join(groups)}</section>'
+
+
+def _render_gear_section(spec: GuideSpec) -> str:
+    build = spec.builds[0] if spec.builds else None
+    report = dict(build.gear_recommendation_report or {}) if build else {}
+    if not report:
+        return '<section class="panel" id="weapons-and-armor"><h2>Weapons and Armor</h2><p>Gear targeting is unavailable.</p></section>'
+    best = _render_type_group(
+        "Best targets for this spec",
+        tuple(report.get("best_weapon_types", [])) + tuple(report.get("best_armor_types", [])),
+    )
+    available = _render_type_group(
+        "Available to this class",
+        tuple(report.get("available_weapon_types", [])) + tuple(report.get("available_armor_types", [])),
+    )
+    warning_items = "".join(f"<li>{_e(warning)}</li>" for warning in report.get("warnings", []))
+    warnings = f'<div class="section-note"><ul>{warning_items}</ul></div>' if warning_items else ""
+    return (
+        '<section class="panel" id="weapons-and-armor"><h2>Weapons and Armor</h2>'
+        f"{best}{available}{warnings}</section>"
+    )
+
+
+def _render_type_group(title: str, values: tuple[str, ...]) -> str:
+    unique_values = tuple(dict.fromkeys(value for value in values if value))
+    if not unique_values:
+        return f"<h3>{_e(title)}</h3><p>Unknown.</p>"
+    chips = "".join(f'<span class="chip">{_e(value.replace("_", " ").title())}</span>' for value in unique_values)
+    return f'<h3>{_e(title)}</h3><div class="chip-row">{chips}</div>'
 
 
 def _render_loop_list(title: str, items: Any) -> str:
@@ -360,6 +416,22 @@ def _render_node(node: Any) -> str:
 
 def _tooltip_script(site: GuideSite) -> str:
     payload = {key: value.to_dict() for key, value in site.tooltips.items()}
+    for spec in site.specs:
+        provenance = dict(spec.role_provenance or {})
+        evidence = ", ".join(str(item) for item in provenance.get("evidence", [])) or "No detailed evidence recorded."
+        source = provenance.get("source", "unknown")
+        confidence = provenance.get("confidence", "unknown")
+        engine_role = provenance.get("engine_role", "unknown")
+        payload[f"role:{spec.slug}"] = {
+            "html": (
+                "<strong>Role Source</strong>"
+                f"<div>Source: {_e(source)}</div>"
+                f"<div>Confidence: {_e(confidence)}</div>"
+                f"<div>Engine profile: {_e(engine_role)}</div>"
+                f"<div>Evidence: {_e(evidence)}</div>"
+            ),
+            "text": f"Role source {source}; confidence {confidence}; engine profile {engine_role}; evidence {evidence}",
+        }
     payload["metric:projected_dps_index"] = {
         "html": "<strong>Projected DPS Index</strong><div>A relative theorycraft score, not observed DPS.</div>",
         "text": "A relative theorycraft score, not observed DPS.",

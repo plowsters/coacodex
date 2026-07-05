@@ -77,3 +77,11 @@ def test_guide_build_cards_include_playstyle_metadata():
     assert build.playstyle_label
     assert build.selection_reason
     assert build.rotation_loop
+
+
+def test_guide_specs_include_role_provenance():
+    site = build_guide_site(_report(), entries_path=FIXTURES / "meta_report_fixture.jsonl")
+    support = next(spec for spec in site.specs if spec.spec_name == "Support")
+
+    assert support.role == "healer"
+    assert support.role_provenance["source"] == "curated"

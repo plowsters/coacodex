@@ -78,6 +78,8 @@ def test_spec_guide_html_has_rotation_stat_and_gear_sections():
     assert "Rotation" in html
     assert "Stat Priority" in html
     assert "Weapon and Armor" in html
+    assert "Best targets for this spec" in html
+    assert "Best stats to target" in html
     assert "Icy" not in html
 
 

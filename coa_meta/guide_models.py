@@ -207,6 +207,8 @@ class GuideBuildCard:
     performance_band: str = ""
     reliability_label: str = ""
     rotation_loop: dict[str, Any] | None = None
+    stat_priority_report: dict[str, Any] | None = None
+    gear_recommendation_report: dict[str, Any] | None = None
     tree: GuideTree | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -222,6 +224,8 @@ class GuideBuildCard:
             "performance_band": self.performance_band,
             "reliability_label": self.reliability_label,
             "rotation_loop": dict(self.rotation_loop or {}),
+            "stat_priority_report": dict(self.stat_priority_report or {}),
+            "gear_recommendation_report": dict(self.gear_recommendation_report or {}),
             "tree": self.tree.to_dict() if self.tree else None,
         }
 
@@ -240,6 +244,7 @@ class GuideSpec:
     builds: tuple[GuideBuildCard, ...]
     nodes: tuple[GuideNode, ...]
     warnings: tuple[str, ...]
+    role_provenance: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -255,6 +260,7 @@ class GuideSpec:
             "builds": [build.to_dict() for build in self.builds],
             "nodes": [node.to_dict() for node in self.nodes],
             "warnings": list(self.warnings),
+            "role_provenance": dict(self.role_provenance or {}),
         }
 
 

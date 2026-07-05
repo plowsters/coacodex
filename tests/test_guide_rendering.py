@@ -82,6 +82,18 @@ def test_spec_html_renders_build_playstyle_and_core_loop():
     assert "Early theorycraft picks" not in html
 
 
+def test_spec_html_renders_grouped_stats_and_best_gear_targets():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+
+    html = render_spec_html(site, spec)
+
+    assert "Best stats to target" in html
+    assert "Stat priorities are early theorycraft" in html
+    assert "Best targets for this spec" in html
+    assert "Available to this class" in html
+
+
 def test_static_assets_have_fel_void_theme_and_no_network_fetch():
     assert "#65f06b" in GUIDE_CSS
     assert "#8f5cff" in GUIDE_CSS
