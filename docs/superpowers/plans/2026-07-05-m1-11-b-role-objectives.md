@@ -57,7 +57,7 @@ Use:
 - `source: "authoritative_video"` for launch-video rows.
 - `source_urls: []` until the exact video URL is recorded.
 - `confidence: "high"` for unambiguous rows.
-- `confidence: "medium"` for Templar `Crusader` until the source URL/video line is verified.
+- `confidence: "high"` for Templar `Crusader`; the prior `Intermediate` text was a transcript typo.
 
 ### Step 3: Implement loader
 

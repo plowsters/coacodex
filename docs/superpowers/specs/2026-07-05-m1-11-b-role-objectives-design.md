@@ -175,7 +175,7 @@ The role seed contains 21 classes and 70 reportable specs.
 | Zealot | melee_dps |  |
 | Crusader | melee_dps |  |
 
-The supplied launch-video transcript has the third Templar line formatted as `Intermediate: Intermediate - melee DPS`. Current builder data has a `Crusader` tab, so M1.11B should map this row to `Crusader` with a note requiring video/source verification before marking it `high` confidence.
+Crusader is confirmed as the correct third Templar spec.
 
 ### Witch Doctor
 

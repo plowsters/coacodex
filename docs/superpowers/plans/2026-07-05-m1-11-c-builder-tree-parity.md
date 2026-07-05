@@ -4,7 +4,7 @@
 
 **Goal:** Render guide talent trees with the same structure as the CoA Builder: separate Ability Essence tree, Talent Essence tree, and automatic level-passive lane.
 
-**Architecture:** Introduce a builder layout artifact produced by the scraper/capture side. The guide renderer consumes the artifact when available and falls back to normalized layout with warnings when it is not available. Build legality remains owned by `BuildRules`.
+**Architecture:** Introduce a builder layout artifact produced by the scraper/capture side. The guide renderer consumes the artifact when available and falls back to normalized layout with warnings when it is not available. Build legality remains owned by `BuildRules`. Talent trees are desktop-first; do not implement mobile-responsive resizing or reflow.
 
 ---
 
@@ -227,6 +227,7 @@ Assert:
 - Tree nodes still include tooltip IDs.
 - JS still has no network calls.
 - Level selector updates all groups in a panel.
+- CSS does not introduce mobile-specific tree reflow rules; narrow containers should scroll horizontally instead of resizing the tree.
 
 ### Step 2: Implement renderer
 
@@ -241,6 +242,8 @@ section#talents
 ```
 
 Use absolute positioning when `layout_source` is `builder_runtime` or `builder_dom`.
+
+Do not add mobile breakpoints that change tree geometry. The guide shell can remain responsive, but the tree component should keep its captured desktop geometry.
 
 ### Step 3: Preserve old fallback
 

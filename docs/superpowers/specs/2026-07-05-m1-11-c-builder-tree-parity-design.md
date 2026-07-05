@@ -16,6 +16,8 @@ The guide must represent the same conceptual layout players see in game and in t
 
 Stalking Venomancer is the first parity target because it has already been called out as visibly wrong and it exercises class-wide ability essence plus spec-specific talent essence.
 
+The talent tree is intentionally desktop-focused. M1.11C should make it clean on 1080p, 2K, and 4K desktop or laptop screens. It should not implement a mobile-responsive tree reflow because that adds high layout complexity and does not match how most WoW talent tools are used.
+
 ## Current Problem
 
 The M1.10 tree renderer builds one mixed tree from normalized nodes, row/column fields, and inferred connections. That is useful for legality debugging but not faithful enough for a player guide.
@@ -150,6 +152,7 @@ Rendering:
 - Use grid positioning only when the source artifact is grid-based and verified.
 - Render edges as SVG paths or segments from the layout artifact.
 - Render passives as a horizontal or vertical lane exactly as captured.
+- Target desktop widths first; allow horizontal scrolling on narrow containers rather than resizing or reflowing the tree.
 - Preserve the existing level selector and legality state overlays.
 
 Guide behavior:
@@ -234,6 +237,7 @@ Browser-gated checks:
 - Do not scrape all class/spec layouts before the Stalking Venomancer capture path is stable.
 - Do not require live builder access to run package tests.
 - Do not use generated screenshots as required unit-test fixtures.
+- Do not implement mobile-responsive tree resizing or mobile-specific reflow.
 
 ## Risks
 
