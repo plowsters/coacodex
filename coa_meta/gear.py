@@ -97,6 +97,69 @@ class ItemScore:
         }
 
 
+@dataclass(frozen=True)
+class GearRecommendationReport:
+    role: str
+    engine_role: str
+    best_weapon_types: tuple[str, ...]
+    best_armor_types: tuple[str, ...]
+    available_weapon_types: tuple[str, ...]
+    available_armor_types: tuple[str, ...]
+    item_scores: tuple[ItemScore, ...]
+    source: str
+    confidence: str
+    warnings: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": "coa-gear-recommendation-v2",
+            "role": self.role,
+            "engine_role": self.engine_role,
+            "best_weapon_types": list(self.best_weapon_types),
+            "best_armor_types": list(self.best_armor_types),
+            "available_weapon_types": list(self.available_weapon_types),
+            "available_armor_types": list(self.available_armor_types),
+            "item_scores": [score.to_dict() for score in self.item_scores],
+            "source": self.source,
+            "confidence": self.confidence,
+            "warnings": list(self.warnings),
+        }
+
+
+GUIDE_ROLE_GEAR_DEFAULTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "melee_dps": {
+        "best_weapon_types": ("sword", "axe", "dagger", "mace"),
+        "best_armor_types": ("leather", "mail"),
+        "available_weapon_types": ("sword", "axe", "dagger", "mace", "staff"),
+        "available_armor_types": ("cloth", "leather", "mail", "plate"),
+    },
+    "caster_dps": {
+        "best_weapon_types": ("staff", "dagger", "mace"),
+        "best_armor_types": ("cloth", "leather"),
+        "available_weapon_types": ("staff", "dagger", "mace", "sword"),
+        "available_armor_types": ("cloth", "leather", "mail"),
+    },
+    "tank": {
+        "best_weapon_types": ("shield", "sword", "mace", "axe"),
+        "best_armor_types": ("plate", "mail"),
+        "available_weapon_types": ("shield", "sword", "mace", "axe"),
+        "available_armor_types": ("plate", "mail", "leather"),
+    },
+    "healer": {
+        "best_weapon_types": ("staff", "mace", "dagger"),
+        "best_armor_types": ("cloth", "leather", "mail"),
+        "available_weapon_types": ("staff", "mace", "dagger", "sword"),
+        "available_armor_types": ("cloth", "leather", "mail"),
+    },
+    "support": {
+        "best_weapon_types": ("staff", "mace", "dagger", "sword"),
+        "best_armor_types": ("cloth", "leather", "mail"),
+        "available_weapon_types": ("staff", "mace", "dagger", "sword", "axe"),
+        "available_armor_types": ("cloth", "leather", "mail", "plate"),
+    },
+}
+
+
 def load_items_jsonl(path: Path | str) -> tuple[ItemRecord, ...]:
     source = Path(path)
     items: list[ItemRecord] = []
@@ -159,6 +222,49 @@ def recommend_weapon_and_armor(role: str, items: tuple[ItemRecord, ...]) -> dict
         "armor_types": armor_types,
         "warnings": warnings,
     }
+
+
+def recommend_gear_for_guide_role(
+    role: str,
+    *,
+    engine_role: str,
+    items: tuple[ItemRecord, ...],
+) -> GearRecommendationReport:
+    defaults = GUIDE_ROLE_GEAR_DEFAULTS.get(role)
+    if defaults is None:
+        raise GearLoadError(f"Unsupported guide role {role!r}")
+    warnings: list[str] = []
+    scores: tuple[ItemScore, ...] = tuple()
+    source = "defaults"
+    confidence = "low"
+    if items:
+        scores = rank_items_for_role(engine_role, items)
+        source = "mixed"
+        confidence = "medium"
+        if any(item.confidence == "low" for item in items):
+            warnings.append("item_data_low_confidence")
+    else:
+        warnings.extend(("item_data_missing", "gear_targets_from_role_defaults"))
+    available_weapon_types = (
+        tuple(sorted({item.weapon_type for item in items if item.weapon_type}))
+        or defaults["available_weapon_types"]
+    )
+    available_armor_types = (
+        tuple(sorted({item.armor_type for item in items if item.armor_type}))
+        or defaults["available_armor_types"]
+    )
+    return GearRecommendationReport(
+        role=role,
+        engine_role=engine_role,
+        best_weapon_types=defaults["best_weapon_types"],
+        best_armor_types=defaults["best_armor_types"],
+        available_weapon_types=available_weapon_types,
+        available_armor_types=available_armor_types,
+        item_scores=scores[:10],
+        source=source,
+        confidence=confidence,
+        warnings=tuple(warnings),
+    )
 
 
 def _as_int(value: Any, default: int = 0) -> int:

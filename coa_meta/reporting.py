@@ -30,7 +30,7 @@ from .roles import (
 from .scoring import TheoryScorer
 from .search import BuildSearchConfig, BuildSearcher
 from .simulation import SimulationConfig, simulate_build
-from .gear import recommend_weapon_and_armor
+from .gear import recommend_gear_for_guide_role, recommend_weapon_and_armor
 from .rotation_loops import build_rotation_loop
 from .stats import stat_priority_for_role, stat_priority_report_for_role
 
@@ -255,6 +255,7 @@ class BuildReport:
     stat_priority: tuple[dict[str, Any], ...]
     stat_priority_report: dict[str, Any]
     gear_recommendation: dict[str, Any]
+    gear_recommendation_report: dict[str, Any]
     explanation: dict[str, Any]
     provenance: dict[str, Any]
     playstyle_fingerprint: dict[str, Any]
@@ -275,6 +276,7 @@ class BuildReport:
             "stat_priority": list(self.stat_priority),
             "stat_priority_report": self.stat_priority_report,
             "gear_recommendation": self.gear_recommendation,
+            "gear_recommendation_report": self.gear_recommendation_report,
             "explanation": self.explanation,
             "provenance": self.provenance,
             "playstyle_fingerprint": self.playstyle_fingerprint,
@@ -533,6 +535,11 @@ class MetaReportRunner:
             stat_priority = tuple(priority.to_dict() for priority in stat_priority_for_role(engine_role))
             stat_priority_report = stat_priority_report_for_role(role, engine_role=engine_role).to_dict()
             gear_recommendation = recommend_weapon_and_armor(engine_role, tuple())
+            gear_recommendation_report = recommend_gear_for_guide_role(
+                role,
+                engine_role=engine_role,
+                items=tuple(),
+            ).to_dict()
             selected_nodes = tuple(_node_to_report(repository.node_by_id(node_id)) for node_id in sorted(result.state.selected_ids))
             selection_reason = candidate.selection_reason
             top_builds.append(
@@ -548,6 +555,7 @@ class MetaReportRunner:
                     stat_priority=stat_priority,
                     stat_priority_report=stat_priority_report,
                     gear_recommendation=gear_recommendation,
+                    gear_recommendation_report=gear_recommendation_report,
                     explanation={"score_components": [component.__dict__ for component in scored.components]},
                     provenance={
                         "normalized_schema": "coa-normalized-v1",

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from coa_meta.gear import GearProfile, ItemRecord, rank_items_for_role, recommend_weapon_and_armor
+from coa_meta.gear import (
+    GearProfile,
+    ItemRecord,
+    rank_items_for_role,
+    recommend_gear_for_guide_role,
+    recommend_weapon_and_armor,
+)
 
 
 def test_item_records_parse_coa_item_schema_and_gear_totals():
@@ -69,3 +75,13 @@ def test_role_item_ranking_and_recommendation_warnings():
     assert healer_scores[0].item_id == 101
     assert "cloth" in recommend_weapon_and_armor("healer_support", (robe,))["armor_types"]
     assert "item_data_missing" in missing["warnings"]
+
+
+def test_guide_gear_recommendation_splits_best_and_available():
+    payload = recommend_gear_for_guide_role("tank", engine_role="tank", items=tuple()).to_dict()
+
+    assert payload["schema_version"] == "coa-gear-recommendation-v2"
+    assert payload["role"] == "tank"
+    assert payload["best_weapon_types"]
+    assert payload["available_weapon_types"]
+    assert "item_data_missing" in payload["warnings"]

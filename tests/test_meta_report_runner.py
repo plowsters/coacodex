@@ -81,6 +81,9 @@ def test_meta_report_exposes_guide_role_engine_role_and_provenance():
     assert build["provenance"]["engine_role"] == "healer_support"
     assert build["stat_priority_report"]["schema_version"] == "coa-stat-priority-v2"
     assert build["stat_priority_report"]["role"] == "healer"
+    assert build["gear_recommendation_report"]["schema_version"] == "coa-gear-recommendation-v2"
+    assert build["gear_recommendation_report"]["role"] == "healer"
+    assert "best_weapon_types" in build["gear_recommendation_report"]
 
 
 def test_meta_report_runner_allows_explicit_role_override():
