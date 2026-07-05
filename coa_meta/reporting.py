@@ -17,6 +17,7 @@ from .build_diversity import (
     select_diverse_builds,
 )
 from .builds import BuildConfig, BuildRules
+from .display_names import display_spec_name
 from .domain import TalentNode
 from .profiles import load_profile_by_role
 from .repository import TalentRepository
@@ -304,10 +305,12 @@ class SpecResult:
     warnings: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
+        display_name = display_spec_name(self.class_name, self.spec_name)
         return {
             "class_name": self.class_name,
             "spec_id": self.spec_id,
-            "spec_name": self.spec_name,
+            "spec_name": display_name,
+            "source_spec_name": self.spec_name,
             "role": self.role,
             "engine_role": self.engine_role,
             "role_provenance": self.role_provenance,
@@ -629,7 +632,8 @@ def _spec_summary(scope: BuildScope, role: str, top_builds: list[BuildReport], w
     return {
         "schema_version": "coa-spec-summary-v1",
         "class_name": scope.class_name,
-        "spec_name": scope.spec_name,
+        "spec_name": display_spec_name(scope.class_name, scope.spec_name),
+        "source_spec_name": scope.spec_name,
         "role": role,
         "best_projected_dps_index": best.projected_dps_index if best else None,
         "data_confidence": best.confidence_label if best else "low",
@@ -649,6 +653,8 @@ def _summary_strengths(best: BuildReport | None, role: str) -> list[str]:
         return ["Prioritizes group utility, aura uptime, and flexible support tools from normalized tags."]
     if role == "caster_dps":
         return ["Prioritizes spell damage, effects, cooldown, and proc features from normalized tags."]
+    if role == "ranged_dps":
+        return ["Prioritizes ranged damage, uptime, cooldown, and proc features from normalized tags."]
     return ["Prioritizes melee damage, resource, cooldown, and proc features from normalized tags."]
 
 
@@ -692,7 +698,8 @@ def _class_summaries(spec_results: tuple[SpecResult, ...]) -> tuple[dict[str, An
             {
                 "class_name": class_name,
                 "spec_count": len(rows),
-                "best_spec_name": best.spec_name if best else None,
+                "best_spec_name": display_spec_name(best.class_name, best.spec_name) if best else None,
+                "source_best_spec_name": best.spec_name if best else None,
                 "best_projected_dps_index": best.top_builds[0].projected_dps_index if best else None,
                 "summary_note": "Derived from per-spec projected build rankings.",
             }

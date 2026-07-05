@@ -142,6 +142,15 @@ GUIDE_ROLE_STAT_WEIGHTS: dict[str, dict[str, float]] = {
         "spirit": 0.4,
         "stamina": 0.2,
     },
+    "ranged_dps": {
+        "ranged_attack_power": 3.0,
+        "agility": 2.3,
+        "attack_power": 1.8,
+        "hit_rating": 1.5,
+        "crit_rating": 1.3,
+        "haste_rating": 1.1,
+        "stamina": 0.2,
+    },
     "tank": ROLE_STAT_WEIGHTS["tank"],
     "healer": {
         "spell_power": 3.0,

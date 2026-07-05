@@ -85,3 +85,10 @@ def test_guide_gear_recommendation_splits_best_and_available():
     assert payload["best_weapon_types"]
     assert payload["available_weapon_types"]
     assert "item_data_missing" in payload["warnings"]
+
+
+def test_ranged_dps_gear_defaults_prefer_ranged_weapons():
+    payload = recommend_gear_for_guide_role("ranged_dps", engine_role="dps", items=tuple()).to_dict()
+
+    assert payload["best_weapon_types"] == ["bow", "gun", "crossbow"]
+    assert "leather" in payload["best_armor_types"]

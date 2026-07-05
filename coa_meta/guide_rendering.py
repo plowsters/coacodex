@@ -6,6 +6,12 @@ from typing import Any
 
 from .guide_models import GuideSite, GuideSpec
 
+ROLE_DISPLAY_ORDER = ("tank", "healer", "support", "caster_dps", "ranged_dps", "melee_dps")
+FRONT_PAGE_DISCLAIMER = (
+    "Theorycrafting calculations based on CoA Builder and db.ascension.gg data. "
+    "AscensionLogs compatibility will be added for more accurate tuning if CoA remains available."
+)
+
 GUIDE_CSS = """
 :root {
   --bg: #09050f;
@@ -23,6 +29,15 @@ body { margin: 0; font-family: Inter, system-ui, sans-serif; background: radial-
 a { color: var(--fel); }
 .site-shell { max-width: 1280px; margin: 0 auto; padding: 28px; }
 .hero { padding: 28px; border: 1px solid var(--border); background: linear-gradient(135deg, rgba(101,240,107,.12), rgba(143,92,255,.13)); border-radius: 10px; box-shadow: 0 0 32px rgba(101,240,107,.08); }
+.front-disclaimer { margin-top: 16px; border: 1px solid rgba(245,197,66,.55); color: #ffe8a3; border-radius: 8px; padding: 12px 14px; background: rgba(245,197,66,.08); }
+.role-filter-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.role-filter { appearance: none; border: 1px solid rgba(143,92,255,.45); border-radius: 999px; background: rgba(28,16,44,.9); color: var(--text); padding: 8px 13px; font: inherit; cursor: pointer; box-shadow: inset 0 0 12px rgba(143,92,255,.1); }
+.role-filter:hover { border-color: var(--fel); box-shadow: 0 0 16px rgba(101,240,107,.18), inset 0 0 12px rgba(143,92,255,.1); }
+.role-filter.is-active, .role-filter[aria-pressed="true"] { border-color: var(--fel); color: #061109; background: linear-gradient(135deg, var(--fel), #b6ff5f); box-shadow: 0 0 18px rgba(101,240,107,.28); }
+.role-section { margin-top: 26px; }
+.role-section[hidden] { display: none; }
+.role-section-title { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: var(--text); text-shadow: 0 0 14px rgba(143,92,255,.42); }
+.empty-role { color: var(--muted); margin: 0; }
 .guide-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 22px; }
 .guide-card, .panel { border: 1px solid var(--border); background: rgba(19,11,30,.92); border-radius: 8px; padding: 18px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .85rem; }
@@ -54,6 +69,8 @@ a { color: var(--fel); }
 .leveling-path { margin-top: 14px; display: grid; gap: 8px; }
 .leveling-path li { margin-bottom: 4px; color: var(--muted); }
 .tooltip { position: fixed; z-index: 20; max-width: 360px; padding: 12px; border: 1px solid var(--void); border-radius: 8px; background: #09050f; box-shadow: 0 0 28px rgba(143,92,255,.25); }
+.tooltip table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.tooltip th, .tooltip td { border: 1px solid rgba(143,92,255,.3); padding: 4px 6px; text-align: left; vertical-align: top; }
 @media (max-width: 720px) { .site-shell { padding: 16px; } .hero { padding: 20px; } }
 """
 
@@ -88,9 +105,33 @@ GUIDE_JS = """
   document.addEventListener("click", event => {
     const filter = event.target.closest("[data-role-filter]");
     if (!filter) return;
-    const role = filter.getAttribute("data-role-filter");
+    const buttons = Array.from(document.querySelectorAll("[data-role-filter]"));
+    const roleButtons = buttons.filter(button => button.getAttribute("data-role-filter") !== "all");
+    const selectedRoles = new Set(roleButtons.filter(button => button.getAttribute("aria-pressed") === "true").map(button => button.getAttribute("data-role-filter")));
+    if (filter.getAttribute("data-role-filter") === "all") {
+      selectedRoles.clear();
+      roleButtons.forEach(button => selectedRoles.add(button.getAttribute("data-role-filter")));
+    } else {
+      const role = filter.getAttribute("data-role-filter");
+      if (selectedRoles.has(role)) selectedRoles.delete(role);
+      else selectedRoles.add(role);
+    }
+    roleButtons.forEach(button => {
+      const active = selectedRoles.has(button.getAttribute("data-role-filter"));
+      button.setAttribute("aria-pressed", String(active));
+      button.classList.toggle("is-active", active);
+    });
+    const allSelected = roleButtons.every(button => selectedRoles.has(button.getAttribute("data-role-filter")));
+    const allButton = buttons.find(button => button.getAttribute("data-role-filter") === "all");
+    if (allButton) {
+      allButton.setAttribute("aria-pressed", String(allSelected));
+      allButton.classList.toggle("is-active", allSelected);
+    }
     document.querySelectorAll("[data-role]").forEach(card => {
-      card.hidden = role !== "all" && card.getAttribute("data-role") !== role;
+      card.hidden = !selectedRoles.has(card.getAttribute("data-role"));
+    });
+    document.querySelectorAll("[data-role-section]").forEach(section => {
+      section.hidden = !selectedRoles.has(section.getAttribute("data-role-section"));
     });
   });
   function parseJson(value, fallback) {
@@ -170,20 +211,25 @@ GUIDE_JS = """
 
 
 def render_index_html(site: GuideSite) -> str:
-    roles = sorted({spec.role for spec in site.specs})
-    filters = '<button data-role-filter="all">All</button>' + "".join(
-        f'<button data-role-filter="{_e(role)}">{_e(_label(role))}</button>' for role in roles
+    roles = _ordered_roles(site)
+    filters = '<div class="role-filter-bar" aria-label="Filter guides by role">'
+    filters += '<button class="role-filter is-active" data-role-filter="all" aria-pressed="true">All Roles</button>'
+    filters += "".join(
+        f'<button class="role-filter is-active" data-role-filter="{_e(role)}" aria-pressed="true">{_e(_label(role))}</button>'
+        for role in roles
     )
-    cards = "".join(_render_spec_card(spec) for spec in site.specs)
+    filters += "</div>"
+    role_sections = "".join(_render_role_section(role, [spec for spec in site.specs if spec.role == role]) for role in roles)
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         "<title>CoA Meta Guides</title><link rel=\"stylesheet\" href=\"assets/guide.css\">"
         "</head><body><main class=\"site-shell\">"
         "<section class=\"hero\"><h1>CoA Meta Guides</h1>"
-        "<p>Player-facing theorycraft guides generated from normalized Conquest of Azeroth builder data.</p></section>"
+        "<p>Player-facing class and specialization guides for Conquest of Azeroth.</p>"
+        f'<p class="front-disclaimer">{_e(FRONT_PAGE_DISCLAIMER)}</p></section>'
         f"<section class=\"panel\"><h2>Find Your Guide</h2>{filters}</section>"
-        f"<section class=\"guide-grid\">{cards}</section>"
+        f"{role_sections}"
         f"{_tooltip_script(site)}<script src=\"assets/guide.js\"></script>"
         "</main></body></html>"
     )
@@ -204,8 +250,7 @@ def render_spec_html(site: GuideSite, spec: GuideSpec) -> str:
         "<link rel=\"stylesheet\" href=\"../assets/guide.css\"></head><body><main class=\"site-shell\">"
         f'<p><a href="../index.html">Back to guides</a></p><section class="hero" id="overview">'
         f"<h1>{_e(spec.class_name)} - {_e(spec.spec_name)}</h1><p>{_e(spec.summary)}</p>"
-        f'<span class="chip" data-tooltip-id="role:{_e(spec.slug)}">{_e(_label(spec.role))}</span> '
-        f'<span class="chip">{_e(spec.confidence_label)} confidence</span></section>'
+        f'<span class="chip" data-tooltip-id="role:{_e(spec.slug)}">{_e(_label(spec.role))}</span></section>'
         f'<nav class="guide-nav">{nav}</nav>'
         f'<section class="panel" id="recommended-builds"><h2>Recommended Builds</h2>{builds}</section>'
         f"{_render_talent_tree_section(spec)}"
@@ -224,10 +269,26 @@ def _render_spec_card(spec: GuideSpec) -> str:
     return (
         f'<article class="guide-card" data-role="{_e(spec.role)}">'
         f"<h2>{_e(spec.class_name)} - {_e(spec.spec_name)}</h2>"
-        f"<p>{_e(spec.summary)}</p><p><span class=\"chip\">{_e(_label(spec.role))}</span> "
-        f"<span class=\"chip\">{_e(spec.confidence_label)} confidence</span> {warning}</p>"
+        f"<p>{_e(spec.summary)}</p><p><span class=\"chip\">{_e(_label(spec.role))}</span> {warning}</p>"
         f'<p><a href="{_e(spec.href)}">Open guide</a></p></article>'
     )
+
+
+def _render_role_section(role: str, specs: list[GuideSpec]) -> str:
+    if specs:
+        cards = "".join(_render_spec_card(spec) for spec in sorted(specs, key=lambda item: (item.class_name, item.spec_name)))
+        body = f'<div class="guide-grid">{cards}</div>'
+    else:
+        body = f'<p class="empty-role">No {_e(_label(role))} guides are available in the current report.</p>'
+    return (
+        f'<section class="role-section" data-role-section="{_e(role)}">'
+        f'<h2 class="role-section-title">{_e(_label(role))}</h2>{body}</section>'
+    )
+
+
+def _ordered_roles(site: GuideSite) -> tuple[str, ...]:
+    extras = sorted({spec.role for spec in site.specs if spec.role not in ROLE_DISPLAY_ORDER})
+    return ROLE_DISPLAY_ORDER + tuple(extras)
 
 
 def _render_build(build: Any) -> str:
@@ -444,6 +505,13 @@ def _anchor(value: str) -> str:
 
 
 def _label(value: str) -> str:
+    labels = {
+        "caster_dps": "Caster DPS",
+        "melee_dps": "Melee DPS",
+        "ranged_dps": "Ranged DPS",
+    }
+    if value in labels:
+        return labels[value]
     return value.replace("_", " ").title()
 
 

@@ -114,6 +114,8 @@ def _role_objective(role: str, encounter: str) -> str:
         return f"Maintain group buffs, debuffs, and useful filler actions in {target_note}."
     if role == "caster_dps":
         return f"Maintain uptime on casts, effects, and spender windows in {target_note}."
+    if role == "ranged_dps":
+        return f"Maintain range, keep effects rolling, and spend during strong damage windows in {target_note}."
     return f"Maintain uptime, build cleanly, and spend inside strong windows in {target_note}."
 
 

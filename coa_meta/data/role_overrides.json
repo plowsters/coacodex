@@ -24,6 +24,11 @@
     {"spec_key": "inspiration", "role": "support", "confidence": "medium", "evidence": ["curated support-leaning spec key"]},
     {"spec_key": "artificer", "role": "support", "confidence": "medium", "evidence": ["curated support-leaning spec key"]},
     {"spec_key": "heretic", "role": "healer", "confidence": "medium", "evidence": ["curated healer/support hybrid key"]},
+    {"spec_key": "archery", "role": "ranged_dps", "confidence": "high", "evidence": ["curated physical ranged damage key"]},
+    {"spec_key": "boltslinger", "role": "ranged_dps", "confidence": "high", "evidence": ["curated physical ranged damage key"]},
+    {"spec_key": "sentinel", "role": "ranged_dps", "confidence": "medium", "evidence": ["curated ranged damage key"]},
+    {"spec_key": "harvest", "role": "melee_dps", "confidence": "high", "evidence": ["curated Reaper damage key"]},
+    {"spec_key": "soul", "role": "caster_dps", "confidence": "high", "evidence": ["curated Reaper damage key"]},
     {"spec_key": "piety", "role": "caster_dps", "confidence": "medium", "evidence": ["curated holy caster damage key"]},
     {"spec_key": "stalking", "role": "melee_dps", "confidence": "high", "evidence": ["curated Venomancer Stalking damage key"]}
   ]

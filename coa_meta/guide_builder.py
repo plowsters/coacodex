@@ -47,10 +47,11 @@ def build_guide_site(
     for result in data["spec_results"]:
         class_name = result["class_name"]
         spec_name = result["spec_name"]
+        source_spec_name = result.get("source_spec_name") or spec_name
         slug = f"{slugify_key(class_name)}-{slugify_key(spec_name)}"
         relevant_nodes = [
             node for node in repository.nodes_for_class(class_name)
-            if node.tab_name in {"Class", spec_name}
+            if node.tab_name in {"Class", source_spec_name}
         ]
         guide_nodes = []
         for node in sorted(relevant_nodes, key=lambda item: (item.tab_name != "Class", item.row, item.col, item.name)):
@@ -82,6 +83,7 @@ def build_guide_site(
                 repository=repository,
                 relevant_nodes=tuple(relevant_nodes),
                 guide_nodes=tuple(guide_nodes),
+                source_spec_name=str(source_spec_name),
                 max_ae=int(data.get("run_config", {}).get("max_ae") or 26),
                 max_te=int(data.get("run_config", {}).get("max_te") or 25),
             )
@@ -125,6 +127,7 @@ def _build_cards(
     repository: TalentRepository,
     relevant_nodes: tuple,
     guide_nodes: tuple[GuideNode, ...],
+    source_spec_name: str,
     max_ae: int,
     max_te: int,
 ) -> list[GuideBuildCard]:
@@ -139,7 +142,7 @@ def _build_cards(
         tree = build_guide_tree(
             repository=repository,
             class_name=str(result["class_name"]),
-            spec_name=str(result["spec_name"]),
+            spec_name=source_spec_name,
             build_rank=int(build["rank"]),
             build_label=label,
             selected_node_ids=node_ids,

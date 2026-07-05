@@ -32,7 +32,22 @@ def test_render_index_html_uses_player_facing_guide_shell():
     assert "CoA Meta Guides" in html
     assert "Open guide" in html
     assert "data-role=" in html
+    assert "Theorycrafting calculations based on CoA Builder and db.ascension.gg data" in html
     assert "beam search" not in html.lower()
+
+
+def test_index_groups_specs_by_role_and_supports_multi_role_filters():
+    html = render_index_html(_site())
+
+    assert "Tank" in html
+    assert "Healer" in html
+    assert "Support" in html
+    assert "Caster DPS" in html
+    assert "Ranged DPS" in html
+    assert "Melee DPS" in html
+    assert 'aria-pressed="true"' in html
+    assert "selectedRoles" in GUIDE_JS
+    assert "data-role-section" in html
 
 
 def test_render_spec_html_includes_sections_and_omits_empty_warnings():
@@ -45,6 +60,7 @@ def test_render_spec_html_includes_sections_and_omits_empty_warnings():
     assert "Abilities and Talents" in html
     assert "Stat priorities are early theorycraft" in html
     assert 'id="warnings"' not in html
+    assert "medium confidence" not in html
 
 
 def test_render_spec_html_links_spell_and_tooltip_ids():
@@ -104,3 +120,9 @@ def test_static_tree_javascript_has_no_network_calls():
     assert "fetch(" not in GUIDE_JS
     assert "XMLHttpRequest" not in GUIDE_JS
     assert "getBoundingClientRect" in GUIDE_JS
+
+
+def test_index_cards_do_not_surface_recommendation_confidence_badges():
+    html = render_index_html(_site())
+
+    assert "medium confidence" not in html

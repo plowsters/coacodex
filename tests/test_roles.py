@@ -16,9 +16,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_engine_role_bridge_preserves_existing_profile_roles():
-    assert GUIDE_ROLES == ("melee_dps", "caster_dps", "tank", "healer", "support")
+    assert GUIDE_ROLES == ("melee_dps", "caster_dps", "ranged_dps", "tank", "healer", "support")
     assert engine_role_for_guide_role("melee_dps") == "dps"
     assert engine_role_for_guide_role("caster_dps") == "dps"
+    assert engine_role_for_guide_role("ranged_dps") == "dps"
     assert engine_role_for_guide_role("tank") == "tank"
     assert engine_role_for_guide_role("healer") == "healer_support"
     assert engine_role_for_guide_role("support") == "healer_support"
@@ -61,3 +62,39 @@ def test_curated_override_wins_for_fixture_support_spec():
     assert resolution.role == "healer"
     assert resolution.engine_role == "healer_support"
     assert resolution.source == "curated"
+
+
+def test_curated_reaper_overrides_keep_harvest_and_soul_as_dps():
+    repo = TalentRepository.from_entries(FIXTURES / "meta_report_fixture.jsonl")
+
+    harvest = resolve_spec_role(
+        repo,
+        BuildScope(
+            class_name="Reaper",
+            spec_id=30,
+            spec_name="Harvest",
+            level=60,
+            encounter_profile_id="baseline_single_target",
+            search_profile_id="default",
+            scoring_profile_id="auto",
+            apl_profile_id="auto",
+            top=1,
+        ),
+    )
+    soul = resolve_spec_role(
+        repo,
+        BuildScope(
+            class_name="Reaper",
+            spec_id=30,
+            spec_name="Soul",
+            level=60,
+            encounter_profile_id="baseline_single_target",
+            search_profile_id="default",
+            scoring_profile_id="auto",
+            apl_profile_id="auto",
+            top=1,
+        ),
+    )
+
+    assert harvest.role == "melee_dps"
+    assert soul.role == "caster_dps"

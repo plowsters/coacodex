@@ -10,7 +10,24 @@ from .domain import TalentNode
 from .guide_models import GuideTooltip
 
 DB_HOST = "https://db.ascension.gg"
-_ALLOWED_TAGS = {"br", "span", "strong", "em", "small", "p", "div", "b", "i"}
+_ALLOWED_TAGS = {
+    "b",
+    "br",
+    "div",
+    "em",
+    "i",
+    "p",
+    "small",
+    "span",
+    "strong",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+}
 
 
 def ascension_spell_url(spell_id: int | None) -> str | None:

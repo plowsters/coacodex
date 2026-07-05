@@ -35,3 +35,11 @@ def test_stat_priority_report_groups_stats_and_has_one_disclaimer():
     assert "simulations or combat logs" in payload["disclaimer"]
     assert [group["group_id"] for group in payload["groups"]] == ["primary", "secondary", "situational"]
     assert payload["groups"][0]["entries"]
+
+
+def test_ranged_dps_stat_priority_uses_physical_ranged_stats():
+    payload = stat_priority_report_for_role("ranged_dps", engine_role="dps").to_dict()
+    primary_stats = [entry["stat"] for entry in payload["groups"][0]["entries"]]
+
+    assert payload["role"] == "ranged_dps"
+    assert "ranged_attack_power" in primary_stats

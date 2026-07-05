@@ -55,3 +55,15 @@ def test_sanitize_tooltip_html_removes_script_and_event_attributes():
     assert "Safe" in html
     assert "onclick" not in html
     assert "script" not in html
+
+
+def test_sanitize_tooltip_html_preserves_db_tables_without_event_attributes():
+    html = sanitize_tooltip_html(
+        '<table onclick="bad()"><tr><th>Effect</th><td>Deals <strong>Nature</strong> damage.</td></tr></table>'
+    )
+
+    assert "<table>" in html
+    assert "<tr>" in html
+    assert "<th>Effect</th>" in html
+    assert "<td>Deals <strong>Nature</strong> damage.</td>" in html
+    assert "onclick" not in html

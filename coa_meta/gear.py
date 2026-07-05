@@ -139,6 +139,12 @@ GUIDE_ROLE_GEAR_DEFAULTS: dict[str, dict[str, tuple[str, ...]]] = {
         "available_weapon_types": ("staff", "dagger", "mace", "sword"),
         "available_armor_types": ("cloth", "leather", "mail"),
     },
+    "ranged_dps": {
+        "best_weapon_types": ("bow", "gun", "crossbow"),
+        "best_armor_types": ("leather", "mail"),
+        "available_weapon_types": ("bow", "gun", "crossbow", "dagger", "sword", "axe"),
+        "available_armor_types": ("cloth", "leather", "mail"),
+    },
     "tank": {
         "best_weapon_types": ("shield", "sword", "mace", "axe"),
         "best_armor_types": ("plate", "mail"),
