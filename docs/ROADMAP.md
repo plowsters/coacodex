@@ -157,7 +157,7 @@ Exit criteria:
 
 ### Milestone 1.10: Static Guide Site and Player-Facing Report UX
 
-Status: in progress. M1.10A/B, M1.10C/D, and M1.10E/F are implemented in the current repo.
+Status: implemented as a first pass. M1.11 tracks correctness, parity, and calibration hardening discovered during guide review.
 
 Purpose: turn the Phase 1 meta report from an analyst table into a GitHub Pages-friendly class/spec guide site for CoA players.
 
@@ -192,6 +192,47 @@ P2/P3 follow-ups:
 - Personal SimC-style upload and bounded simulations belong to Milestone 2.6.
 - Cheap small/medium-model guide prose generation should wait until guide schemas are stable and can be constrained by strict templates, provenance, and review gates.
 - Full dynamic build sharing, user account workflows, and large-scale comparison tools belong to Phase 4 or later.
+
+### Milestone 1.11: Report Correctness, Data Parity, and Simulation Hardening
+
+Status: in progress. M1.11A quick fixes are implemented; M1.11B-G are planned. Design: [M1.11 Report Correctness and Data Parity](superpowers/specs/2026-07-05-m1-11-report-correctness-data-parity-design.md). Plan: [M1.11 Implementation Plan](superpowers/plans/2026-07-05-m1-11-report-correctness-data-parity.md).
+
+Purpose: correct the guide output where M1.10 is visibly useful but not yet faithful enough to the CoA Builder, intended roles, or guide-site rotation expectations.
+
+Requirements:
+
+- Keep the front page grouped by Tank, Healer, Support, Caster DPS, Ranged DPS, and Melee DPS with multi-select role filters.
+- Keep the front-page theorycraft disclaimer visible: outputs are based on CoA Builder and AscensionDB data, with AscensionLogs compatibility planned for more accurate tuning if CoA remains available.
+- Preserve source spec names internally while applying user-facing legacy renames in JSON, Markdown, and HTML.
+- Treat confidence as provenance/internal data unless it becomes genuinely sensitive enough to be useful to players.
+- Replace DPS-only labels and sorting for tanks, healers, and support specs with role-specific objective indexes.
+- Build an authoritative or curated role map with provenance before relying on inference for high-confidence role labels.
+- Recreate CoA Builder tree structure accurately: separate Ability Essence class tree, Talent Essence spec tree, and automatic level passive lane.
+- Generate exact level-by-level build paths from level 10 through 60, alternating Ability Essence and Talent Essence and respecting gates.
+- Extend AscensionDB scraping to icons/images, items, weapons, armor, effects, and tooltip data with conditional requests, content hashing, and bounded concurrency.
+- Render DB tooltip tables safely as tables.
+- Upgrade rotation generation from category summaries to guide-ready priority output backed by APL execution and role-objective simulation.
+- Improve recommended build diversity by clustering playstyle/rotation fingerprints and selecting one strong representative per meaningful playstyle.
+- Add calibration hooks for known theory/live mismatches and prepare AscensionLogs/addon data integration.
+
+P1 sub-milestones:
+
+- M1.11A Report index and metadata quick fixes. Status: implemented.
+- M1.11B Authoritative role map and role-specific objective indexes. Status: planned.
+- M1.11C CoA Builder talent tree parity capture and renderer separation. Status: planned.
+- M1.11D Cache-aware AscensionDB asset and canonical data scraper. Status: planned.
+- M1.11E Rotation simulation and guide-ready priority output. Status: planned.
+- M1.11F Exact leveling path and build diversity clustering. Status: planned.
+- M1.11G Calibration and live-meta sanity layer. Status: planned; partially P2-gated.
+
+Exit criteria:
+
+- The generated guide no longer presents non-DPS specs through DPS-specific labels.
+- Stalking Venomancer tree parity can be screenshot-compared against the CoA Builder and passes documented manual checks.
+- Icons and canonical DB tooltip/item records are generated from local cached assets without page-load network calls.
+- Recommended builds are meaningfully distinct and remain inside a documented performance/reliability band.
+- Rotation sections are concise player guidance, not full-kit category dumps.
+- Full tests pass and the real artifact smoke command can generate JSON, Markdown, and HTML reports.
 
 ## Phase 2: Data-Driven Calibration Release
 

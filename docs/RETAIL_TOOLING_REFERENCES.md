@@ -94,6 +94,29 @@ License note:
 
 - WoWAnalyzer is AGPL-3.0. Copying source code can impose strong source-sharing obligations, including for networked use.
 
+## Retail Class Guide Sites
+
+Links:
+
+- Icy Veins Outlaw Rogue rotation example: <https://www.icy-veins.com/wow/outlaw-rogue-pve-dps-rotation-cooldowns-abilities>
+- Wowhead Demonology Warlock guide example: <https://www.wowhead.com/guide/classes/warlock/demonology/overview-pve-dps>
+- Archon Brewmaster Monk build example: <https://www.archon.gg/wow/builds/brewmaster/monk/mythic-plus/overview/10/all-dungeons/this-week>
+- Method Discipline Priest guide example: <https://www.method.gg/guides/discipline-priest>
+
+Relevant patterns:
+
+- Guides are organized around player tasks: overview, talents, rotation, gear, stats, utility, and update context.
+- Rotation sections explain opener, core priority, cooldowns, maintenance, and conditional/proc rules. They do not list every ability in the kit.
+- Data-backed sites expose context such as content type, recency, parse/sample counts, and ranking filters.
+- Tooltip-rich spell links keep guides compact while preserving access to detailed spell/item data.
+
+How to apply to CoA:
+
+- Generate one concise rotation guide per selected build rather than category dumps.
+- Keep analyzer-specific metrics behind tooltips or provenance sections.
+- Use role-specific guide language: damage, healing, tank survival/threat, or support contribution.
+- Show when output is theorycraft-only and reserve empirical claims for AscensionLogs/addon-calibrated data.
+
 ## Architecture Takeaways
 
 - Separate data capture, normalization, simulation, analysis, and UI.
@@ -102,4 +125,3 @@ License note:
 - Keep in-game addons lightweight.
 - Label evidence source and confidence.
 - Do not present uncalibrated theorycraft scores as observed DPS.
-

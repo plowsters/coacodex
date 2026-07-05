@@ -1,6 +1,6 @@
 # CoA Meta Analyzer Documentation
 
-This directory documents the architecture and release roadmap for the Conquest of Azeroth meta analyzer. The current repository contains the Phase 1 package, the scraper/normalization pipeline, legacy prototype scripts, and planning docs for the next guide-site milestone.
+This directory documents the architecture and release roadmap for the Conquest of Azeroth meta analyzer. The current repository contains the Phase 1 package, the scraper/normalization pipeline, legacy prototype scripts, implemented M1.10 guide-site work, and active M1.11 hardening plans.
 
 ## Document Map
 
@@ -92,7 +92,28 @@ This writes DB tooltip artifacts and an enriched entries file. AscensionDB enric
 
 ## Current Planning Focus
 
-M1.10 is the active Phase 1 guide-site milestone. It redesigns the static report as a player-facing guide site with a fel/void visual direction, individual class/spec guide pages, CoA-style talent trees, tooltip-rich spell/talent links, better role taxonomy, diverse playstyle build selection, and clearer stat/gear/rotation sections. See [ROADMAP.md](ROADMAP.md) and [M1.10 Guide Site and Report UX Design](superpowers/specs/2026-07-05-m1-10-guide-site-report-ux-design.md).
+M1.11 is the active Phase 1 hardening milestone. It corrects guide output where the M1.10 static site is useful but not yet faithful enough to the CoA Builder, intended roles, source assets, or rotation expectations. See [ROADMAP.md](ROADMAP.md), [M1.11 Design](superpowers/specs/2026-07-05-m1-11-report-correctness-data-parity-design.md), and [M1.11 Implementation Plan](superpowers/plans/2026-07-05-m1-11-report-correctness-data-parity.md).
+
+M1.11A quick fixes are implemented in the current repo:
+
+- Main guide index role sections for Tank, Healer, Support, Caster DPS, Ranged DPS, and Melee DPS.
+- Multi-select role filters.
+- Front-page theorycrafting disclaimer.
+- Legacy user-facing spec renames while preserving source names for internal joins.
+- Safe DB tooltip table rendering.
+- `ranged_dps` role support in report filters, stats, gear, and rotation wording.
+- Harvest and Soul Reaper curated as DPS specs.
+
+M1.11B-G remain planned:
+
+- Role-specific objective indexes for damage/healing/survival/support.
+- CoA Builder tree parity and separated AE/TE/passive tree rendering.
+- Cache-aware AscensionDB icon/image/item/effect scraping.
+- Exact level-by-level talent paths.
+- APL-backed rotation simulation and guide-ready priority output.
+- Build diversity clustering and confidence calibration.
+
+M1.10 redesigned the static report as a player-facing guide site with a fel/void visual direction, individual class/spec guide pages, CoA-style talent trees, tooltip-rich spell/talent links, better role taxonomy, diverse playstyle build selection, and clearer stat/gear/rotation sections. See [M1.10 Guide Site and Report UX Design](superpowers/specs/2026-07-05-m1-10-guide-site-report-ux-design.md).
 
 M1.10A/B, guide information architecture plus asset and tooltip integration, is implemented in the current repo. See [M1.10A/B Design](superpowers/specs/2026-07-05-m1-10-a-b-guide-ia-assets-design.md) and [M1.10A/B Implementation Plan](superpowers/plans/2026-07-05-m1-10-a-b-guide-ia-assets.md).
 
@@ -100,4 +121,4 @@ M1.10C/D, CoA-style static talent trees plus diverse build and core-loop selecti
 
 M1.10E/F, player-facing role taxonomy plus clearer stat and gear presentation, is implemented. See [M1.10E/F Design](superpowers/specs/2026-07-05-m1-10-e-f-role-gear-stats-design.md) and [M1.10E/F Implementation Plan](superpowers/plans/2026-07-05-m1-10-e-f-role-gear-stats.md).
 
-The next planning focus is any remaining M1.10 polish, then Phase 2 data collection, calibration, and personal upload/simulation workflows.
+After M1.11, the next major planning focus is Phase 2 data collection, AscensionLogs/addon calibration, and the Vercel free-tier personal upload/simulation workflow.
