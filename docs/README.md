@@ -47,6 +47,19 @@ The report emits projected theorycraft indexes. It does not emit observed DPS, s
 
 The command writes progress logs to stderr, including start, artifact/report stages, output formats, and completion.
 
+For the M1.10 static guide-site renderer, include DB tooltip enrichment when available:
+
+```bash
+python -m coa_meta meta \
+  --entries coa_scraper/dist/coa_entries.jsonl \
+  --classes coa_scraper/dist/coa_classes.json \
+  --db-tooltips coa_scraper/dist/coa_db_spell_tooltips.jsonl \
+  --out reports/meta \
+  --format html
+```
+
+This writes `index.html`, `meta-report.html`, `specs/*.html`, and static assets under `reports/meta/assets/`.
+
 The legacy prototype can also be run from the repository root. Prefer the scraper artifact path:
 
 ```bash
