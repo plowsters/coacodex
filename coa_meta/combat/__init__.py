@@ -1,0 +1,1 @@
+"""Deterministic combat simulation primitives."""

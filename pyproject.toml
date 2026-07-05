@@ -17,7 +17,7 @@ dependencies = []
 coa-meta = "coa_meta.cli:main"
 
 [tool.setuptools]
-packages = ["coa_meta"]
+packages = ["coa_meta", "coa_meta.combat"]
 
 [tool.setuptools.package-data]
 coa_meta = [
