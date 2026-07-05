@@ -2,6 +2,8 @@
 
 Date: 2026-07-05
 
+Implementation status: M1.10A/B and M1.10C/D are implemented in the current repo. M1.10E/F remains planned.
+
 ## Goal
 
 M1.10 turns the generated meta report into a static, GitHub Pages-friendly CoA guide site. The report should feel like a player guide first and an analyzer artifact second. The canonical JSON can remain technical, but the HTML should explain choices in WoW player language and reserve analyzer terms for tooltips.

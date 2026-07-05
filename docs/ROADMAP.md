@@ -157,7 +157,7 @@ Exit criteria:
 
 ### Milestone 1.10: Static Guide Site and Player-Facing Report UX
 
-Status: in progress. M1.10A/B is implemented in the current repo. M1.10C/D now has detailed design and implementation planning. M1.10E/F remains planned.
+Status: in progress. M1.10A/B and M1.10C/D are implemented in the current repo. M1.10E/F remains planned.
 
 Purpose: turn the Phase 1 meta report from an analyst table into a GitHub Pages-friendly class/spec guide site for CoA players.
 
@@ -181,8 +181,8 @@ P1 sub-milestones:
 
 - M1.10A Guide information architecture: static route structure, guide page templates, navigation, player-facing copy rules, and metric tooltip definitions. Status: implemented. Design: [M1.10A/B Guide Information Architecture and Asset Integration](superpowers/specs/2026-07-05-m1-10-a-b-guide-ia-assets-design.md).
 - M1.10B Asset and tooltip integration: icon resolver, class/spec media catalog, AscensionDB hotlinks, hover tooltip payloads, missing-asset fallback policy, and asset manifest updates. Status: implemented. Plan: [M1.10A/B Guide IA and Asset Integration](superpowers/plans/2026-07-05-m1-10-a-b-guide-ia-assets.md).
-- M1.10C CoA-style talent tree renderer: static tree layout from normalized row/column/edges, rank/cost badges, level gating, AE/TE legality checks, hover tooltips, and lightweight JavaScript for interactions. Status: designed. Design: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/specs/2026-07-05-m1-10-c-d-tree-diversity-design.md).
-- M1.10D Rotation and build diversity heuristics: playstyle fingerprints from selected nodes/APL actions, performance-band filtering, reliability scoring, and user-facing build comparison labels. Status: designed. Plan: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/plans/2026-07-05-m1-10-c-d-tree-diversity.md).
+- M1.10C CoA-style talent tree renderer: static tree layout from normalized row/column/edges, rank/cost badges, level gating, AE/TE legality checks, hover tooltips, and lightweight JavaScript for interactions. Status: implemented. Design: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/specs/2026-07-05-m1-10-c-d-tree-diversity-design.md).
+- M1.10D Rotation and build diversity heuristics: playstyle fingerprints from selected nodes/APL actions, performance-band filtering, reliability scoring, and user-facing build comparison labels. Status: implemented. Plan: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/plans/2026-07-05-m1-10-c-d-tree-diversity.md).
 - M1.10E Role taxonomy refinement: source-backed role mapping where possible, metadata inference fallback, separate melee/caster/healer/support/tank scoring and APL profile routing.
 - M1.10F Gear/stat presentation: single stat disclaimer, best-vs-available gear sections, icon support, and explicit source warnings for unsupported gear slots.
 
