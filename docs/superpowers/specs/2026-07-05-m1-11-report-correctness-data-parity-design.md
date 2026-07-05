@@ -94,6 +94,10 @@ Exit criteria:
 
 Status: planned.
 
+Detailed design: [M1.11B Role Map and Role-Specific Objective Indexes](2026-07-05-m1-11-b-role-objectives-design.md).
+
+Implementation plan: [M1.11B Role Map and Role-Specific Objective Indexes](../plans/2026-07-05-m1-11-b-role-objectives.md).
+
 Scope:
 
 - Create a role map artifact with provenance per class/spec.
@@ -121,6 +125,10 @@ Exit criteria:
 ### M1.11C: CoA Builder Talent Tree Parity
 
 Status: planned.
+
+Detailed design: [M1.11C CoA Builder Talent Tree Parity](2026-07-05-m1-11-c-builder-tree-parity-design.md).
+
+Implementation plan: [M1.11C CoA Builder Talent Tree Parity](../plans/2026-07-05-m1-11-c-builder-tree-parity.md).
 
 Scope:
 

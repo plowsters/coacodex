@@ -149,6 +149,28 @@ Why it matters:
 
 - The addon scaffold is minimal. Phase 2 needs evidence about what the 3.3.5 Ascension client exposes.
 
+### AscensionLogsCompanion Probe
+
+AscensionLogsCompanion is promising as a capture-pattern reference because it embeds compressed combatant-info payloads into `WoWCombatLog.txt`, but it should not become a dependency until a CoA sample proves it exposes CoA class/spec/essence state.
+
+Collect one short CoA combat log with AscensionLogsCompanion installed and combat logging enabled.
+
+For the sample, record:
+
+- AscensionLogsCompanion version or commit if known
+- Ascension client build/version if shown
+- class/spec/build used
+- whether `WoWCombatLog.txt` contains `ALC_CI_v1`
+- one decoded payload if the sentinel is present
+- whether the decoded payload includes CoA class/spec, selected Ability Essence nodes, selected Talent Essence nodes, ranks, and spell IDs
+- whether it only includes legacy CharacterAdvancement, gear, mystic enchants, or vanilla talent data
+
+Decision rule:
+
+- If CoA node state is present, add an `AscensionLogsCompanionAdapter` in Phase 2.
+- If only legacy Ascension state is present, use the addon as a design reference and continue extending `CoADataLogger`.
+- If no sentinel is present in CoA logs, mark the avenue not viable until the addon adds CoA support.
+
 ## Phase 3 Data Needs
 
 ### Coefficient Tests
@@ -213,4 +235,3 @@ data_collected/
 ```
 
 The README should include class, build, level, gear notes, stat notes, target count, session length, and anything unusual that happened.
-

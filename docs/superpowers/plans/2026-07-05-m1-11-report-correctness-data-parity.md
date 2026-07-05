@@ -54,6 +54,8 @@ Expected:
 
 Purpose: stop explaining non-DPS roles through DPS labels.
 
+Detailed plan: [M1.11B Role Map and Role-Specific Objective Indexes](2026-07-05-m1-11-b-role-objectives.md). Use that plan for implementation; the steps below are retained as the high-level checkpoint summary.
+
 ### Step 1: Add role objective tests
 
 Create or extend tests:
@@ -170,6 +172,8 @@ git commit -m "Add role-specific report indexes"
 ## Checkpoint 3: CoA Builder Tree Parity Capture
 
 Purpose: stop approximating talent trees when the Builder has a canonical layout.
+
+Detailed plan: [M1.11C CoA Builder Talent Tree Parity](2026-07-05-m1-11-c-builder-tree-parity.md). Use that plan for implementation; the steps below are retained as the high-level checkpoint summary.
 
 ### Step 1: Define parity fixture contract
 

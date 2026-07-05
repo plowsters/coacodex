@@ -218,8 +218,8 @@ Requirements:
 P1 sub-milestones:
 
 - M1.11A Report index and metadata quick fixes. Status: implemented.
-- M1.11B Authoritative role map and role-specific objective indexes. Status: planned.
-- M1.11C CoA Builder talent tree parity capture and renderer separation. Status: planned.
+- M1.11B Authoritative role map and role-specific objective indexes. Status: planned. Design: [M1.11B Role Map and Role-Specific Objective Indexes](superpowers/specs/2026-07-05-m1-11-b-role-objectives-design.md). Plan: [M1.11B Implementation Plan](superpowers/plans/2026-07-05-m1-11-b-role-objectives.md).
+- M1.11C CoA Builder talent tree parity capture and renderer separation. Status: planned. Design: [M1.11C CoA Builder Talent Tree Parity](superpowers/specs/2026-07-05-m1-11-c-builder-tree-parity-design.md). Plan: [M1.11C Implementation Plan](superpowers/plans/2026-07-05-m1-11-c-builder-tree-parity.md).
 - M1.11D Cache-aware AscensionDB asset and canonical data scraper. Status: planned.
 - M1.11E Rotation simulation and guide-ready priority output. Status: planned.
 - M1.11F Exact leveling path and build diversity clustering. Status: planned.
@@ -245,6 +245,7 @@ Primary output: data-calibrated meta reports labeled by data source, sample size
 Requirements:
 
 - Expand `CoADataLogger/` into a supported addon module.
+- Add a bounded AscensionLogsCompanion compatibility probe before building a full adapter: collect one CoA `WoWCombatLog.txt`, search for `ALC_CI_v1` payloads, decode one payload if present, and verify whether it contains CoA class/spec/essence state rather than only legacy Ascension CharacterAdvancement data.
 - Capture sessions with player, realm, timestamp, level, current build identifier if available, selected talents if exposed by the client, gear links, base/effective stats, combat ratings, AP/RAP/SP/crit, and combat events.
 - Capture player pets and guardians when they can be reliably attributed to the player.
 - Add event sampling controls and session labels so users can run repeatable target dummy tests.
@@ -253,6 +254,7 @@ Requirements:
 Exit criteria:
 
 - A user can capture one labeled fight, reload/logout, and produce a parseable SavedVariables export.
+- The AscensionLogsCompanion probe is documented as viable, not viable for CoA, or deferred pending a sample log.
 - The exported data can be mapped to Phase 1 normalized spells by spell ID or normalized spell name.
 
 ### Milestone 2.2: Combat Log and SavedVariables Ingestion
@@ -261,6 +263,7 @@ Requirements:
 
 - Split log parsing into dedicated adapters.
 - Parse `WoWCombatLog.txt` and addon JSON/SavedVariables exports into a common event schema.
+- If the Milestone 2.1 probe proves viable, add an `AscensionLogsCompanionAdapter` that reassembles embedded combatant-info chunks from combat log rows and normalizes them to the same snapshot schema as `CoADataLogger`.
 - Segment fights by combat boundaries, target dummy labels, boss encounters, or manual session labels.
 - Normalize spell names, spell IDs, source GUIDs, pet ownership, damage events, aura applications/removals, misses, interrupts, absorbs, crits, periodic ticks, and resource events when present.
 - Preserve raw event references for auditability.
