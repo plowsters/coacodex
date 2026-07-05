@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--format", dest="formats", action="append", choices=("json", "md", "html"), default=[])
     meta.add_argument("--out", type=Path, default=Path("reports/meta"))
     meta.add_argument("--asset-root", type=Path, default=None)
+    meta.add_argument("--db-tooltips", type=Path, default=None, help="Optional AscensionDB tooltip JSONL for static guide tooltips")
     meta.set_defaults(handler=run_meta)
     return parser
 
@@ -80,7 +81,14 @@ def run_meta(args: argparse.Namespace) -> int:
     formats = tuple(args.formats) if args.formats else ("json", "md", "html")
     asset_resolver = AssetResolver(args.asset_root) if args.asset_root else None
     _log_progress(f"Writing outputs: formats={', '.join(formats)}")
-    outputs = write_report_outputs(report, args.out, formats=formats, asset_resolver=asset_resolver)
+    outputs = write_report_outputs(
+        report,
+        args.out,
+        formats=formats,
+        asset_resolver=asset_resolver,
+        entries_path=args.entries,
+        db_tooltips_path=args.db_tooltips,
+    )
     _log_progress(f"Complete: wrote {len(outputs)} file(s) to {args.out}")
     return 0
 
