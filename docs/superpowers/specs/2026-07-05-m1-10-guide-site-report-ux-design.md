@@ -2,7 +2,7 @@
 
 Date: 2026-07-05
 
-Implementation status: M1.10A/B and M1.10C/D are implemented in the current repo. M1.10E/F remains planned.
+Implementation status: M1.10A/B and M1.10C/D are implemented in the current repo. M1.10E/F is designed and ready for implementation.
 
 ## Goal
 
@@ -38,6 +38,8 @@ Detailed follow-up docs:
 - [M1.10A/B Guide IA and Asset Integration Implementation Plan](../plans/2026-07-05-m1-10-a-b-guide-ia-assets.md)
 - [M1.10C/D Talent Tree Renderer and Build Diversity Design](2026-07-05-m1-10-c-d-tree-diversity-design.md)
 - [M1.10C/D Talent Tree Renderer and Build Diversity Implementation Plan](../plans/2026-07-05-m1-10-c-d-tree-diversity.md)
+- [M1.10E/F Role Taxonomy and Gear/Stats Presentation Design](2026-07-05-m1-10-e-f-role-gear-stats-design.md)
+- [M1.10E/F Role Taxonomy and Gear/Stats Presentation Implementation Plan](../plans/2026-07-05-m1-10-e-f-role-gear-stats.md)
 
 ### Guide Information Architecture
 

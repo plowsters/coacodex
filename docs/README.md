@@ -98,4 +98,4 @@ M1.10A/B, guide information architecture plus asset and tooltip integration, is 
 
 M1.10C/D, CoA-style static talent trees plus diverse build and core-loop selection, is also implemented. See [M1.10C/D Design](superpowers/specs/2026-07-05-m1-10-c-d-tree-diversity-design.md) and [M1.10C/D Implementation Plan](superpowers/plans/2026-07-05-m1-10-c-d-tree-diversity.md).
 
-The remaining M1.10 planning focus is M1.10E/F: role taxonomy refinement and clearer gear/stat presentation.
+M1.10E/F, player-facing role taxonomy plus clearer stat and gear presentation, is designed and ready for implementation. See [M1.10E/F Design](superpowers/specs/2026-07-05-m1-10-e-f-role-gear-stats-design.md) and [M1.10E/F Implementation Plan](superpowers/plans/2026-07-05-m1-10-e-f-role-gear-stats.md).
