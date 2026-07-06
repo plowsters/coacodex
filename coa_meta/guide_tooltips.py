@@ -48,7 +48,7 @@ def load_db_tooltip_rows(path: Path | str | None) -> dict[int, dict[str, Any]]:
             continue
         row = json.loads(line)
         if row.get("kind") == "spell" and row.get("status") == "matched":
-            spell_id = int(row["id"])
+            spell_id = int(row.get("spell_id") or row["id"])
             rows[spell_id] = row
     return rows
 

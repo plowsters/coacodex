@@ -405,6 +405,11 @@ test("manifest writer records builder, validation, artifact hashes, and missing 
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/build-mechanics-artifacts.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_mechanics.jsonl" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_items.jsonl" && artifact.missing === true));
+  assert(manifest.scripts.some(artifact => artifact.path === "scripts/enrich-ascensiondb-assets.mjs" && artifact.missing === true));
+  assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/icon-assets.mjs" && artifact.missing === true));
+  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_spell_records.jsonl" && artifact.missing === true));
+  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_asset_records.jsonl" && artifact.missing === true));
+  assert(manifest.artifacts.some(artifact => artifact.path === "reports/coa_ascensiondb_cache_summary.json" && artifact.missing === true));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/capture-options.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.missing === true));
 });
@@ -593,6 +598,14 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
     id: 92117,
     entry_id: 501,
     tooltip_text: "Deals 120 Nature damage over 12 sec.",
+    cooldown_ms: 30000,
+    gcd_ms: 1500,
+    cast_time_ms: 0,
+    range_yards: 30,
+    duration_ms: 12000,
+    period_ms: 3000,
+    power_costs: [{ amount: 25, resource: "Energy" }],
+    mechanic_tags: ["damage", "dot"],
     linked_item_ids: [23887],
     provenance: {
       url: "https://db.ascension.gg/?spell=92117&power",
@@ -615,10 +628,19 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
   assert.deepEqual(mechanicsRows[0].source_node_ids, [501]);
   assert.equal(mechanicsRows[0].effects[0].effect_type, "damage");
   assert.equal(mechanicsRows[0].effects[0].school, "nature");
+  assert.deepEqual(mechanicsRows[0].costs, { Energy: 25 });
+  assert.equal(mechanicsRows[0].cooldown_ms, 30000);
+  assert.equal(mechanicsRows[0].gcd_ms, 1500);
+  assert.equal(mechanicsRows[0].cast_time_ms, 0);
+  assert.equal(mechanicsRows[0].range_yards, 30);
+  assert.equal(mechanicsRows[0].effects[0].duration_ms, 12000);
+  assert.equal(mechanicsRows[0].effects[0].period_ms, 3000);
+  assert(mechanicsRows[0].raw.linked_item_ids.includes(23887));
   assert.equal(mechanicsRows[0].provenance[0].source, "ascension_db");
   assert.equal(itemRows[0].schema_version, "coa-item-v1");
   assert.equal(itemRows[0].item_id, 23887);
   assert.equal(itemRows[0].required_level, 58);
+  assert.equal(itemRows[0].icon, "inv_boots_09");
   assert.deepEqual(itemRows[0].linked_spell_ids, [30556]);
   assert.equal(summary.mechanics_count, 1);
   assert.equal(summary.item_count, 1);

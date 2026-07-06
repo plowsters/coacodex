@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from coa_meta.guide_builder import build_guide_site
-from coa_meta.guide_models import GuideBuildCard, GuideSite, GuideSpec
+from coa_meta.guide_models import GuideAsset, GuideBuildCard, GuideNode, GuideSite, GuideSpec
 from coa_meta.guide_rendering import GUIDE_CSS, GUIDE_JS, render_index_html, render_spec_html
+from coa_meta.guide_tooltips import sanitize_tooltip_html
 from coa_meta.reporting import MetaReportRunner, MetaRunConfig
 
 
@@ -128,6 +129,62 @@ def test_render_spec_html_links_spell_and_tooltip_ids():
 
     assert "https://db.ascension.gg/?spell=2001" in html
     assert 'data-tooltip-id="spell:2001"' in html
+
+
+def test_render_spec_html_uses_local_icon_images_for_nodes():
+    site = _hybrid_site()
+    spec = site.specs[0]
+    node = GuideNode(
+        entry_id=1,
+        spell_id=1001,
+        name="Fel Strike",
+        class_name="Guardian",
+        tab_name="Class",
+        essence_kind="ability",
+        required_level=10,
+        ae_cost=1,
+        te_cost=0,
+        tags=("melee",),
+        active=True,
+        db_url="https://db.ascension.gg/?spell=1001",
+        tooltip_id="spell:1001",
+        asset=GuideAsset(
+            asset_id="icon:felstrike",
+            kind="icon",
+            label="Fel Strike",
+            href="icons/fel_strike.png",
+            source="ascension_db_asset",
+            missing=False,
+            source_path="dist/assets/icons/fel_strike.png",
+        ),
+    )
+    spec = GuideSpec(
+        **{
+            **spec.__dict__,
+            "nodes": (node,),
+            "sections": (*spec.sections, "Abilities and Talents"),
+        }
+    )
+    site = GuideSite(**{**site.__dict__, "specs": (spec,)})
+
+    html = render_spec_html(site, spec)
+
+    assert '<img src="../assets/icons/fel_strike.png"' in html
+    assert "FS</span>" not in html
+
+
+def test_tooltip_sanitizer_preserves_tables_and_strips_active_markup():
+    sanitized = sanitize_tooltip_html(
+        '<table onclick="bad()"><tr><td>Damage</td></tr></table>'
+        '<script>alert(1)</script><img src=x onerror="bad()">'
+    )
+
+    assert "<table>" in sanitized
+    assert "<tr>" in sanitized
+    assert "<td>Damage</td>" in sanitized
+    assert "onclick" not in sanitized
+    assert "script" not in sanitized
+    assert "&lt;img" in sanitized
 
 
 def test_render_spec_html_includes_static_talent_tree():

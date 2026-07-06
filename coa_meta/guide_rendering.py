@@ -48,6 +48,7 @@ a { color: var(--fel); }
 .node-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .node-card { display: grid; grid-template-columns: 42px 1fr; gap: 10px; align-items: center; border: 1px solid rgba(101,240,107,.18); border-radius: 8px; padding: 10px; background: rgba(255,255,255,.03); }
 .icon-frame { width: 42px; height: 42px; border-radius: 6px; border: 1px solid var(--fel); display: grid; place-items: center; color: var(--fel); background: rgba(101,240,107,.09); box-shadow: inset 0 0 12px rgba(101,240,107,.12); }
+.icon-frame img { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
 .tree-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0; }
 .tree-toolbar select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; }
 .tree-scroll { overflow-x: auto; padding-bottom: 8px; }
@@ -65,6 +66,7 @@ a { color: var(--fel); }
 .tree-links line.is-selected { stroke: var(--fel); filter: drop-shadow(0 0 7px rgba(101,240,107,.55)); }
 .tree-links line.is-available { stroke: var(--void); }
 .tree-node { position: relative; z-index: 1; width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid rgba(143,92,255,.5); border-radius: 50%; color: var(--text); background: rgba(19,11,30,.94); box-shadow: inset 0 0 16px rgba(143,92,255,.16); cursor: help; }
+.tree-node img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .is-captured-layout .tree-node { position: absolute; }
 .passive-lane .tree-node { border-radius: 12px; }
 .tree-node.shape-square { border-radius: 12px; }
@@ -549,7 +551,7 @@ def _render_tree_canvas(tree: Any) -> str:
 def _render_tree_node(node: Any) -> str:
     shape = "shape-square" if "square" in node.node_type.lower() else "shape-hex" if "hex" in node.node_type.lower() else "shape-circle"
     state_class = _tree_state_class(node.tree_state)
-    label = node.name[:2].upper()
+    label = _render_icon_content(node, "../assets")
     rank = f"{node.rank}/{node.max_rank}" if node.max_rank > 1 else str(node.rank or 1)
     style = _tree_node_style(node)
     return (
@@ -558,7 +560,7 @@ def _render_tree_node(node: Any) -> str:
         f'data-rank="{node.rank}" data-max-rank="{node.max_rank}" '
         f'style="{style}" '
         f'aria-label="{_e(node.name)}">'
-        f'<span>{_e(label)}</span><span class="tree-rank">{_e(rank)}</span></button>'
+        f'{label}<span class="tree-rank">{_e(rank)}</span></button>'
     )
 
 
@@ -599,13 +601,29 @@ def _render_leveling_path(tree_or_panel: Any) -> str:
 
 
 def _render_node(node: Any) -> str:
-    icon = node.name[:2].upper()
+    icon = _render_icon_content(node, "../assets")
     link = f'<a href="{_e(node.db_url)}" data-tooltip-id="{_e(node.tooltip_id)}">{_e(node.name)}</a>' if node.db_url else _e(node.name)
     return (
         '<article class="node-card">'
-        f'<span class="icon-frame">{_e(icon)}</span><span>{link}<br>'
+        f'<span class="icon-frame">{icon}</span><span>{link}<br>'
         f'<small>{_e(node.tab_name)} - {_e(node.essence_kind)} - Level {node.required_level}</small></span></article>'
     )
+
+
+def _render_icon_content(node: Any, asset_prefix: str) -> str:
+    asset = getattr(node, "asset", None)
+    href = getattr(asset, "href", None)
+    missing = bool(getattr(asset, "missing", True))
+    if href and not missing:
+        src = _asset_src(href, asset_prefix)
+        return f'<img src="{_e(src)}" alt="" loading="lazy">'
+    return f"<span>{_e(node.name[:2].upper())}</span>"
+
+
+def _asset_src(href: str, asset_prefix: str) -> str:
+    if href.startswith(("http://", "https://", "/", "../")):
+        return href
+    return f"{asset_prefix.rstrip('/')}/{href.lstrip('/')}"
 
 
 def _tooltip_script(site: GuideSite) -> str:

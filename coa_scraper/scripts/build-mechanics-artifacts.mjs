@@ -10,13 +10,13 @@ const MECHANICS_SCHEMA_VERSION = "coa-mechanics-v1";
 const ITEM_SCHEMA_VERSION = "coa-item-v1";
 
 export function buildMechanicsRows({ entries, spellRows }) {
-  const spellById = new Map(spellRows.map(row => [Number(row.id), row]));
+  const spellById = new Map(spellRows.map(row => [Number(row.spell_id ?? row.id), row]));
   return entries
     .filter(entry => Number.isFinite(Number(entry.spell_id)))
     .map(entry => {
       const spellRow = spellById.get(Number(entry.spell_id)) || entry.db_enrichment || null;
       const tooltipText = spellRow?.tooltip_text || entry.description_text || "";
-      const effects = inferEffects({ entry, tooltipText });
+      const effects = inferEffects({ entry, tooltipText, spellRow });
       const dbMatched = spellRow?.status === "matched";
       return {
         schema_version: MECHANICS_SCHEMA_VERSION,
@@ -24,21 +24,28 @@ export function buildMechanicsRows({ entries, spellRows }) {
         name: spellRow?.name || entry.name || "",
         kind: classifyMechanicKind(entry, tooltipText),
         source_node_ids: [Number(entry.entry_id)].filter(Number.isFinite),
-        source_urls: spellRow?.provenance?.url ? [spellRow.provenance.url] : [],
+        source_urls: sourceUrls(spellRow),
         school: firstValue(entry.damage_schools),
         power_type: firstValue(entry.resources),
-        costs: {},
+        costs: costsObject(spellRow?.power_costs),
         generates: {},
         spends: {},
+        cooldown_ms: numberOrNull(spellRow?.cooldown_ms),
+        gcd_ms: numberOrNull(spellRow?.gcd_ms),
+        cast_time_ms: numberOrNull(spellRow?.cast_time_ms),
+        range_yards: numberOrNull(spellRow?.range_yards),
         effects,
         provenance: [
           {
             source: dbMatched ? "ascension_db" : "builder",
             source_id: `spell:${Number(entry.spell_id)}`,
-            source_url: spellRow?.provenance?.url || "",
+            source_url: sourceUrls(spellRow)[0] || "",
             parser: "build-mechanics-artifacts",
             confidence: dbMatched ? "medium" : "low",
-            notes: dbMatched ? ["derived_from_ascensiondb_tooltip"] : ["derived_from_builder_node"]
+            notes: [
+              ...(dbMatched ? ["derived_from_ascensiondb_tooltip"] : ["derived_from_builder_node"]),
+              ...((spellRow?.warnings || []).map(warning => `db_warning:${warning}`))
+            ]
           }
         ],
         confidence: dbMatched ? "medium" : "low",
@@ -57,16 +64,17 @@ export function buildItemRows({ itemPayloadRows }) {
     .filter(row => row.status === "matched")
     .map(row => ({
       schema_version: ITEM_SCHEMA_VERSION,
-      item_id: Number(row.id),
+      item_id: Number(row.item_id ?? row.id),
       name: row.name || "",
       icon: row.icon || "",
+      icon_asset_path: row.icon_asset_path || null,
       quality: row.quality ?? null,
-      slot: inferItemSlot(row.tooltip_text),
-      item_class: inferItemClass(row.tooltip_text),
-      subclass: "",
-      weapon_type: inferWeaponType(row.tooltip_text),
-      armor_type: inferArmorType(row.tooltip_text),
-      stats: {},
+      slot: row.inventory_type || inferItemSlot(row.tooltip_text),
+      item_class: row.item_class || inferItemClass(row.tooltip_text),
+      subclass: row.item_subclass || "",
+      weapon_type: row.weapon_type || inferWeaponType(row.tooltip_text),
+      armor_type: row.armor_type || inferArmorType(row.tooltip_text),
+      stats: statsObject(row.stats),
       ratings: {},
       speed: null,
       min_damage: null,
@@ -77,14 +85,15 @@ export function buildItemRows({ itemPayloadRows }) {
       linked_spell_ids: row.linked_spell_ids || [],
       linked_item_ids: row.linked_item_ids || [],
       tooltip_text: row.tooltip_text || "",
-      source_urls: row?.provenance?.url ? [row.provenance.url] : [],
+      source_urls: sourceUrls(row),
       provenance: [
         {
           source: "ascension_db",
-          source_id: `item:${Number(row.id)}`,
-          source_url: row?.provenance?.url || "",
+          source_id: `item:${Number(row.item_id ?? row.id)}`,
+          source_url: sourceUrls(row)[0] || "",
           parser: "build-mechanics-artifacts",
-          confidence: "medium"
+          confidence: "medium",
+          notes: (row.warnings || []).map(warning => `db_warning:${warning}`)
         }
       ],
       confidence: "medium",
@@ -108,10 +117,11 @@ export function summarizeMechanicsArtifacts({ mechanicsRows, itemRows }) {
   };
 }
 
-function inferEffects({ entry, tooltipText }) {
+function inferEffects({ entry, tooltipText, spellRow }) {
   const tags = entry.tags || [];
   const school = firstValue(entry.damage_schools) || inferSchool(tooltipText);
-  const durationMs = inferDurationMs(tooltipText);
+  const durationMs = numberOrNull(spellRow?.duration_ms) ?? inferDurationMs(tooltipText);
+  const periodMs = numberOrNull(spellRow?.period_ms);
   const amount = inferAmount(tooltipText);
   if (tags.includes("heal") || /\bheal/i.test(tooltipText)) {
     return [
@@ -121,6 +131,7 @@ function inferEffects({ entry, tooltipText }) {
         target: "ally",
         amount,
         duration_ms: durationMs,
+        period_ms: periodMs,
         tags: tags.filter(Boolean)
       }
     ];
@@ -131,6 +142,7 @@ function inferEffects({ entry, tooltipText }) {
         effect_type: "summon",
         target: "self",
         duration_ms: durationMs,
+        period_ms: periodMs,
         tags: tags.filter(Boolean)
       }
     ];
@@ -141,6 +153,7 @@ function inferEffects({ entry, tooltipText }) {
         effect_type: "aura_apply",
         target: "self",
         duration_ms: durationMs,
+        period_ms: periodMs,
         tags: tags.filter(Boolean)
       }
     ];
@@ -153,6 +166,7 @@ function inferEffects({ entry, tooltipText }) {
         target: "enemy",
         amount,
         duration_ms: durationMs,
+        period_ms: periodMs,
         tags: tags.filter(Boolean)
       }
     ];
@@ -220,6 +234,44 @@ function inferArmorType(text) {
 
 function firstValue(values) {
   return Array.isArray(values) && values.length ? String(values[0]) : "";
+}
+
+function costsObject(costs) {
+  const output = {};
+  for (const item of costs || []) {
+    const resource = item?.resource ? String(item.resource) : "";
+    const amount = Number(item?.amount);
+    if (resource && Number.isFinite(amount)) {
+      output[resource] = amount;
+    }
+  }
+  return output;
+}
+
+function statsObject(stats) {
+  const output = {};
+  for (const item of stats || []) {
+    const stat = item?.stat ? String(item.stat) : "";
+    const value = Number(item?.value);
+    if (stat && Number.isFinite(value)) {
+      output[stat] = value;
+    }
+  }
+  return output;
+}
+
+function sourceUrls(row) {
+  const urls = [
+    row?.source_url,
+    row?.provenance?.url,
+    ...(Array.isArray(row?.source_urls) ? row.source_urls : [])
+  ].filter(Boolean);
+  return [...new Set(urls)];
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function countBy(rows, keyFn) {

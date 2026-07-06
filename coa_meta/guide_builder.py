@@ -58,9 +58,14 @@ def build_guide_site(
         ]
         guide_nodes = []
         for node in sorted(relevant_nodes, key=lambda item: (item.tab_name != "Class", item.row, item.col, item.name)):
+            db_row = db_rows.get(node.spell_id or -1)
             tooltip = build_node_tooltip(node, db_rows)
             tooltips[tooltip.tooltip_id] = tooltip
-            asset = assets.icon_for(node.raw.get("icon") or node.raw.get("iconPath") or node.name, node.name)
+            asset = assets.icon_for(
+                str((db_row or {}).get("icon") or node.raw.get("icon") or node.raw.get("iconPath") or node.name),
+                node.name,
+                local_path=(db_row or {}).get("icon_asset_path"),
+            )
             guide_nodes.append(
                 GuideNode(
                     entry_id=node.entry_id,
