@@ -22,3 +22,7 @@ Backend trust reports are internal Phase 1 QA artifacts. They are not rendered i
 - `notes`
 
 Trust scores are coarse internal diagnostics. They are not observed DPS, HPS, mitigation, or player performance.
+
+## User-Facing Boundary
+
+Phase 1 guide HTML must not render backend trust scores, watchlist concerns, or live sanity labels. The sidecar exists for maintainers and future Phase 2 calibration only.

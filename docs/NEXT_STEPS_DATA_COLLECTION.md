@@ -153,6 +153,8 @@ Why it matters:
 
 AscensionLogsCompanion is promising as a capture-pattern reference because it embeds compressed combatant-info payloads into `WoWCombatLog.txt`, but it should not become a dependency until a CoA sample proves it exposes CoA class/spec/essence state.
 
+This remains a Phase 2 probe, not a Phase 1 dependency. Do not build an adapter until a CoA combat-log sample includes `ALC_CI_v1` and the decoded payload contains CoA node state.
+
 Collect one short CoA combat log with AscensionLogsCompanion installed and combat logging enabled.
 
 For the sample, record:

@@ -115,10 +115,10 @@ M1.11D and M1.11E are implemented in the current M1.11 worktree as first passes:
 - Cache-aware AscensionDB icon/image/item/effect scraping.
 - APL-backed rotation simulation and guide-ready priority output.
 
-M1.11F is implemented as a first pass, and M1.11G now has dedicated design and implementation planning:
+M1.11F and M1.11G are implemented as first passes:
 
 - M1.11F exact level-by-level talent paths and stronger build diversity clustering. Design: [M1.11F Exact Leveling Path and Build Diversity Correctness](superpowers/specs/2026-07-06-m1-11-f-leveling-path-build-diversity-design.md). Plan: [M1.11F Implementation Plan](superpowers/plans/2026-07-06-m1-11-f-leveling-path-build-diversity.md).
-- M1.11G backend-only verification/trust heuristic. Design: [M1.11G Backend Verification and Trust Heuristic](superpowers/specs/2026-07-06-m1-11-g-backend-trust-heuristic-design.md). Plan: [M1.11G Implementation Plan](superpowers/plans/2026-07-06-m1-11-g-backend-trust-heuristic.md). This remains internal in P1; user-facing calibration waits for P2 logs.
+- M1.11G backend-only verification/trust heuristic. Design: [M1.11G Backend Verification and Trust Heuristic](superpowers/specs/2026-07-06-m1-11-g-backend-trust-heuristic-design.md). Plan: [M1.11G Implementation Plan](superpowers/plans/2026-07-06-m1-11-g-backend-trust-heuristic.md). The sidecar remains internal in P1; user-facing calibration waits for P2 logs.
 
 M1.10 redesigned the static report as a player-facing guide site with a fel/void visual direction, individual class/spec guide pages, CoA-style talent trees, tooltip-rich spell/talent links, better role taxonomy, diverse playstyle build selection, and clearer stat/gear/rotation sections. See [M1.10 Guide Site and Report UX Design](superpowers/specs/2026-07-05-m1-10-guide-site-report-ux-design.md).
 
