@@ -195,7 +195,7 @@ P2/P3 follow-ups:
 
 ### Milestone 1.11: Report Correctness, Data Parity, and Simulation Hardening
 
-Status: in progress. M1.11A quick fixes and M1.11B role/objective work are implemented; M1.11C-G remain planned. Design: [M1.11 Report Correctness and Data Parity](superpowers/specs/2026-07-05-m1-11-report-correctness-data-parity-design.md). Plan: [M1.11 Implementation Plan](superpowers/plans/2026-07-05-m1-11-report-correctness-data-parity.md).
+Status: in progress. M1.11A quick fixes, M1.11B role/objective work, and M1.11C builder-tree layout plumbing are implemented; M1.11D-G remain planned. Design: [M1.11 Report Correctness and Data Parity](superpowers/specs/2026-07-05-m1-11-report-correctness-data-parity-design.md). Plan: [M1.11 Implementation Plan](superpowers/plans/2026-07-05-m1-11-report-correctness-data-parity.md).
 
 Purpose: correct the guide output where M1.10 is visibly useful but not yet faithful enough to the CoA Builder, intended roles, or guide-site rotation expectations.
 
@@ -219,7 +219,7 @@ P1 sub-milestones:
 
 - M1.11A Report index and metadata quick fixes. Status: implemented.
 - M1.11B Authoritative role map and role-specific objective indexes. Status: implemented as a first pass. Design: [M1.11B Role Map and Role-Specific Objective Indexes](superpowers/specs/2026-07-05-m1-11-b-role-objectives-design.md). Plan: [M1.11B Implementation Plan](superpowers/plans/2026-07-05-m1-11-b-role-objectives.md).
-- M1.11C CoA Builder talent tree parity capture and renderer separation. Status: planned. Design: [M1.11C CoA Builder Talent Tree Parity](superpowers/specs/2026-07-05-m1-11-c-builder-tree-parity-design.md). Plan: [M1.11C Implementation Plan](superpowers/plans/2026-07-05-m1-11-c-builder-tree-parity.md).
+- M1.11C CoA Builder talent tree parity capture and renderer separation. Status: implemented as a first pass; browser screenshot parity remains a manual checklist item. Design: [M1.11C CoA Builder Talent Tree Parity](superpowers/specs/2026-07-05-m1-11-c-builder-tree-parity-design.md). Plan: [M1.11C Implementation Plan](superpowers/plans/2026-07-05-m1-11-c-builder-tree-parity.md). Checklist: [Tree Parity Checklist](tree-parity-checklist.md).
 - M1.11D Cache-aware AscensionDB asset and canonical data scraper. Status: planned.
 - M1.11E Rotation simulation and guide-ready priority output. Status: planned.
 - M1.11F Exact leveling path and build diversity clustering. Status: planned.
