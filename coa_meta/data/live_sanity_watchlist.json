@@ -1,0 +1,135 @@
+[
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "venomancer-stalking-theory-overrank-risk",
+    "class_name": "Venomancer",
+    "source_spec_name": "Stalking",
+    "guide_role": "melee_dps",
+    "concern": "Current theory output may over-rank Venomancer relative to observed live-server expectations.",
+    "direction": "theory_may_be_high",
+    "severity": "medium",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Runemaster, Primalist DPS, and Knight of Xoroth DPS outperform current Venomancer-heavy report ordering."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "runemaster-dps-theory-underrank-risk",
+    "class_name": "Runemaster",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may under-rank Runemaster DPS specs until coefficients and logs are calibrated.",
+    "direction": "theory_may_be_low",
+    "severity": "medium",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Runemaster DPS outperforming current theory ranking on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "primalist-dps-theory-underrank-risk",
+    "class_name": "Primalist",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may under-rank Primalist DPS specs until coefficients, resource behavior, and logs are calibrated.",
+    "direction": "theory_may_be_low",
+    "severity": "medium",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Primalist DPS outperforming current theory ranking on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "knight-of-xoroth-dps-theory-underrank-risk",
+    "class_name": "Knight of Xoroth",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may under-rank Knight of Xoroth DPS specs until weapon, pet, and cooldown interactions are calibrated.",
+    "direction": "theory_may_be_low",
+    "severity": "medium",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Knight of Xoroth DPS outperforming current theory ranking on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "felsworn-dps-theory-relative-band-risk",
+    "class_name": "Felsworn",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may separate Felsworn too far from Venomancer even though owner observation suggests similar live DPS bands.",
+    "direction": "relative_band_uncertain",
+    "severity": "low",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Felsworn DPS pulling similar DPS to Venomancer on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "cultist-dps-theory-relative-band-risk",
+    "class_name": "Cultist",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may separate Cultist too far from Venomancer even though owner observation suggests similar live DPS bands.",
+    "direction": "relative_band_uncertain",
+    "severity": "low",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Cultist DPS pulling similar DPS to Venomancer on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  },
+  {
+    "schema_version": "coa-live-sanity-watchlist-v1",
+    "watchlist_id": "barbarian-dps-theory-relative-band-risk",
+    "class_name": "Barbarian",
+    "source_spec_name": "*",
+    "guide_role": "*_dps",
+    "concern": "Current theory output may separate Barbarian too far from Venomancer even though owner observation suggests similar live DPS bands.",
+    "direction": "relative_band_uncertain",
+    "severity": "low",
+    "evidence_type": "owner_observation",
+    "evidence": [
+      "Project owner reported Barbarian DPS pulling similar DPS to Venomancer on live servers."
+    ],
+    "confidence": "low",
+    "source": "project_owner",
+    "status": "watch",
+    "not_user_facing": true,
+    "expires_after": "p2_log_calibration"
+  }
+]
