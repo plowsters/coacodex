@@ -15,6 +15,7 @@ import {
   loadCacheManifest,
   writeCacheManifest
 } from "./lib/ascensiondb-cache.mjs";
+import { resolveIconAsset } from "./lib/icon-assets.mjs";
 import { writeJson } from "./lib/artifacts.mjs";
 
 export function buildSeedResources(entries) {
@@ -162,15 +163,22 @@ export async function runAscensionDbAssetEnrichment(options) {
     fetchedAt: startedAt
   });
 
-  logStage("Stage 5: resolve icon assets");
-  const assetRows = [];
-
-  logStage("Stage 6: write artifacts and summaries");
   const allResults = [...seedResults, ...linkedResults];
   const allRows = allResults.map(result => result.parsed);
-  const allSpellRows = allRows.filter(row => row.kind === "spell");
+
+  logStage("Stage 5: resolve icon assets");
+  const iconResult = await resolveIconAssetsForRows(allRows, {
+    skipAssets: options.skipAssets,
+    assetRoot: options.assetRoot,
+    manifestRows: existingManifestRows,
+    staleDays: options.staleDays
+  });
+
+  logStage("Stage 6: write artifacts and summaries");
+  const allRowsWithAssets = iconResult.rows;
+  const allSpellRows = allRowsWithAssets.filter(row => row.kind === "spell");
   const linkedSpellRows = linkedResults.map(result => result.parsed).filter(row => row.kind === "spell");
-  const itemRows = allRows.filter(row => row.kind === "item");
+  const itemRows = allRowsWithAssets.filter(row => row.kind === "item");
 
   fs.mkdirSync(options.out, { recursive: true });
   fs.mkdirSync(options.reports, { recursive: true });
@@ -178,13 +186,13 @@ export async function runAscensionDbAssetEnrichment(options) {
   writeJsonl(path.join(options.out, "coa_db_spell_records.jsonl"), allSpellRows);
   writeJsonl(path.join(options.out, "coa_db_item_records.jsonl"), itemRows);
   writeJsonl(path.join(options.out, "coa_db_effect_records.jsonl"), linkedSpellRows);
-  writeJsonl(path.join(options.out, "coa_db_asset_records.jsonl"), assetRows);
+  writeJsonl(path.join(options.out, "coa_db_asset_records.jsonl"), iconResult.assetRows);
   writeJsonl(path.join(options.out, "coa_db_spell_tooltips.jsonl"), seedSpellRows);
   writeJsonl(path.join(options.out, "coa_db_item_tooltips.jsonl"), itemRows);
 
   const manifestRows = mergeManifestRows(
     existingManifestRows,
-    allResults.map(result => result.cache.row)
+    [...allResults.map(result => result.cache.row), ...iconResult.assetRows]
   );
   writeCacheManifest(options.manifest, manifestRows);
 
@@ -197,13 +205,60 @@ export async function runAscensionDbAssetEnrichment(options) {
     spell_count: allSpellRows.length,
     item_count: itemRows.length,
     effect_spell_count: linkedSpellRows.length,
-    asset_count: assetRows.length,
+    asset_count: iconResult.assetRows.length,
     concurrency: options.concurrency,
     timeout_ms: options.timeoutMs
   });
   writeJson(path.join(options.reports, "coa_ascensiondb_cache_summary.json"), summary);
   console.log(JSON.stringify(summary, null, 2));
   return summary;
+}
+
+export async function resolveIconAssetsForRows(rows, {
+  skipAssets = false,
+  assetRoot = "dist/assets",
+  manifestRows = [],
+  staleDays = 7,
+  now = new Date(),
+  fetchBinary,
+  templates,
+  writeAsset
+} = {}) {
+  if (skipAssets) {
+    return {
+      rows: rows.map(row => ({ ...row })),
+      assetRows: []
+    };
+  }
+
+  const iconTokens = [
+    ...new Set(rows.map(row => row.icon).filter(Boolean))
+  ].sort();
+  const resolved = new Map();
+  const assetRows = [];
+
+  for (const iconToken of iconTokens) {
+    const result = await resolveIconAsset({
+      iconToken,
+      manifestRows,
+      assetRoot,
+      staleDays,
+      now,
+      fetchBinary,
+      templates,
+      writeAsset
+    });
+    resolved.set(iconToken, result.asset_path);
+    assetRows.push(result.row);
+  }
+
+  return {
+    rows: rows.map(row => ({
+      ...row,
+      icon_asset_path: row.icon ? resolved.get(row.icon) || null : row.icon_asset_path || null
+    })),
+    assetRows
+  };
 }
 
 async function fetchAndParseResources(resources, { options, existingManifestRows, fetchedAt }) {

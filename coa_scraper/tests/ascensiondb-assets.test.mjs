@@ -6,6 +6,7 @@ import {
   buildSeedResources,
   discoverLinkedResources,
   normalizeCliOptions,
+  resolveIconAssetsForRows,
   summarizeCacheRun
 } from "../scripts/enrich-ascensiondb-assets.mjs";
 
@@ -133,6 +134,35 @@ test("asset enrichment CLI defaults are conservative", () => {
   assert.equal(options.timeoutMs, 10000);
   assert.equal(options.linkedSpellDepth, 1);
   assert.equal(options.linkedItemDepth, 1);
+});
+
+test("asset enrichment skip-assets leaves DB records writable without fetching icons", async () => {
+  const result = await resolveIconAssetsForRows(
+    [
+      {
+        kind: "spell",
+        id: 100,
+        icon: "ability_test",
+        icon_asset_path: null
+      }
+    ],
+    {
+      skipAssets: true,
+      fetchBinary: async () => {
+        throw new Error("skip-assets must not fetch icons");
+      }
+    }
+  );
+
+  assert.deepEqual(result.assetRows, []);
+  assert.deepEqual(result.rows, [
+    {
+      kind: "spell",
+      id: 100,
+      icon: "ability_test",
+      icon_asset_path: null
+    }
+  ]);
 });
 
 test("asset enrichment package script is exposed", () => {
