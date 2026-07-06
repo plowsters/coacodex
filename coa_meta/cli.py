@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--out", type=Path, default=Path("reports/meta"))
     meta.add_argument("--asset-root", type=Path, default=None)
     meta.add_argument("--db-tooltips", type=Path, default=None, help="Optional AscensionDB tooltip JSONL for static guide tooltips")
+    meta.add_argument("--builder-layout-root", type=Path, default=None, help="Optional CoA Builder tree layout artifact directory")
     meta.set_defaults(handler=run_meta)
     return parser
 
@@ -88,6 +89,7 @@ def run_meta(args: argparse.Namespace) -> int:
         asset_resolver=asset_resolver,
         entries_path=args.entries,
         db_tooltips_path=args.db_tooltips,
+        builder_layout_root=args.builder_layout_root,
     )
     _log_progress(f"Complete: wrote {len(outputs)} file(s) to {args.out}")
     return 0

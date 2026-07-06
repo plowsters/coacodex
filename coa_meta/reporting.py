@@ -786,6 +786,7 @@ def render_html_report(
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
     db_tooltips_path: Path | str | None = None,
+    builder_layout_root: Path | str | None = None,
 ) -> str:
     if entries_path is not None:
         from .guide_writer import render_guide_index_html
@@ -795,6 +796,7 @@ def render_html_report(
             entries_path=entries_path,
             db_tooltips_path=db_tooltips_path,
             asset_root=getattr(asset_resolver, "asset_root", None),
+            builder_layout_root=builder_layout_root,
         )
 
     data = report.to_dict()
@@ -966,6 +968,7 @@ def write_report_outputs(
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
     db_tooltips_path: Path | str | None = None,
+    builder_layout_root: Path | str | None = None,
 ) -> tuple[Path, ...]:
     output_dir = Path(out_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -988,6 +991,7 @@ def write_report_outputs(
                         entries_path=entries_path,
                         db_tooltips_path=db_tooltips_path,
                         asset_root=getattr(asset_resolver, "asset_root", None),
+                        builder_layout_root=builder_layout_root,
                     )
                 )
                 continue
