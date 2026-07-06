@@ -10,6 +10,7 @@
     "normalize": "node scripts/export-coa-normalized.mjs reports/coa_builder_payload.json dist",
     "validate": "node scripts/validate-normalized.mjs dist reports",
     "pipeline": "node scripts/run-normalization-pipeline.mjs",
+    "enrich-assets": "node scripts/enrich-ascensiondb-assets.mjs --entries dist/coa_entries.enriched.jsonl --out dist --reports reports --asset-root dist/assets --manifest reports/coa_ascensiondb_cache_manifest.json",
     "enrich-db": "node scripts/enrich-ascensiondb.mjs dist/coa_entries.jsonl dist reports",
     "apply-db-enrichment": "node scripts/apply-db-enrichment.mjs dist/coa_entries.jsonl dist/coa_db_spell_tooltips.jsonl dist/coa_entries.enriched.jsonl",
     "enrich-items": "node scripts/enrich-linked-items.mjs dist/coa_db_spell_tooltips.jsonl dist reports",
