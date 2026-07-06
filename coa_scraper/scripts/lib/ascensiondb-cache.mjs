@@ -43,6 +43,12 @@ export function isFresh(row, staleDays, now = new Date()) {
   if (!row || staleDays <= 0) {
     return false;
   }
+  if (!freshEligibleStatus(row.status)) {
+    return false;
+  }
+  if ((row.errors || []).length > 0 || !row.body_path) {
+    return false;
+  }
 
   const checkedAt = row.validated_at || row.fetched_at || row.checked_at;
   if (!checkedAt) {
@@ -60,6 +66,10 @@ export function isFresh(row, staleDays, now = new Date()) {
   }
 
   return nowTime - checkedTime < Number(staleDays) * 24 * 60 * 60 * 1000;
+}
+
+function freshEligibleStatus(status) {
+  return !status || ["fetched", "fresh_cache", "not_modified"].includes(status);
 }
 
 export async function fetchCachedResource({

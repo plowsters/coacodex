@@ -90,6 +90,43 @@ test("fresh cache rows skip network fetches", async () => {
   assert.equal(result.row.validated_at, NOW.toISOString());
 });
 
+test("fresh failed rows are retried instead of reused", async () => {
+  let fetchCalled = false;
+  const row = {
+    cache_key: cacheKeyForUrl(URL),
+    url: URL,
+    status: "fetch_failed",
+    validated_at: "2026-07-06T11:00:00.000Z",
+    errors: ["network blocked"]
+  };
+
+  assert.equal(isFresh(row, 7, NOW), false);
+  assert.equal(isFresh({ ...row, status: "fresh_cache" }, 7, NOW), false);
+
+  const result = await fetchCachedResource({
+    url: URL,
+    resourceKind: "spell",
+    sourceKind: "spell",
+    sourceId: 123,
+    parserVersion: "test-parser-v1",
+    manifestRows: [row],
+    staleDays: 7,
+    now: NOW,
+    fetchText: async () => {
+      fetchCalled = true;
+      return {
+        status: 200,
+        headers: {},
+        text: "$WowheadPower.registerSpell(123, 0, {});"
+      };
+    },
+    writeBody: async () => {}
+  });
+
+  assert.equal(fetchCalled, true);
+  assert.equal(result.status, "fetched");
+});
+
 test("stale cache rows send conditional request headers and reuse body on 304", async () => {
   const cachedBody = "$WowheadPower.registerSpell(123, 0, {});";
   const staleRow = {
