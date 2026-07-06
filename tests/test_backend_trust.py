@@ -6,6 +6,7 @@ from coa_meta.backend_trust import (
     TrustResult,
     load_live_sanity_watchlist,
     match_watchlist,
+    trust_for_build_payload,
     trust_label_from_score,
 )
 
@@ -63,3 +64,34 @@ def test_watchlist_matches_class_spec_and_role():
 
     assert matches
     assert matches[0].not_user_facing is True
+
+
+def test_trust_for_build_payload_combines_role_mechanics_rotation_and_watchlist():
+    build = {
+        "rank": 1,
+        "warnings": ["missing_mechanics:2001"],
+        "rotation_guide": {
+            "reliability": "medium",
+            "simulation_summary": {
+                "unsupported_condition_count": 0,
+                "unsupported_effect_count": 1,
+                "action_count": 20,
+            },
+            "warnings": [],
+        },
+        "provenance": {
+            "role_provenance": {"source": "curated", "confidence": "high"}
+        },
+    }
+
+    trust = trust_for_build_payload(
+        class_name="Venomancer",
+        source_spec_name="Stalking",
+        guide_role="melee_dps",
+        build=build,
+        watchlist=load_live_sanity_watchlist(),
+    )
+
+    assert trust.trust_label in {"low", "medium"}
+    assert any(component.component_id == "mechanics_coverage" for component in trust.components)
+    assert trust.watchlist_matches
