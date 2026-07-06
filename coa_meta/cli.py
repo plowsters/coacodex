@@ -40,6 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--asset-root", type=Path, default=None)
     meta.add_argument("--db-tooltips", type=Path, default=None, help="Optional AscensionDB tooltip JSONL for static guide tooltips")
     meta.add_argument("--builder-layout-root", type=Path, default=None, help="Optional CoA Builder tree layout artifact directory")
+    meta.add_argument("--write-backend-trust", action="store_true")
+    meta.add_argument("--backend-trust-out", type=Path, default=None)
     meta.set_defaults(handler=run_meta)
     return parser
 
@@ -94,6 +96,10 @@ def run_meta(args: argparse.Namespace) -> int:
     formats = tuple(args.formats) if args.formats else ("json", "md", "html")
     asset_resolver = AssetResolver(args.asset_root) if args.asset_root else None
     _log_progress(f"Writing outputs: formats={', '.join(formats)}")
+    writer_kwargs = {}
+    if args.write_backend_trust or args.backend_trust_out is not None:
+        writer_kwargs["write_backend_trust"] = True
+        writer_kwargs["backend_trust_out"] = args.backend_trust_out
     outputs = write_report_outputs(
         report,
         args.out,
@@ -102,6 +108,7 @@ def run_meta(args: argparse.Namespace) -> int:
         entries_path=args.entries,
         db_tooltips_path=args.db_tooltips,
         builder_layout_root=args.builder_layout_root,
+        **writer_kwargs,
     )
     _log_progress(f"Complete: wrote {len(outputs)} file(s) to {args.out}")
     return 0

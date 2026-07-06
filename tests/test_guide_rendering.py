@@ -323,3 +323,13 @@ def test_index_cards_do_not_surface_recommendation_confidence_badges():
     html = render_index_html(_site())
 
     assert "medium confidence" not in html
+
+
+def test_spec_html_does_not_render_backend_trust_text():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+
+    html = render_spec_html(site, spec)
+
+    assert "backend trust" not in html.lower()
+    assert "live sanity" not in html.lower()

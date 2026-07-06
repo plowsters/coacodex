@@ -1096,6 +1096,8 @@ def write_report_outputs(
     entries_path: Path | str | None = None,
     db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    write_backend_trust: bool = False,
+    backend_trust_out: Path | str | None = None,
 ) -> tuple[Path, ...]:
     output_dir = Path(out_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1133,6 +1135,14 @@ def write_report_outputs(
         else:
             raise ValueError(f"Unsupported report format {fmt}")
         written.append(path)
+    if write_backend_trust:
+        from .backend_trust import build_backend_trust_report, load_live_sanity_watchlist
+
+        trust_report = build_backend_trust_report(report.to_dict(), watchlist=load_live_sanity_watchlist())
+        trust_path = Path(backend_trust_out) if backend_trust_out is not None else output_dir / "backend-trust-report.json"
+        trust_path.parent.mkdir(parents=True, exist_ok=True)
+        trust_path.write_text(json.dumps(trust_report.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+        written.append(trust_path)
     return tuple(written)
 
 

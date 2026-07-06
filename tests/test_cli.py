@@ -228,6 +228,33 @@ def test_meta_cli_accepts_new_guide_role_values(monkeypatch, tmp_path):
     assert calls["config"].role == "caster_dps"
 
 
+def test_meta_cli_accepts_backend_trust_sidecar_flag(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_write_outputs(report, out_dir, formats, **kwargs):
+        captured.update(kwargs)
+        return (Path(out_dir) / "meta-report.json", Path(out_dir) / "backend-trust-report.json")
+
+    monkeypatch.setattr(cli, "MetaReportRunner", DummyRunner)
+    monkeypatch.setattr(cli, "write_report_outputs", fake_write_outputs)
+
+    exit_code = cli.main(
+        [
+            "meta",
+            "--entries",
+            "coa_scraper/dist/coa_entries.jsonl",
+            "--write-backend-trust",
+            "--format",
+            "json",
+            "--out",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["write_backend_trust"] is True
+
+
 def test_cli_returns_nonzero_for_unknown_command(capsys):
     exit_code = cli.main(["unknown"])
 
