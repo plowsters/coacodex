@@ -47,3 +47,12 @@ def test_root_package_json_delegates_scraper_pipeline_commands():
     data = json.loads(path.read_text(encoding="utf-8"))
     scripts = data["scripts"]
     assert scripts["pipeline:m1.8"] == "npm --prefix coa_scraper run pipeline:m1.8"
+
+
+def test_root_package_json_exposes_tree_layout_capture_from_repo_root():
+    path = Path("package.json")
+
+    assert path.exists()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    scripts = data["scripts"]
+    assert scripts["capture:tree-layout"] == "node coa_scraper/scripts/capture-builder-tree-layout.mjs"

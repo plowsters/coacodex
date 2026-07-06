@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "capture:tree-layout": "node coa_scraper/scripts/capture-builder-tree-layout.mjs",
     "pipeline": "npm --prefix coa_scraper run pipeline",
     "pipeline:m1.8": "npm --prefix coa_scraper run pipeline:m1.8",
     "pipeline:m1.9": "npm --prefix coa_scraper run pipeline:m1.9",
