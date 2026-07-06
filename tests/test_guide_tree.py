@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from coa_meta.builds import BuildConfig
@@ -123,12 +124,81 @@ def test_guide_tree_panel_splits_ability_talent_and_passive_groups():
     passive_lane = next(tree for tree in panel.trees if tree.tree_kind == "level_passives")
 
     assert ability_tree.layout_source == "normalized_fallback"
-    assert {node.entry_id for node in ability_tree.nodes} == {101, 102}
+    assert {node.entry_id for node in ability_tree.nodes} == {100, 101, 102}
     assert {node.entry_id for node in talent_tree.nodes} == {201, 202}
-    assert {node.entry_id for node in passive_lane.nodes} == {100}
-    assert all(node.ae_cost > 0 and node.essence_kind == "ability" for node in ability_tree.nodes)
+    assert {node.entry_id for node in passive_lane.nodes} == set()
+    assert all(node.tab_name == "Class" for node in ability_tree.nodes)
     assert all(node.te_cost > 0 and node.essence_kind == "talent" for node in talent_tree.nodes)
     assert all(node.ae_cost == 0 and node.te_cost == 0 for node in passive_lane.nodes)
+
+
+def test_guide_tree_panel_keeps_spec_free_core_nodes_out_of_passive_lane(tmp_path):
+    rows = [
+        json.loads(line)
+        for line in (FIXTURES / "meta_report_fixture.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    spec_free_core = {
+        **rows[3],
+        "entry_id": 203,
+        "spell_id": 2003,
+        "spell_ids": [2003],
+        "name": "Free Core Ability",
+        "entry_type": "Ability",
+        "essence_kind": "ability",
+        "ae_cost": 0,
+        "te_cost": 0,
+        "required_level": 0,
+        "row": 0,
+        "col": 4,
+        "required_ids": [],
+        "connected_node_ids": [],
+    }
+    level_passive = {
+        **rows[3],
+        "entry_id": 204,
+        "spell_id": 2004,
+        "spell_ids": [2004],
+        "name": "Level Passive",
+        "entry_type": "Talent",
+        "essence_kind": "talent",
+        "ae_cost": 0,
+        "te_cost": 0,
+        "required_level": 10,
+        "row": 0,
+        "col": 10,
+        "required_ids": [],
+        "connected_node_ids": [],
+    }
+    fixture = tmp_path / "entries.jsonl"
+    fixture.write_text(
+        "\n".join(json.dumps(row) for row in [*rows, spec_free_core, level_passive]) + "\n",
+        encoding="utf-8",
+    )
+    repo = TalentRepository.from_entries(fixture)
+    nodes = tuple(
+        node for node in repo.nodes_for_class("Testclass")
+        if node.tab_name in {"Class", "Damage"}
+    )
+
+    panel = build_guide_tree_panel(
+        repository=repo,
+        class_name="Testclass",
+        source_spec_name="Damage",
+        display_spec_name="Damage",
+        build_rank=1,
+        build_label="Direct damage loop",
+        selected_node_ids=(201, 202),
+        config=BuildConfig(class_name="Testclass", level=60, max_ae=26, max_te=25),
+        spec_nodes=nodes,
+    )
+
+    talent_tree = next(tree for tree in panel.trees if tree.tree_kind == "talent_essence")
+    passive_lane = next(tree for tree in panel.trees if tree.tree_kind == "level_passives")
+
+    assert 203 in {node.entry_id for node in talent_tree.nodes}
+    assert 203 not in {node.entry_id for node in passive_lane.nodes}
+    assert {node.entry_id for node in passive_lane.nodes} == {204}
 
 
 def test_build_card_serializes_tree_panel_and_legacy_tree():

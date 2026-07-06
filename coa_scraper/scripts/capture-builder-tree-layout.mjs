@@ -3,9 +3,16 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
+import {
+  BUILDER_TREE_KINDS,
+  BUILDER_TREE_LAYOUT_SCHEMA_VERSION,
+  layoutFromNormalizedEntries,
+  layoutHasNodes,
+  readNormalizedEntries,
+  resolveNormalizedEntriesPath
+} from "./lib/builder-tree-layout.mjs";
+
 const DEFAULT_URL = "https://ascension.gg/en/v2/coa-builder/voljin-alpha";
-const SCHEMA_VERSION = "coa-builder-tree-layout-v1";
-const TREE_KINDS = ["ability_essence", "talent_essence", "level_passives"];
 
 function valueAfter(argv, name, fallback = "") {
   const index = argv.indexOf(name);
@@ -27,6 +34,9 @@ function parseOptions(argv = process.argv.slice(2)) {
     specName: valueAfter(argv, "--spec", ""),
     outDir: valueAfter(argv, "--out", "reports/tree_layout"),
     screenshotsDir: valueAfter(argv, "--screenshots", ""),
+    entriesPath: valueAfter(argv, "--entries", ""),
+    normalizedFallback: !args.has("--no-normalized-fallback"),
+    fromEntries: args.has("--from-entries"),
     headless: args.has("--headless"),
     viewport: parseViewport(valueAfter(argv, "--viewport", "1920x1080")),
     pauseForManualSelection: args.has("--pause-for-manual-selection")
@@ -42,6 +52,9 @@ Options:
   --spec <name>                       Spec/source tab name to select or label in output.
   --out <dir>                         Directory for layout JSON.
   --screenshots <dir>                 Optional screenshot output directory.
+  --entries <path>                    Normalized coa_entries.jsonl for builder-grid fallback.
+  --from-entries                      Build layout JSON from normalized entries without opening a browser.
+  --no-normalized-fallback            Keep empty DOM output instead of using normalized builder data.
   --headless                          Run Chromium headless.
   --viewport <width>x<height>         Capture viewport, default 1920x1080.
   --pause-for-manual-selection        Pause after page load for manual class/spec selection.
@@ -204,8 +217,43 @@ async function captureDomLayout(page, options) {
   }, {
     className: options.className,
     specName: options.specName,
-    schemaVersion: SCHEMA_VERSION,
-    treeKinds: TREE_KINDS,
+    schemaVersion: BUILDER_TREE_LAYOUT_SCHEMA_VERSION,
+    treeKinds: BUILDER_TREE_KINDS,
+    viewport: options.viewport
+  });
+}
+
+function normalizedFallbackLayout(domLayout, options) {
+  if (!options.normalizedFallback || layoutHasNodes(domLayout)) {
+    return domLayout;
+  }
+
+  const normalizedLayout = normalizedLayoutFromOptions(options);
+  if (!normalizedLayout) {
+    domLayout.warnings = [...(domLayout.warnings || []), "normalized_entries_not_found"];
+    return domLayout;
+  }
+
+  normalizedLayout.warnings = [
+    ...(domLayout.warnings || []),
+    "builder_dom_empty_used_builder_grid",
+    ...(normalizedLayout.warnings || [])
+  ];
+  return normalizedLayout;
+}
+
+function normalizedLayoutFromOptions(options) {
+  const entriesPath = resolveNormalizedEntriesPath(options.entriesPath);
+  if (!entriesPath) {
+    return null;
+  }
+
+  console.log(`[tree-layout] Using normalized builder grid from ${entriesPath}`);
+  const rows = readNormalizedEntries(entriesPath);
+  return layoutFromNormalizedEntries(rows, {
+    className: options.className,
+    specName: options.specName,
+    sourceUrl: options.url,
     viewport: options.viewport
   });
 }
@@ -217,11 +265,13 @@ async function writeOutputs(layout, options, page) {
   await fs.writeFile(jsonPath, JSON.stringify(layout, null, 2) + "\n", "utf8");
   console.log(`[tree-layout] Saved layout JSON: ${jsonPath}`);
 
-  if (options.screenshotsDir) {
+  if (options.screenshotsDir && page) {
     await fs.mkdir(options.screenshotsDir, { recursive: true });
     const screenshotPath = path.join(options.screenshotsDir, fileName.replace(/\.json$/, ".png"));
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`[tree-layout] Saved screenshot: ${screenshotPath}`);
+  } else if (options.screenshotsDir) {
+    console.log("[tree-layout] Skipped screenshot: --from-entries does not open a browser");
   }
 }
 
@@ -229,6 +279,18 @@ async function main() {
   const options = parseOptions();
   if (options.help) {
     console.log(usage());
+    return;
+  }
+
+  if (options.fromEntries) {
+    console.log("[tree-layout] Stage 1: build layout from normalized entries");
+    const layout = normalizedLayoutFromOptions(options);
+    if (!layout) {
+      throw new Error("Could not find normalized entries. Pass --entries <path> or run from a repo/package root with dist/coa_entries.jsonl.");
+    }
+    console.log(`[tree-layout] Layout source: ${layout.layout_source}`);
+    console.log("[tree-layout] Stage 2: save layout JSON");
+    await writeOutputs(layout, options, null);
     return;
   }
 
@@ -247,7 +309,7 @@ async function main() {
     }
 
     console.log("[tree-layout] Stage 3: detect tree containers and DOM boxes");
-    const layout = await captureDomLayout(page, options);
+    const layout = normalizedFallbackLayout(await captureDomLayout(page, options), options);
     console.log(`[tree-layout] Layout source: ${layout.layout_source}`);
 
     console.log("[tree-layout] Stage 4: save layout JSON and screenshots");

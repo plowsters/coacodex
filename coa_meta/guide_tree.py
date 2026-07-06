@@ -263,13 +263,11 @@ def _apply_layout_edges(
 
 
 def _tree_kind_for_node(node: GuideNode) -> str:
-    if node.ae_cost == 0 and node.te_cost == 0:
-        return "level_passives"
-    if node.essence_kind == "ability" or node.ae_cost > 0:
+    if node.tab_name == "Class" or node.ae_cost > 0:
         return "ability_essence"
-    if node.essence_kind == "talent" or node.te_cost > 0:
-        return "talent_essence"
-    return "level_passives"
+    if node.ae_cost == 0 and node.te_cost == 0 and (node.col or 0) >= 10:
+        return "level_passives"
+    return "talent_essence"
 
 
 def classify_node_state(

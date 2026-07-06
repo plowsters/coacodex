@@ -24,6 +24,10 @@ import {
   deriveAvailability,
   summarizeMetadataTabs
 } from "../scripts/lib/source-level.mjs";
+import {
+  layoutFromNormalizedEntries,
+  treeKindForNormalizedEntry
+} from "../scripts/lib/builder-tree-layout.mjs";
 import { parseCaptureOptions } from "../scripts/lib/capture-options.mjs";
 import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs";
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
@@ -193,7 +197,129 @@ test("builder tree layout capture command is exposed", () => {
   assert.match(script, /--screenshots/);
   assert.match(script, /--headless/);
   assert.match(script, /--viewport/);
+  assert.match(script, /--entries/);
+  assert.match(script, /--from-entries/);
   assert.match(script, /--pause-for-manual-selection/);
+});
+
+test("builder tree layout uses normalized builder grid as canonical structure", () => {
+  const rows = [
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Class",
+      entry_id: 101,
+      name: "Class Starter",
+      essence_kind: "ability",
+      ae_cost: 1,
+      te_cost: 0,
+      row: 0,
+      col: 0,
+      connected_node_ids: [102]
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Class",
+      entry_id: 102,
+      name: "Class Follow-up",
+      essence_kind: "ability",
+      ae_cost: 1,
+      te_cost: 0,
+      row: 1,
+      col: 0,
+      connected_node_ids: []
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Stalking",
+      entry_id: 201,
+      name: "Spec Starter",
+      essence_kind: "talent",
+      ae_cost: 0,
+      te_cost: 0,
+      required_level: 0,
+      row: 0,
+      col: 4,
+      connected_node_ids: [202]
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Stalking",
+      entry_id: 202,
+      name: "Paid Spec Talent",
+      essence_kind: "talent",
+      ae_cost: 0,
+      te_cost: 1,
+      required_level: 0,
+      row: 1,
+      col: 4,
+      required_ids: [201],
+      connected_node_ids: []
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Stalking",
+      entry_id: 203,
+      name: "Spec Core Ability",
+      essence_kind: "ability",
+      ae_cost: 0,
+      te_cost: 0,
+      required_level: 0,
+      row: 1,
+      col: 5,
+      connected_node_ids: []
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Stalking",
+      entry_id: 301,
+      name: "Level 10 Passive",
+      essence_kind: "talent",
+      ae_cost: 0,
+      te_cost: 0,
+      required_level: 10,
+      row: 0,
+      col: 10,
+      connected_node_ids: [302]
+    }),
+    validNode({
+      class_name: "Venomancer",
+      tab_name: "Stalking",
+      entry_id: 302,
+      name: "Level 20 Passive",
+      essence_kind: "talent",
+      ae_cost: 0,
+      te_cost: 0,
+      required_level: 20,
+      row: 2,
+      col: 10,
+      connected_node_ids: []
+    })
+  ];
+
+  const layout = layoutFromNormalizedEntries(rows, {
+    className: "Venomancer",
+    specName: "Stalking",
+    viewport: { width: 1920, height: 1080 },
+    sourceUrl: "https://ascension.gg/en/v2/coa-builder/voljin-alpha"
+  });
+
+  const abilityTree = layout.trees.find(tree => tree.tree_kind === "ability_essence");
+  const talentTree = layout.trees.find(tree => tree.tree_kind === "talent_essence");
+  const passiveLane = layout.trees.find(tree => tree.tree_kind === "level_passives");
+
+  assert.equal(layout.layout_source, "builder_grid");
+  assert.deepEqual(abilityTree.nodes.map(node => node.entry_id), [101, 102]);
+  assert.deepEqual(talentTree.nodes.map(node => node.entry_id), [201, 202, 203]);
+  assert.deepEqual(passiveLane.nodes.map(node => node.entry_id), [301, 302]);
+  assert.equal(treeKindForNormalizedEntry(rows[2]), "talent_essence");
+  assert.equal(treeKindForNormalizedEntry(rows[4]), "talent_essence");
+  assert.equal(treeKindForNormalizedEntry(rows[5]), "level_passives");
+  assert(passiveLane.nodes.every(node => node.x === passiveLane.nodes[0].x));
+  assert(passiveLane.nodes[1].y > passiveLane.nodes[0].y);
+  assert(abilityTree.edges.some(edge => edge.source_entry_id === 101 && edge.target_entry_id === 102 && edge.kind === "connection"));
+  assert(talentTree.edges.some(edge => edge.source_entry_id === 201 && edge.target_entry_id === 202 && edge.kind === "requirement"));
+  assert(abilityTree.bounds.width > 64);
+  assert(talentTree.bounds.height > 64);
 });
 
 test("validator accepts complete normalized artifacts and writes summary", () => {
