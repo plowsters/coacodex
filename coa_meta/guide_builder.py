@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .builder_tree_layout import load_builder_tree_layouts
-from .builds import BuildConfig
+from .builds import BuildConfig, BuildRules
+from .domain import SelectedRank
 from .guide_assets import GuideAssetCatalog
 from .guide_models import (
     GuideBuildCard,
@@ -14,6 +15,7 @@ from .guide_models import (
 )
 from .guide_tree import build_guide_tree, build_guide_tree_panel
 from .guide_tooltips import build_node_tooltip, load_db_tooltip_rows
+from .leveling_path import build_leveling_path
 from .reporting import MetaReport, slugify_key
 from .repository import TalentRepository
 
@@ -155,6 +157,12 @@ def _build_cards(
         rotation_loop = dict(build.get("rotation_loop") or {})
         rotation_guide = dict(build.get("rotation_guide") or {})
         label = str(playstyle.get("label") or f"Build {build['rank']}")
+        build_config = BuildConfig(
+            class_name=str(result["class_name"]),
+            level=int(result["level"]),
+            max_ae=max_ae,
+            max_te=max_te,
+        )
         tree = build_guide_tree(
             repository=repository,
             class_name=str(result["class_name"]),
@@ -162,12 +170,7 @@ def _build_cards(
             build_rank=int(build["rank"]),
             build_label=label,
             selected_node_ids=node_ids,
-            config=BuildConfig(
-                class_name=str(result["class_name"]),
-                level=int(result["level"]),
-                max_ae=max_ae,
-                max_te=max_te,
-            ),
+            config=build_config,
             spec_nodes=relevant_nodes,
             guide_nodes_by_id=guide_nodes_by_id,
         )
@@ -179,12 +182,7 @@ def _build_cards(
             build_rank=int(build["rank"]),
             build_label=label,
             selected_node_ids=node_ids,
-            config=BuildConfig(
-                class_name=str(result["class_name"]),
-                level=int(result["level"]),
-                max_ae=max_ae,
-                max_te=max_te,
-            ),
+            config=build_config,
             spec_nodes=relevant_nodes,
             guide_nodes_by_id=guide_nodes_by_id,
             builder_layout=builder_layout,
@@ -208,6 +206,16 @@ def _build_cards(
                 reliability_label=str(selection.get("reliability_label") or _reliability_from_confidence(build["confidence_label"])),
                 rotation_loop=rotation_loop,
                 rotation_guide=rotation_guide,
+                leveling_path=_leveling_path_payload(
+                    repository=repository,
+                    class_name=str(result["class_name"]),
+                    source_spec_name=source_spec_name,
+                    build_id=str(selection.get("build_id") or build.get("rank") or label),
+                    node_ids=node_ids,
+                    config=build_config,
+                    role=str(result.get("role") or "melee_dps"),
+                    rotation_guide=rotation_guide,
+                ),
                 stat_priority_report=dict(build.get("stat_priority_report") or {}),
                 gear_recommendation_report=dict(build.get("gear_recommendation_report") or {}),
                 tree=tree,
@@ -215,6 +223,37 @@ def _build_cards(
             )
         )
     return cards
+
+
+def _leveling_path_payload(
+    *,
+    repository: TalentRepository,
+    class_name: str,
+    source_spec_name: str,
+    build_id: str,
+    node_ids: tuple[int, ...],
+    config: BuildConfig,
+    role: str,
+    rotation_guide: dict,
+) -> dict:
+    paid_ranks = [
+        SelectedRank(node_id=node_id, rank=1)
+        for node_id in node_ids
+        if (node := repository.get_node(node_id)) is not None and node.paid
+    ]
+    result = BuildRules(repository, config).validate(paid_ranks)
+    if result.state is None:
+        return {}
+    return build_leveling_path(
+        repository=repository,
+        state=result.state,
+        class_name=class_name,
+        spec_name=source_spec_name,
+        build_id=build_id,
+        config=config,
+        role=role,
+        rotation_guide=rotation_guide,
+    ).to_dict()
 
 
 def _reliability_from_confidence(confidence: str) -> str:

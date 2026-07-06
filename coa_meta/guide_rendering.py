@@ -501,7 +501,6 @@ def _render_talent_tree_section(spec: GuideSpec) -> str:
         _render_build_tree_panel(build, hidden=index > 0)
         for index, build in enumerate(tree_builds)
     )
-    leveling_path = _render_leveling_path(first_panel or first_tree)
     return (
         '<section class="panel" id="talents" data-guide-tree-panel>'
         "<h2>Talents</h2>"
@@ -511,7 +510,6 @@ def _render_talent_tree_section(spec: GuideSpec) -> str:
         f'<span class="chip" data-tree-budget-summary>AE {first_tree.ae_spent}/{first_tree.max_ae} - TE {first_tree.te_spent}/{first_tree.max_te}</span>'
         "</div>"
         f'<div class="tree-scroll">{panels}</div>'
-        f"{leveling_path}"
         "</section>"
     )
 
@@ -540,6 +538,7 @@ def _first_panel_tree(panel: Any) -> Any:
 
 
 def _render_build_tree_panel(build: Any, *, hidden: bool) -> str:
+    leveling_path = _render_leveling_path_for_build(build)
     if build.tree_panel:
         groups = "".join(_render_tree_group(tree) for tree in build.tree_panel.trees)
         warnings = "".join(f"<li>{_e(warning)}</li>" for warning in build.tree_panel.warnings)
@@ -547,13 +546,14 @@ def _render_build_tree_panel(build: Any, *, hidden: bool) -> str:
         return (
             f'<div class="tree-build-panel" data-tree-build-panel="{_e(build.tree_panel.tree_panel_id)}"'
             f'{" hidden" if hidden else ""}>'
-            f'<div class="tree-groups">{groups}</div>{warning_html}</div>'
+            f'<div class="tree-groups">{groups}</div>{leveling_path}{warning_html}</div>'
         )
     if build.tree:
+        leveling_path = leveling_path or _render_leveling_path(build.tree)
         return (
             f'<div class="tree-build-panel" data-tree-build-panel="{_e(build.tree.tree_id)}"'
             f'{" hidden" if hidden else ""}>'
-            f'{_render_tree(build.tree, hidden=False)}</div>'
+            f'{_render_tree(build.tree, hidden=False)}{leveling_path}</div>'
         )
     return ""
 
@@ -646,6 +646,37 @@ def _render_leveling_path(tree_or_panel: Any) -> str:
         for node in selected[:12]
     )
     return f'<div class="leveling-path"><h3>Leveling Path</h3><ol>{items}</ol></div>'
+
+
+def _render_leveling_path_for_build(build: Any) -> str:
+    path = dict(getattr(build, "leveling_path", None) or {})
+    steps = [dict(step) for step in path.get("steps", []) if isinstance(step, dict)]
+    if not steps:
+        return ""
+    items = []
+    for step in steps:
+        if step.get("event_type") == "deferred":
+            continue
+        level = step.get("level")
+        essence = str(step.get("essence_kind", "")).replace("_", " ").title()
+        name = step.get("name", "")
+        reason = step.get("reason", "")
+        items.append(
+            f"<li><strong>Level {_e(level)}</strong> "
+            f"<span class=\"chip\">{_e(essence)}</span> "
+            f"{_e(name)}<br><span class=\"muted\">{_e(reason)}</span></li>"
+        )
+    if not items:
+        return ""
+    warnings = [
+        warning
+        for warning in path.get("warnings", [])
+        if warning
+    ]
+    warning_html = ""
+    if warnings:
+        warning_html = "<ul>" + "".join(f"<li>{_e(warning)}</li>" for warning in warnings) + "</ul>"
+    return f'<div class="leveling-path"><h3>Leveling Path</h3><ol>{"".join(items)}</ol>{warning_html}</div>'
 
 
 def _render_node(node: Any) -> str:

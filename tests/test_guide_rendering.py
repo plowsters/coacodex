@@ -201,6 +201,17 @@ def test_render_spec_html_includes_static_talent_tree():
     assert "TE" in html
 
 
+def test_spec_html_renders_exact_leveling_path_events():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+
+    html = render_spec_html(site, spec)
+
+    assert "Leveling Path" in html
+    assert "Ability" in html or "Talent" in html
+    assert "No legal target choice" not in html
+
+
 def test_render_spec_html_includes_separate_tree_groups_and_passive_lane():
     site = _site()
     spec = next(item for item in site.specs if item.spec_name == "Damage")

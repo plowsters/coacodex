@@ -194,6 +194,15 @@ def test_guide_build_cards_include_playstyle_metadata():
     assert build.rotation_loop
 
 
+def test_guide_build_cards_include_build_specific_leveling_path():
+    site = build_guide_site(_report(), entries_path=FIXTURES / "meta_report_fixture.jsonl")
+    build = site.specs[0].builds[0]
+
+    assert build.leveling_path
+    assert build.leveling_path["schema_version"] == "coa-leveling-path-v1"
+    assert any(step["event_type"].startswith("choose_") for step in build.leveling_path["steps"])
+
+
 def test_guide_build_cards_include_simulated_rotation_guide_when_available():
     report = MetaReportRunner(
         MetaRunConfig(
