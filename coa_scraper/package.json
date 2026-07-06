@@ -15,6 +15,7 @@
     "enrich-items": "node scripts/enrich-linked-items.mjs dist/coa_db_spell_tooltips.jsonl dist reports",
     "build-mechanics": "node scripts/build-mechanics-artifacts.mjs dist/coa_entries.enriched.jsonl dist/coa_db_spell_tooltips.jsonl dist reports dist/coa_db_item_tooltips.jsonl",
     "source-level-report": "node scripts/write-source-level-report.mjs dist/coa_entries.jsonl dist/coa_classes.json reports",
+    "capture:tree-layout": "node scripts/capture-builder-tree-layout.mjs",
     "pipeline:m1.8": "npm run pipeline && npm run enrich-db && npm run apply-db-enrichment && node scripts/write-artifact-manifest.mjs reports dist reports/coa_artifact_manifest.json",
     "pipeline:m1.9": "npm run pipeline:m1.8 && npm run enrich-items && npm run build-mechanics && node scripts/write-artifact-manifest.mjs reports dist reports/coa_artifact_manifest.json",
     "unit-test": "node --test tests/*.test.mjs",

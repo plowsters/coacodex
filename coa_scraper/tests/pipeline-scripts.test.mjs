@@ -182,6 +182,20 @@ test("artifact utilities hash, load, and describe files", () => {
   assert.equal(artifactRecord(file, dir).path, "data.json");
 });
 
+test("builder tree layout capture command is exposed", () => {
+  const packageJson = loadJson(path.join(import.meta.dirname, "..", "package.json"));
+  assert.equal(packageJson.scripts["capture:tree-layout"], "node scripts/capture-builder-tree-layout.mjs");
+
+  const script = fs.readFileSync(path.join(import.meta.dirname, "..", "scripts", "capture-builder-tree-layout.mjs"), "utf8");
+  assert.match(script, /--class/);
+  assert.match(script, /--spec/);
+  assert.match(script, /--out/);
+  assert.match(script, /--screenshots/);
+  assert.match(script, /--headless/);
+  assert.match(script, /--viewport/);
+  assert.match(script, /--pause-for-manual-selection/);
+});
+
 test("validator accepts complete normalized artifacts and writes summary", () => {
   const dir = tempProject();
   const { dist, reports } = writeValidationFixture(dir);
