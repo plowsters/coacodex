@@ -243,4 +243,5 @@ def test_meta_report_top_builds_include_playstyle_selection_and_rotation_loop():
     assert build["playstyle_fingerprint"]["schema_version"] == "coa-build-playstyle-v1"
     assert build["selection_reason"]["schema_version"] == "coa-build-selection-v1"
     assert build["rotation_loop"]["schema_version"] == "coa-rotation-loop-v1"
+    assert build["rotation_signature"]["schema_version"] == "coa-rotation-playstyle-v1"
     assert build["rotation_summary"]["sections"]

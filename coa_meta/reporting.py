@@ -15,6 +15,7 @@ from .build_diversity import (
     build_playstyle_fingerprint,
     reliability_label,
     reliability_score,
+    rotation_signature_from_apl,
     select_diverse_builds,
 )
 from .builds import BuildConfig, BuildRules
@@ -276,6 +277,7 @@ class BuildReport:
     playstyle_fingerprint: dict[str, Any]
     selection_reason: dict[str, Any]
     rotation_loop: dict[str, Any]
+    rotation_signature: dict[str, Any]
     warnings: tuple[str, ...]
     rotation_guide: dict[str, Any] | None = None
     primary_index: float | None = None
@@ -311,6 +313,7 @@ class BuildReport:
             "playstyle_fingerprint": self.playstyle_fingerprint,
             "selection_reason": self.selection_reason,
             "rotation_loop": self.rotation_loop,
+            "rotation_signature": self.rotation_signature,
             "rotation_guide": dict(self.rotation_guide or {}),
             "warnings": list(self.warnings),
         }
@@ -531,6 +534,7 @@ class MetaReportRunner:
                 role=role,
                 encounter=scope.scoring_encounter,
             )
+            rotation_signature = rotation_signature_from_apl(apl_doc, role=role)
             candidates.append(
                 BuildDiversityCandidate(
                     build_id=str(_build_key(result.state)),
@@ -539,11 +543,13 @@ class MetaReportRunner:
                     fingerprint=fingerprint,
                     reliability_score=reliability,
                     reliability_label=reliability_label(reliability),
+                    rotation_signature=rotation_signature,
                     payload={
                         "result": result,
                         "scored": scored,
                         "apl_doc": apl_doc,
                         "rotation_loop": loop,
+                        "rotation_signature": rotation_signature,
                         "selected_node_objects": selected_node_objects,
                         "warnings": candidate_warnings,
                     },
@@ -626,6 +632,7 @@ class MetaReportRunner:
                     playstyle_fingerprint=candidate.fingerprint.to_dict(),
                     selection_reason=selection_reason.to_dict() if selection_reason else {},
                     rotation_loop=payload["rotation_loop"].to_dict(),
+                    rotation_signature=payload["rotation_signature"].to_dict(),
                     warnings=build_warnings,
                     rotation_guide=rotation_guide,
                     primary_index=objective.primary_index,

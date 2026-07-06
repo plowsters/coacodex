@@ -111,6 +111,7 @@ class BuildDiversityCandidate:
     fingerprint: PlaystyleFingerprint
     reliability_score: float
     reliability_label: str
+    rotation_signature: RotationPlaystyleSignature | None = None
     payload: Any = None
     warnings: tuple[str, ...] = tuple()
     selection_reason: SelectionReason | None = None
@@ -123,6 +124,7 @@ class BuildDiversityCandidate:
             "fingerprint": self.fingerprint.to_dict(),
             "reliability_score": self.reliability_score,
             "reliability_label": self.reliability_label,
+            "rotation_signature": self.rotation_signature.to_dict() if self.rotation_signature else None,
             "warnings": list(self.warnings),
             "selection_reason": self.selection_reason.to_dict() if self.selection_reason else None,
         }
@@ -251,6 +253,84 @@ def rotation_signature_distance(left: RotationPlaystyleSignature, right: Rotatio
     return round(min(1.0, action_distance + categorical * 0.10 + uptime * 0.05), 4)
 
 
+def rotation_signature_from_apl(apl: APLDocument, *, role: str) -> RotationPlaystyleSignature:
+    actions_by_category: dict[str, list[str]] = {}
+    for action in sorted(apl.actions, key=lambda item: (item.priority, item.action_key)):
+        actions_by_category.setdefault(_normalize(action.category), []).append(action.action_key)
+    maintenance = tuple(actions_by_category.get("maintenance", []))
+    cooldowns = tuple(actions_by_category.get("cooldown", []))
+    role_tools = tuple(
+        key
+        for category in ("defensive", "healing", "support", "utility")
+        for key in actions_by_category.get(category, [])
+    )
+    core = tuple(
+        key
+        for category in ("builder", "spender", "filler", "execute", "aoe")
+        for key in actions_by_category.get(category, [])
+    )
+    opener = tuple((*maintenance[:1], *cooldowns[:1], *core[:2]))
+    return RotationPlaystyleSignature(
+        schema_version="coa-rotation-playstyle-v1",
+        core_actions=core,
+        opener_actions=opener,
+        maintenance_actions=maintenance,
+        cooldown_actions=cooldowns,
+        role_tool_actions=role_tools,
+        resource_loop=_resource_loop(actions_by_category),
+        burst_cadence=_burst_cadence(cooldowns),
+        uptime_mechanics=_uptime_mechanics(actions_by_category),
+        range_profile=_range_profile(role),
+    )
+
+
+def _resource_loop(actions_by_category: dict[str, list[str]]) -> str:
+    if actions_by_category.get("builder") and actions_by_category.get("spender"):
+        return "builder_spender"
+    if actions_by_category.get("maintenance"):
+        return "maintenance_loop"
+    if actions_by_category.get("cooldown"):
+        return "cooldown_driven"
+    if actions_by_category.get("support"):
+        return "support_cycle"
+    if actions_by_category.get("defensive"):
+        return "defensive_cycle"
+    return "unknown"
+
+
+def _burst_cadence(cooldowns: tuple[str, ...]) -> str:
+    if len(cooldowns) >= 2:
+        return "long"
+    if len(cooldowns) == 1:
+        return "medium"
+    return "none"
+
+
+def _uptime_mechanics(actions_by_category: dict[str, list[str]]) -> tuple[str, ...]:
+    mechanics: list[str] = []
+    if actions_by_category.get("maintenance"):
+        mechanics.append("dot")
+    if actions_by_category.get("healing"):
+        mechanics.append("hot")
+    if actions_by_category.get("support"):
+        mechanics.append("aura")
+    if actions_by_category.get("defensive"):
+        mechanics.append("mitigation")
+    if actions_by_category.get("summon"):
+        mechanics.append("summon")
+    return tuple(mechanics)
+
+
+def _range_profile(role: str) -> str:
+    if role == "caster_dps":
+        return "caster"
+    if role == "ranged_dps":
+        return "ranged"
+    if role == "melee_dps":
+        return "melee"
+    return role
+
+
 def reliability_score(
     *,
     nodes: Sequence[TalentNode],
@@ -346,17 +426,14 @@ def select_diverse_builds(
             break
         scored: list[tuple[float, float, BuildDiversityCandidate]] = []
         for candidate in remaining:
-            min_distance = min(fingerprint_distance(candidate.fingerprint, item.fingerprint) for item in selected)
+            min_distance = min(_candidate_distance(candidate, item) for item in selected)
             normalized = candidate.projected_dps_index / best_score if best_score else 0.0
             score = normalized * 0.60 + candidate.reliability_score * 0.25 + min_distance * 0.15
             scored.append((score, min_distance, candidate))
         scored.sort(key=lambda item: (item[1] >= minimum_distance, item[0], item[2].projected_dps_index), reverse=True)
         _score, distance, candidate = scored[0]
         if distance < minimum_distance and len(selected) >= 1:
-            if len(selected) + 1 < top:
-                break
-            diversity_label = "minor variation"
-            reason = f"{candidate.fingerprint.label.title()} is close to the top build but plays similarly."
+            break
         else:
             diversity_label = "distinct playstyle"
             reason = f"{candidate.fingerprint.label.title()} stays in the top theorycraft band with a different button profile."
@@ -370,6 +447,14 @@ def select_diverse_builds(
             )
         )
     return tuple(selected)
+
+
+def _candidate_distance(left: BuildDiversityCandidate, right: BuildDiversityCandidate) -> float:
+    fingerprint_part = fingerprint_distance(left.fingerprint, right.fingerprint)
+    if left.rotation_signature is None or right.rotation_signature is None:
+        return fingerprint_part
+    rotation_part = rotation_signature_distance(left.rotation_signature, right.rotation_signature)
+    return round(fingerprint_part * 0.55 + rotation_part * 0.45, 4)
 
 
 def _label_from_features(tags: Counter[str], categories: Counter[str], role: str) -> str:
