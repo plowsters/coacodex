@@ -5,10 +5,12 @@ from pathlib import Path
 from coa_meta.apl import APLAction, APLDocument
 from coa_meta.build_diversity import (
     BuildDiversityCandidate,
+    RotationPlaystyleSignature,
     build_playstyle_fingerprint,
     fingerprint_distance,
     reliability_label,
     reliability_score,
+    rotation_signature_distance,
     select_diverse_builds,
 )
 from coa_meta.repository import TalentRepository
@@ -63,6 +65,36 @@ def test_fingerprint_distance_separates_different_playstyles():
     fp_b = build_playstyle_fingerprint(nodes=[node_b], apl=None, role="healer")
 
     assert fingerprint_distance(fp_a, fp_b) > 0.20
+
+
+def test_rotation_signature_separates_dot_loop_from_burst_loop():
+    dot = RotationPlaystyleSignature(
+        schema_version="coa-rotation-playstyle-v1",
+        core_actions=("poison_bite", "venom_tick"),
+        opener_actions=("poison_bite",),
+        maintenance_actions=("venom_tick",),
+        cooldown_actions=tuple(),
+        role_tool_actions=tuple(),
+        resource_loop="maintenance_loop",
+        burst_cadence="none",
+        uptime_mechanics=("dot",),
+        range_profile="caster",
+    )
+    burst = RotationPlaystyleSignature(
+        schema_version="coa-rotation-playstyle-v1",
+        core_actions=("shadowstep", "ambush"),
+        opener_actions=("stealth", "ambush"),
+        maintenance_actions=tuple(),
+        cooldown_actions=("shadow_dance",),
+        role_tool_actions=tuple(),
+        resource_loop="cooldown_driven",
+        burst_cadence="medium",
+        uptime_mechanics=tuple(),
+        range_profile="melee",
+    )
+
+    assert rotation_signature_distance(dot, burst) >= 0.5
+    assert rotation_signature_distance(dot, dot) == 0.0
 
 
 def test_reliability_penalizes_missing_active_apl_actions():

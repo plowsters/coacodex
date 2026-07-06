@@ -56,6 +56,34 @@ class PlaystyleFingerprint:
 
 
 @dataclass(frozen=True)
+class RotationPlaystyleSignature:
+    schema_version: str
+    core_actions: tuple[str, ...]
+    opener_actions: tuple[str, ...]
+    maintenance_actions: tuple[str, ...]
+    cooldown_actions: tuple[str, ...]
+    role_tool_actions: tuple[str, ...]
+    resource_loop: str
+    burst_cadence: str
+    uptime_mechanics: tuple[str, ...]
+    range_profile: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "core_actions": list(self.core_actions),
+            "opener_actions": list(self.opener_actions),
+            "maintenance_actions": list(self.maintenance_actions),
+            "cooldown_actions": list(self.cooldown_actions),
+            "role_tool_actions": list(self.role_tool_actions),
+            "resource_loop": self.resource_loop,
+            "burst_cadence": self.burst_cadence,
+            "uptime_mechanics": list(self.uptime_mechanics),
+            "range_profile": self.range_profile,
+        }
+
+
+@dataclass(frozen=True)
 class SelectionReason:
     schema_version: str
     performance_band: str
@@ -200,6 +228,27 @@ def fingerprint_distance(left: PlaystyleFingerprint, right: PlaystyleFingerprint
         + role_distance * 0.10
     )
     return round(min(1.0, max(0.0, distance)), 4)
+
+
+def rotation_signature_distance(left: RotationPlaystyleSignature, right: RotationPlaystyleSignature) -> float:
+    action_distance = (
+        _jaccard_distance(set(left.core_actions), set(right.core_actions)) * 0.35
+        + _jaccard_distance(set(left.opener_actions), set(right.opener_actions)) * 0.15
+        + _jaccard_distance(set(left.maintenance_actions), set(right.maintenance_actions)) * 0.15
+        + _jaccard_distance(set(left.cooldown_actions), set(right.cooldown_actions)) * 0.15
+        + _jaccard_distance(set(left.role_tool_actions), set(right.role_tool_actions)) * 0.05
+    )
+    categorical = sum(
+        1.0
+        for left_value, right_value in (
+            (left.resource_loop, right.resource_loop),
+            (left.burst_cadence, right.burst_cadence),
+            (left.range_profile, right.range_profile),
+        )
+        if left_value != right_value
+    ) / 3
+    uptime = _jaccard_distance(set(left.uptime_mechanics), set(right.uptime_mechanics))
+    return round(min(1.0, action_distance + categorical * 0.10 + uptime * 0.05), 4)
 
 
 def reliability_score(
