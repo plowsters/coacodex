@@ -4,6 +4,7 @@ from coa_meta.backend_trust import (
     BACKEND_TRUST_SCHEMA_VERSION,
     TrustComponent,
     TrustResult,
+    build_backend_trust_report,
     load_live_sanity_watchlist,
     match_watchlist,
     trust_for_build_payload,
@@ -95,3 +96,31 @@ def test_trust_for_build_payload_combines_role_mechanics_rotation_and_watchlist(
     assert trust.trust_label in {"low", "medium"}
     assert any(component.component_id == "mechanics_coverage" for component in trust.components)
     assert trust.watchlist_matches
+
+
+def test_backend_trust_report_serializes_separate_sidecar():
+    report = {
+        "schema_version": "coa-meta-report-v1",
+        "spec_results": [
+            {
+                "class_name": "Venomancer",
+                "source_spec_name": "Stalking",
+                "spec_name": "Stalking",
+                "role": "melee_dps",
+                "top_builds": [
+                    {
+                        "rank": 1,
+                        "warnings": [],
+                        "provenance": {},
+                        "rotation_guide": {},
+                    }
+                ],
+            }
+        ],
+    }
+
+    trust_report = build_backend_trust_report(report, watchlist=load_live_sanity_watchlist())
+    payload = trust_report.to_dict()
+
+    assert payload["schema_version"] == "coa-backend-trust-v1"
+    assert payload["spec_results"][0]["build_trust"][0]["subject_id"].startswith("Venomancer:Stalking")

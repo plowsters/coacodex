@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,38 @@ class TrustResult:
             "score": round(self.score, 4),
             "components": [component.to_dict() for component in self.components],
             "watchlist_matches": list(self.watchlist_matches),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True)
+class BackendTrustSpecResult:
+    class_name: str
+    source_spec_name: str
+    role: str
+    build_trust: tuple[TrustResult, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "class_name": self.class_name,
+            "source_spec_name": self.source_spec_name,
+            "role": self.role,
+            "build_trust": [item.to_dict() for item in self.build_trust],
+        }
+
+
+@dataclass(frozen=True)
+class BackendTrustReport:
+    schema_version: str
+    generated_at: str
+    spec_results: tuple[BackendTrustSpecResult, ...]
+    warnings: tuple[str, ...] = tuple()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "generated_at": self.generated_at,
+            "spec_results": [item.to_dict() for item in self.spec_results],
             "warnings": list(self.warnings),
         }
 
@@ -155,6 +188,41 @@ def trust_for_build_payload(
         components=components,
         watchlist_matches=tuple(entry.watchlist_id for entry in matches),
         warnings=warnings,
+    )
+
+
+def build_backend_trust_report(
+    report_payload: dict[str, Any],
+    *,
+    watchlist: tuple[LiveSanityWatchlistEntry, ...],
+) -> BackendTrustReport:
+    specs: list[BackendTrustSpecResult] = []
+    for spec in report_payload.get("spec_results", []):
+        class_name = str(spec.get("class_name", ""))
+        source_spec_name = str(spec.get("source_spec_name") or spec.get("spec_name") or "")
+        role = str(spec.get("role", ""))
+        builds = tuple(
+            trust_for_build_payload(
+                class_name=class_name,
+                source_spec_name=source_spec_name,
+                guide_role=role,
+                build=dict(build),
+                watchlist=watchlist,
+            )
+            for build in spec.get("top_builds", [])
+        )
+        specs.append(
+            BackendTrustSpecResult(
+                class_name=class_name,
+                source_spec_name=source_spec_name,
+                role=role,
+                build_trust=builds,
+            )
+        )
+    return BackendTrustReport(
+        schema_version=BACKEND_TRUST_SCHEMA_VERSION,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        spec_results=tuple(specs),
     )
 
 
