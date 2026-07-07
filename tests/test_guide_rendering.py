@@ -79,8 +79,23 @@ def test_render_index_html_uses_player_facing_guide_shell():
     assert "CoA Meta Guides" in html
     assert "Open guide" in html
     assert "data-role=" in html
-    assert "Theorycrafting calculations based on CoA Builder and db.ascension.gg data" in html
+    assert "Further accuracy tuning through combat logs/simming" in html
+    assert "db.ascension.gg data" not in html
     assert "beam search" not in html.lower()
+
+
+def test_pages_include_github_header_and_footer():
+    site = _site()
+    index_html = render_index_html(site)
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+    spec_html = render_spec_html(site, spec)
+
+    for html in (index_html, spec_html):
+        assert "https://github.com/plowsters/coa_meta_analyzer" in html
+        assert "https://github.com/plowsters/coa_meta_analyzer/issues" in html
+        assert "© 2026 CoA Meta Analyzer" in html
+        assert "Not affiliated with or endorsed by Project Ascension" in html
+        assert 'aria-label="View source on GitHub"' in html
 
 
 def test_index_groups_specs_by_role_and_supports_multi_role_filters():
