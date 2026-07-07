@@ -346,9 +346,21 @@ def test_spec_html_renders_grouped_stats_and_best_gear_targets():
 
 
 def test_static_assets_have_fel_void_theme_and_no_network_fetch():
-    assert "#65f06b" in GUIDE_CSS
-    assert "#8f5cff" in GUIDE_CSS
+    assert "#6cf06b" in GUIDE_CSS          # fel lead
+    assert "#a879ff" in GUIDE_CSS          # void lead
+    assert ':root[data-theme="void"]' in GUIDE_CSS
     assert "fetch(" not in GUIDE_JS
+
+
+def test_header_has_theme_toggle_and_js_persists_choice():
+    html = render_index_html(_site())
+    assert "data-theme-toggle" in html
+    assert 'data-theme-value="fel"' in html
+    assert 'data-theme-value="void"' in html
+    # persistence + application
+    assert '"coa-theme"' in GUIDE_JS or "'coa-theme'" in GUIDE_JS
+    assert "data-theme" in GUIDE_JS
+    assert "localStorage" in GUIDE_JS
 
 
 def test_static_tree_javascript_has_no_network_calls():
