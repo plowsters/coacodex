@@ -716,11 +716,10 @@ def _render_leveling_path_for_build(build: Any) -> str:
         level = step.get("level")
         essence = str(step.get("essence_kind", "")).replace("_", " ").title()
         name = step.get("name", "")
-        reason = step.get("reason", "")
         items.append(
             f"<li><strong>Level {_e(level)}</strong> "
             f"<span class=\"chip\">{_e(essence)}</span> "
-            f"{_e(name)}<br><span class=\"muted\">{_e(reason)}</span></li>"
+            f"{_e(name)}</li>"
         )
     if not items:
         return ""

@@ -370,7 +370,7 @@ def _choice_reason(node: TalentNode, role: str, rotation_guide: dict) -> str:
         return f"Take this because it supports the build's {role.replace('_', ' ')} role tools."
     if node.required_ids:
         return "Take this because it advances the selected talent tree path."
-    return "Take this selected build node as soon as it is legal."
+    return ""
 
 
 def _is_paid_or_passive_target(repository: TalentRepository, node_id: int) -> bool:
