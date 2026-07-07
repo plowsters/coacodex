@@ -399,3 +399,11 @@ def test_index_tagline_drops_player_facing():
     assert "Player-facing" not in html
     assert "Class and specialization guides for Conquest of Azeroth." in html
     assert "Meta Codex" in html
+
+
+def test_guide_css_defines_self_hosted_font_faces():
+    assert "@font-face" in GUIDE_CSS
+    assert 'url("fonts/' in GUIDE_CSS
+    assert "Cinzel" in GUIDE_CSS
+    assert "Barlow" in GUIDE_CSS
+    assert "JetBrains Mono" in GUIDE_CSS

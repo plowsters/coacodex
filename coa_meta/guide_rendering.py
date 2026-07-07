@@ -26,6 +26,15 @@ GITHUB_MARK_SVG = (
 )
 
 GUIDE_CSS = """
+@font-face { font-family: "Cinzel"; font-weight: 600; font-display: swap; src: url("fonts/Cinzel-600.woff2") format("woff2"); }
+@font-face { font-family: "Cinzel"; font-weight: 700; font-display: swap; src: url("fonts/Cinzel-700.woff2") format("woff2"); }
+@font-face { font-family: "Cinzel"; font-weight: 900; font-display: swap; src: url("fonts/Cinzel-900.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 400; font-display: swap; src: url("fonts/Barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 500; font-display: swap; src: url("fonts/Barlow-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url("fonts/Barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 700; font-display: swap; src: url("fonts/Barlow-700.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: swap; src: url("fonts/JetBrainsMono-500.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url("fonts/JetBrainsMono-700.woff2") format("woff2"); }
 :root {
   --bg: #08060f;
   --panel-solid: rgba(14,10,23,.92);
@@ -54,7 +63,9 @@ GUIDE_CSS = """
   --line: rgba(168,121,255,.30);
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, sans-serif; background: radial-gradient(circle at top, #24113b 0, var(--bg) 42rem); color: var(--text); }
+body { margin: 0; font-family: Barlow, system-ui, sans-serif; background: radial-gradient(circle at top, #24113b 0, var(--bg) 42rem); color: var(--text); }
+h1, h2, h3, h4, h5, h6 { font-family: Cinzel, serif; }
+.mono, .chip, .tree-rank { font-family: "JetBrains Mono", monospace; }
 a { color: var(--lead); }
 .site-shell { max-width: 1280px; margin: 0 auto; padding: 28px; }
 .hero { padding: 28px; border: 1px solid var(--line); background: linear-gradient(135deg, rgba(101,240,107,.12), rgba(143,92,255,.13)); border-radius: 10px; box-shadow: 0 0 32px rgba(101,240,107,.08); }

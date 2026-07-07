@@ -7,6 +7,8 @@ from .guide_builder import build_guide_site
 from .guide_rendering import GUIDE_CSS, GUIDE_JS, render_index_html, render_spec_html
 from .reporting import MetaReport
 
+FONT_ASSET_DIR = Path(__file__).parent / "assets" / "fonts"
+
 
 def render_guide_index_html(
     report: MetaReport,
@@ -63,6 +65,14 @@ def write_guide_site(
     js_path = asset_dir / "guide.js"
     js_path.write_text(GUIDE_JS.strip() + "\n", encoding="utf-8")
     written.append(js_path)
+
+    fonts_out = asset_dir / "fonts"
+    if FONT_ASSET_DIR.exists():
+        fonts_out.mkdir(parents=True, exist_ok=True)
+        for font_file in sorted(FONT_ASSET_DIR.glob("*.woff2")):
+            target = fonts_out / font_file.name
+            target.write_bytes(font_file.read_bytes())
+            written.append(target)
 
     tooltip_path = asset_dir / "tooltip-catalog.json"
     tooltip_path.write_text(
