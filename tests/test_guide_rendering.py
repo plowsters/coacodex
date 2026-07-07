@@ -407,3 +407,11 @@ def test_guide_css_defines_self_hosted_font_faces():
     assert "Cinzel" in GUIDE_CSS
     assert "Barlow" in GUIDE_CSS
     assert "JetBrains Mono" in GUIDE_CSS
+
+
+def test_ember_canvas_respects_reduced_motion_and_has_no_network():
+    assert "prefers-reduced-motion" in GUIDE_JS
+    assert "requestAnimationFrame" in GUIDE_JS
+    assert "getContext" in GUIDE_JS
+    assert "fetch(" not in GUIDE_JS
+    assert "XMLHttpRequest" not in GUIDE_JS

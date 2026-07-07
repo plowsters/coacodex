@@ -163,6 +163,47 @@ GUIDE_JS = """
     });
   }
   document.addEventListener("DOMContentLoaded", initTheme);
+  const FEL_PAL = [[108,240,107],[154,107,255],[255,207,92]];
+  const VOID_PAL = [[168,121,255],[108,240,107],[255,207,92]];
+  let emberPalette = FEL_PAL, emberParts = [], emberCanvas, emberCtx, emberRaf, emberW, emberH;
+  window.__coaEmberRecolor = theme => { emberPalette = theme === "void" ? VOID_PAL : FEL_PAL; };
+  function sizeEmberCanvas() {
+    if (!emberCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    emberW = window.innerWidth; emberH = window.innerHeight;
+    emberCanvas.width = emberW * dpr; emberCanvas.height = emberH * dpr;
+    emberCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function startEmbers() {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    emberCanvas = document.createElement("canvas");
+    emberCanvas.setAttribute("data-embers", "");
+    emberCanvas.setAttribute("aria-hidden", "true");
+    emberCanvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;";
+    document.body.insertBefore(emberCanvas, document.body.firstChild);
+    emberCtx = emberCanvas.getContext("2d");
+    sizeEmberCanvas();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const n = Math.min(74, Math.round(emberW / 17));
+    emberParts = Array.from({ length: n }, () => ({ x: rnd(0, emberW), y: rnd(0, emberH), r: rnd(0.7, 2.5), vy: rnd(-0.5, -0.13), vx: rnd(-0.15, 0.15), a: rnd(0.14, 0.66), tw: rnd(0.004, 0.02), ph: rnd(0, 6.28), ci: Math.random() < 0.12 ? 2 : (Math.random() < 0.4 ? 1 : 0) }));
+    const loop = () => {
+      emberCtx.clearRect(0, 0, emberW, emberH); emberCtx.globalCompositeOperation = "lighter";
+      for (const p of emberParts) {
+        p.y += p.vy; p.x += p.vx; p.ph += p.tw;
+        if (p.y < -10) { p.y = emberH + 10; p.x = rnd(0, emberW); }
+        if (p.x < -10) p.x = emberW + 10; if (p.x > emberW + 10) p.x = -10;
+        const c = emberPalette[p.ci], al = p.a * (0.55 + 0.45 * Math.sin(p.ph));
+        const g = emberCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4.5);
+        g.addColorStop(0, "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + al + ")");
+        g.addColorStop(1, "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0)");
+        emberCtx.fillStyle = g; emberCtx.beginPath(); emberCtx.arc(p.x, p.y, p.r * 4.5, 0, 6.2832); emberCtx.fill();
+      }
+      emberCtx.globalCompositeOperation = "source-over"; emberRaf = requestAnimationFrame(loop);
+    };
+    loop();
+    window.addEventListener("resize", sizeEmberCanvas);
+  }
+  document.addEventListener("DOMContentLoaded", startEmbers);
   const tooltipData = window.COA_TOOLTIPS || {};
   let active;
   function removeTooltip() {
