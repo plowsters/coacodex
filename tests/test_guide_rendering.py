@@ -76,7 +76,7 @@ def test_render_index_html_uses_player_facing_guide_shell():
     html = render_index_html(_site())
 
     assert "<!doctype html>" in html
-    assert "CoA Meta Guides" in html
+    assert "CoA Codex" in html
     assert "Open guide" in html
     assert "data-role=" in html
     assert "Further accuracy tuning through combat logs/simming" in html
@@ -91,9 +91,9 @@ def test_pages_include_github_header_and_footer():
     spec_html = render_spec_html(site, spec)
 
     for html in (index_html, spec_html):
-        assert "https://github.com/plowsters/coa_meta_analyzer" in html
-        assert "https://github.com/plowsters/coa_meta_analyzer/issues" in html
-        assert "© 2026 CoA Meta Analyzer" in html
+        assert "https://github.com/plowsters/coacodex" in html
+        assert "https://github.com/plowsters/coacodex/issues" in html
+        assert "© 2026 CoA Codex" in html
         assert "Not affiliated with or endorsed by Project Ascension" in html
         assert 'aria-label="View source on GitHub"' in html
 
@@ -380,3 +380,10 @@ def test_spec_html_does_not_render_backend_trust_text():
 
     assert "backend trust" not in html.lower()
     assert "live sanity" not in html.lower()
+
+
+def test_index_tagline_drops_player_facing():
+    html = render_index_html(_site())
+    assert "Player-facing" not in html
+    assert "Class and specialization guides for Conquest of Azeroth." in html
+    assert "Meta Codex" in html

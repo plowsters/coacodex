@@ -7,8 +7,8 @@ from typing import Any
 from .guide_models import GuideSite, GuideSpec
 
 ROLE_DISPLAY_ORDER = ("tank", "healer", "support", "caster_dps", "ranged_dps", "melee_dps")
-REPO_URL = "https://github.com/plowsters/coa_meta_analyzer"
-ISSUES_URL = "https://github.com/plowsters/coa_meta_analyzer/issues"
+REPO_URL = "https://github.com/plowsters/coacodex"
+ISSUES_URL = "https://github.com/plowsters/coacodex/issues"
 FRONT_PAGE_DISCLAIMER = (
     "Theorycrafting projections based on CoA Builder and Ascension data. "
     "Further accuracy tuning through combat logs/simming may be added if CoA stays online "
@@ -247,7 +247,7 @@ GUIDE_JS = """
 def _render_header(home_href: str = "index.html") -> str:
     return (
         '<header class="site-header">'
-        f'<a class="site-brand" href="{_e(home_href)}">CoA Meta Guides</a>'
+        f'<a class="site-brand" href="{_e(home_href)}">CoA Codex</a>'
         f'<a class="github-link" href="{REPO_URL}" target="_blank" rel="noopener" '
         f'aria-label="View source on GitHub">{GITHUB_MARK_SVG}</a>'
         "</header>"
@@ -259,7 +259,7 @@ def _render_footer(site: GuideSite) -> str:
     generated_html = f" · Generated {generated}" if generated else ""
     return (
         '<footer class="site-footer">'
-        "<p>© 2026 CoA Meta Analyzer · Fan-made theorycraft tool. "
+        "<p>© 2026 CoA Codex · Fan-made theorycraft tool. "
         "Not affiliated with or endorsed by Project Ascension.</p>"
         f'<p><a href="{ISSUES_URL}" target="_blank" rel="noopener">Submit an issue</a> · '
         f'<a href="{REPO_URL}" target="_blank" rel="noopener">Source on GitHub</a>'
@@ -281,11 +281,11 @@ def render_index_html(site: GuideSite) -> str:
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>CoA Meta Guides</title><link rel=\"stylesheet\" href=\"assets/guide.css\">"
+        "<title>CoA Codex</title><link rel=\"stylesheet\" href=\"assets/guide.css\">"
         "</head><body><main class=\"site-shell\">"
         f"{_render_header()}"
-        "<section class=\"hero\"><h1>CoA Meta Guides</h1>"
-        "<p>Player-facing class and specialization guides for Conquest of Azeroth.</p>"
+        "<section class=\"hero\"><h1>Meta Codex</h1>"
+        "<p>Class and specialization guides for Conquest of Azeroth.</p>"
         f'<p class="front-disclaimer">{_e(FRONT_PAGE_DISCLAIMER)}</p></section>'
         f"<section class=\"panel\"><h2>Find Your Guide</h2>{filters}</section>"
         f"{role_sections}"
@@ -306,7 +306,7 @@ def render_spec_html(site: GuideSite, spec: GuideSpec) -> str:
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        f"<title>{_e(spec.class_name)} {_e(spec.spec_name)} Guide</title>"
+        f"<title>{_e(spec.class_name)} {_e(spec.spec_name)} Guide · CoA Codex</title>"
         "<link rel=\"stylesheet\" href=\"../assets/guide.css\"></head><body><main class=\"site-shell\">"
         f"{_render_header(home_href='../index.html')}"
         f'<p><a href="../index.html">Back to guides</a></p><section class="hero" id="overview">'

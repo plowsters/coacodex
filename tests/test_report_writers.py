@@ -111,7 +111,7 @@ def test_markdown_and_html_include_warnings_and_theorycraft_label():
     assert "theorycraft" in markdown.lower()
     assert "metadata_tab_has_no_nodes:Testclass:Empty" in markdown
     assert "Observed DPS" not in markdown
-    assert "CoA Meta Guides" in html
+    assert "CoA Codex" in html
     assert "Open guide" in html
     assert "beam search" not in html.lower()
 
