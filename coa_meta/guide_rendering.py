@@ -68,21 +68,25 @@ h1, h2, h3, h4, h5, h6 { font-family: Cinzel, serif; }
 .mono, .chip, .tree-rank { font-family: "JetBrains Mono", monospace; }
 a { color: var(--lead); }
 .site-shell { max-width: 1280px; margin: 0 auto; padding: 28px; }
-.hero { padding: 28px; border: 1px solid var(--line); background: linear-gradient(135deg, rgba(101,240,107,.12), rgba(143,92,255,.13)); border-radius: 10px; box-shadow: 0 0 32px rgba(101,240,107,.08); }
+.hero { padding: 28px; border: 1px solid var(--line); background: linear-gradient(135deg, rgba(var(--lead-rgb),.12), rgba(var(--accent-rgb),.13)); border-radius: 10px; box-shadow: 0 0 32px rgba(var(--lead-rgb),.08); }
 .front-disclaimer { margin-top: 16px; border: 1px solid rgba(245,197,66,.55); color: #ffe8a3; border-radius: 8px; padding: 12px 14px; background: rgba(245,197,66,.08); }
+.stat-line { margin: 14px 0 0; color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: .92rem; letter-spacing: .02em; }
 .role-filter-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.role-filter { appearance: none; border: 1px solid rgba(143,92,255,.45); border-radius: 999px; background: rgba(28,16,44,.9); color: var(--text); padding: 8px 13px; font: inherit; cursor: pointer; box-shadow: inset 0 0 12px rgba(143,92,255,.1); }
-.role-filter:hover { border-color: var(--lead); box-shadow: 0 0 16px rgba(101,240,107,.18), inset 0 0 12px rgba(143,92,255,.1); }
-.role-filter.is-active, .role-filter[aria-pressed="true"] { border-color: var(--lead); color: #061109; background: linear-gradient(135deg, var(--lead), #b6ff5f); box-shadow: 0 0 18px rgba(101,240,107,.28); }
+.role-filter { appearance: none; border: 1px solid rgba(var(--accent-rgb),.45); border-radius: 999px; background: rgba(28,16,44,.9); color: var(--text); padding: 8px 13px; font: inherit; cursor: pointer; box-shadow: inset 0 0 12px rgba(var(--accent-rgb),.1); }
+.role-filter:hover { border-color: var(--lead); box-shadow: 0 0 16px rgba(var(--lead-rgb),.18), inset 0 0 12px rgba(var(--accent-rgb),.1); }
+.role-filter.is-active, .role-filter[aria-pressed="true"] { border-color: var(--lead); color: #061109; background: linear-gradient(135deg, var(--lead), #b6ff5f); box-shadow: 0 0 18px rgba(var(--lead-rgb),.28); }
 .role-section { margin-top: 26px; }
 .role-section[hidden] { display: none; }
 .role-section-title { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: var(--text); text-shadow: 0 0 14px rgba(143,92,255,.42); }
 .empty-role { color: var(--muted); margin: 0; }
 .guide-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 22px; }
 .guide-card, .panel { border: 1px solid var(--line); background: rgba(19,11,30,.92); border-radius: 8px; padding: 18px; }
-.spec-icon { display: inline-flex; width: 28px; height: 28px; vertical-align: middle; margin-right: 8px; border-radius: 6px; overflow: hidden; }
+.guide-card { position: relative; clip-path: var(--bevel-sm); background: linear-gradient(160deg, rgba(var(--lead-rgb),.07), rgba(var(--accent-rgb),.08)), rgba(19,11,30,.92); transition: box-shadow .15s ease, border-color .15s ease; }
+.guide-card:hover { border-color: var(--lead); box-shadow: 0 0 20px rgba(var(--lead-rgb),.18); }
+.flagship-badge { position: absolute; top: -11px; right: 16px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(var(--gold-rgb),.16); color: var(--gold); font-size: .78rem; font-family: "JetBrains Mono", monospace; box-shadow: 0 0 14px rgba(var(--gold-rgb),.28); }
+.spec-icon { display: inline-flex; width: 30px; height: 30px; vertical-align: middle; margin-right: 8px; border: 1px solid rgba(var(--lead-rgb),.4); clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); overflow: hidden; }
 .spec-icon img { width: 100%; height: 100%; object-fit: cover; }
-.spec-icon-mono { align-items: center; justify-content: center; background: rgba(143,92,255,.18); color: var(--text); font-size: 12px; }
+.spec-icon-mono { align-items: center; justify-content: center; background: rgba(var(--accent-rgb),.18); color: var(--text); font-size: 12px; }
 .site-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px; }
 .site-brand { font-weight: 600; color: var(--text); text-decoration: none; }
 .github-link { color: var(--muted); display: inline-flex; transition: color .15s ease; }
@@ -368,6 +372,13 @@ def _render_footer(site: GuideSite) -> str:
 
 def render_index_html(site: GuideSite) -> str:
     roles = _ordered_roles(site)
+    unique_specs = len({spec.slug for spec in site.specs})
+    role_count = len(roles)
+    stat_line = (
+        f'<p class="stat-line" data-stat-line>'
+        f'{unique_specs} spec{"" if unique_specs == 1 else "s"} · '
+        f'{role_count} role{"" if role_count == 1 else "s"}</p>'
+    )
     filters = '<div class="role-filter-bar" aria-label="Filter guides by role">'
     filters += '<button class="role-filter is-active" data-role-filter="all" aria-pressed="true">All Roles</button>'
     filters += "".join(
@@ -384,7 +395,8 @@ def render_index_html(site: GuideSite) -> str:
         f"{_render_header()}"
         "<section class=\"hero\"><h1>Meta Codex</h1>"
         "<p>Class and specialization guides for Conquest of Azeroth.</p>"
-        f'<p class="front-disclaimer">{_e(FRONT_PAGE_DISCLAIMER)}</p></section>'
+        f'<p class="front-disclaimer">{_e(FRONT_PAGE_DISCLAIMER)}</p>'
+        f"{stat_line}</section>"
         f"<section class=\"panel\"><h2>Find Your Guide</h2>{filters}</section>"
         f"{role_sections}"
         f"{_render_footer(site)}"
@@ -435,9 +447,14 @@ def _render_spec_icon(spec: GuideSpec, asset_prefix: str = "assets") -> str:
 
 def _render_spec_card(spec: GuideSpec) -> str:
     warning = '<span class="chip warning">Warnings</span>' if spec.warning_count else ""
+    flagship = (
+        '<span class="flagship-badge" data-flagship>✦ Flagship</span>'
+        if spec.slug == "felsworn-tyrant"
+        else ""
+    )
     role_values = " ".join(_spec_roles(spec))
     return (
-        f'<article class="guide-card" data-role="{_e(role_values)}">'
+        f'<article class="guide-card" data-role="{_e(role_values)}">{flagship}'
         f"<h2>{_render_spec_icon(spec)} {_e(spec.class_name)} - {_e(spec.spec_name)}</h2>"
         f"<p>{_e(spec.summary)}</p><p>{_role_chips(spec)} {warning}</p>"
         f'<p><a href="{_e(spec.href)}">Open guide</a></p></article>'

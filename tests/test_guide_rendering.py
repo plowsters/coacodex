@@ -415,3 +415,16 @@ def test_ember_canvas_respects_reduced_motion_and_has_no_network():
     assert "getContext" in GUIDE_JS
     assert "fetch(" not in GUIDE_JS
     assert "XMLHttpRequest" not in GUIDE_JS
+
+
+def test_index_shows_unique_spec_stat_line():
+    site = _site()
+    html = render_index_html(site)
+    unique = len({spec.slug for spec in site.specs})
+    assert "data-stat-line" in html
+    assert f"{unique} spec" in html
+
+
+def test_index_flagship_badge_only_on_tyrant():
+    html = render_index_html(_hybrid_site())  # no tyrant -> no badge
+    assert "data-flagship" not in html
