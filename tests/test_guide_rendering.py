@@ -351,7 +351,40 @@ def test_spec_hero_renders_weapon_armor_chip_when_gear_present():
 
     html = render_spec_html(site, spec)
 
-    assert 'class="chip weapon-chip"' in html
+    assert '<span class="chip weapon-chip">Caster · Staff + Dagger + Mace · Cloth</span>' in html
+
+
+def test_spec_hero_classifies_support_weapon_chip_as_caster():
+    site = _hybrid_site()
+    build = GuideBuildCard(
+        **{
+            **site.specs[0].builds[0].__dict__,
+            "gear_recommendation_report": {
+                "schema_version": "coa-gear-recommendation-v2",
+                "role": "support",
+                "best_weapon_types": ["staff", "mace", "dagger"],
+                "best_armor_types": ["cloth", "leather", "mail"],
+                "available_weapon_types": ["staff", "mace", "dagger", "sword"],
+                "available_armor_types": ["cloth", "leather", "mail"],
+                "source": "defaults",
+            },
+        }
+    )
+    spec = GuideSpec(
+        **{
+            **site.specs[0].__dict__,
+            "role": "support",
+            "primary_role": "support",
+            "secondary_roles": tuple(),
+            "roles": ("support",),
+            "builds": (build,),
+        }
+    )
+
+    html = render_spec_html(site, spec)
+
+    assert '<span class="chip weapon-chip">Caster · Staff + Mace + Dagger · Cloth</span>' in html
+    assert '<span class="chip weapon-chip">Melee ·' not in html
 
 
 def test_spec_hero_omits_weapon_chip_when_gear_empty():

@@ -517,7 +517,7 @@ def _role_chips(spec: GuideSpec, *, tooltip_id: str = "") -> str:
 
 def _attack_posture(spec: GuideSpec) -> str:
     role = (spec.primary_role or spec.role or "").lower()
-    if role == "caster_dps":
+    if role in {"caster_dps", "healer", "support"}:
         return "Caster"
     if role == "ranged_dps":
         return "Ranged"
