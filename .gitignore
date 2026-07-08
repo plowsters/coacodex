@@ -24,3 +24,4 @@ coa_scraper/data/raw/
 
 # Usually do not commit generated archives
 *.zip
+reports/meta/assets/guide-site-manifest.json
