@@ -421,10 +421,36 @@ def test_index_shows_unique_spec_stat_line():
     site = _site()
     html = render_index_html(site)
     unique = len({spec.slug for spec in site.specs})
+    role_count = len(
+        {
+            token.split('"', 1)[0]
+            for token in html.split('data-role-filter="')[1:]
+            if not token.startswith("all")
+        }
+    )
     assert "data-stat-line" in html
-    assert f"{unique} spec" in html
+    assert f"{unique} specs · {role_count} roles" in html
 
 
 def test_index_flagship_badge_only_on_tyrant():
     html = render_index_html(_hybrid_site())  # no tyrant -> no badge
     assert "data-flagship" not in html
+
+    site = _hybrid_site()
+    tyrant = GuideSpec(**{**site.specs[0].__dict__, "slug": "felsworn-tyrant"})
+    site = GuideSite(**{**site.__dict__, "specs": (tyrant,)})
+
+    html = render_index_html(site)
+
+    assert "data-flagship" in html
+
+
+def test_spec_card_reskin_marker_stays_off_spec_page_build_cards():
+    site = _site()
+    index_html = render_index_html(site)
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+
+    spec_html = render_spec_html(site, spec)
+
+    assert 'class="guide-card spec-card"' in index_html
+    assert 'class="guide-card spec-card"' not in spec_html

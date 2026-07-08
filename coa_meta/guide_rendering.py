@@ -81,9 +81,9 @@ a { color: var(--lead); }
 .empty-role { color: var(--muted); margin: 0; }
 .guide-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 22px; }
 .guide-card, .panel { border: 1px solid var(--line); background: rgba(19,11,30,.92); border-radius: 8px; padding: 18px; }
-.guide-card { position: relative; clip-path: var(--bevel-sm); background: linear-gradient(160deg, rgba(var(--lead-rgb),.07), rgba(var(--accent-rgb),.08)), rgba(19,11,30,.92); transition: box-shadow .15s ease, border-color .15s ease; }
-.guide-card:hover { border-color: var(--lead); box-shadow: 0 0 20px rgba(var(--lead-rgb),.18); }
-.flagship-badge { position: absolute; top: -11px; right: 16px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(var(--gold-rgb),.16); color: var(--gold); font-size: .78rem; font-family: "JetBrains Mono", monospace; box-shadow: 0 0 14px rgba(var(--gold-rgb),.28); }
+.spec-card { position: relative; padding: 32px 18px 18px; clip-path: var(--bevel-sm); background: linear-gradient(160deg, rgba(var(--lead-rgb),.07), rgba(var(--accent-rgb),.08)), rgba(19,11,30,.92); transition: box-shadow .15s ease, border-color .15s ease; }
+.spec-card:hover { border-color: var(--lead); box-shadow: 0 0 20px rgba(var(--lead-rgb),.18); }
+.flagship-badge { position: absolute; top: 10px; right: 16px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--gold); border-radius: 999px; background: rgba(var(--gold-rgb),.16); color: var(--gold); font-size: .78rem; font-family: "JetBrains Mono", monospace; box-shadow: 0 0 14px rgba(var(--gold-rgb),.28); }
 .spec-icon { display: inline-flex; width: 30px; height: 30px; vertical-align: middle; margin-right: 8px; border: 1px solid rgba(var(--lead-rgb),.4); clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); overflow: hidden; }
 .spec-icon img { width: 100%; height: 100%; object-fit: cover; }
 .spec-icon-mono { align-items: center; justify-content: center; background: rgba(var(--accent-rgb),.18); color: var(--text); font-size: 12px; }
@@ -454,7 +454,7 @@ def _render_spec_card(spec: GuideSpec) -> str:
     )
     role_values = " ".join(_spec_roles(spec))
     return (
-        f'<article class="guide-card" data-role="{_e(role_values)}">{flagship}'
+        f'<article class="guide-card spec-card" data-role="{_e(role_values)}">{flagship}'
         f"<h2>{_render_spec_icon(spec)} {_e(spec.class_name)} - {_e(spec.spec_name)}</h2>"
         f"<p>{_e(spec.summary)}</p><p>{_role_chips(spec)} {warning}</p>"
         f'<p><a href="{_e(spec.href)}">Open guide</a></p></article>'
