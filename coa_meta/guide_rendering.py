@@ -131,8 +131,10 @@ a { color: var(--lead); }
 .tree-node.is-gated, .tree-node.is-inactive { opacity: .54; filter: grayscale(.35); }
 .tree-node.is-over-budget { border-color: var(--warning); box-shadow: 0 0 16px rgba(245,197,66,.28); }
 .tree-rank { position: absolute; right: -7px; bottom: -7px; min-width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; background: #09050f; font-size: .72rem; }
-.leveling-path { margin-top: 14px; display: grid; gap: 8px; }
-.leveling-path li { margin-bottom: 4px; color: var(--muted); }
+.leveling-path { margin-top: 14px; }
+.leveling-path summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
+.leveling-list { columns: 220px auto; column-gap: 24px; list-style: none; padding: 8px 0 0; margin: 0; }
+.leveling-list li { break-inside: avoid; margin-bottom: 6px; color: var(--muted); }
 .tooltip { position: fixed; z-index: 20; max-width: 360px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: #09050f; box-shadow: 0 0 28px rgba(143,92,255,.25); }
 .tooltip.is-pinned { border-color: var(--gold); box-shadow: 0 0 24px rgba(var(--gold-rgb),.32); }
 .tooltip table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -899,7 +901,11 @@ def _render_leveling_path(tree_or_panel: Any) -> str:
         f"<li><strong>{_e(node.name)}</strong> <span class=\"chip\">Level {node.required_level or 'when available'}</span></li>"
         for node in selected[:12]
     )
-    return f'<div class="leveling-path"><h3>Leveling Path</h3><ol>{items}</ol></div>'
+    return (
+        '<details class="leveling-path" open><summary><h3>Leveling Path</h3>'
+        '<span class="mono">order to spend your essence</span></summary>'
+        f'<ol class="leveling-list">{items}</ol></details>'
+    )
 
 
 def _render_leveling_path_for_build(build: Any) -> str:
@@ -929,7 +935,11 @@ def _render_leveling_path_for_build(build: Any) -> str:
     warning_html = ""
     if warnings:
         warning_html = "<ul>" + "".join(f"<li>{_e(warning)}</li>" for warning in warnings) + "</ul>"
-    return f'<div class="leveling-path"><h3>Leveling Path</h3><ol>{"".join(items)}</ol>{warning_html}</div>'
+    return (
+        '<details class="leveling-path" open><summary><h3>Leveling Path</h3>'
+        '<span class="mono">order to spend your essence</span></summary>'
+        f'<ol class="leveling-list">{"".join(items)}</ol>{warning_html}</details>'
+    )
 
 
 def _render_node(node: Any) -> str:

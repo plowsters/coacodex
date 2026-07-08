@@ -259,6 +259,16 @@ def test_leveling_path_omits_boilerplate_reason():
     assert 'class="muted">Take this' not in html
 
 
+def test_leveling_path_is_collapsible_and_column_major():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+    html = render_spec_html(site, spec)
+    assert "<details" in html
+    assert "Leveling Path" in html
+    assert 'class="leveling-list"' in html
+    assert ".leveling-list { columns:" in GUIDE_CSS   # column-major flow
+
+
 def test_render_spec_html_includes_separate_tree_groups_and_passive_lane():
     site = _site()
     spec = next(item for item in site.specs if item.spec_name == "Damage")
