@@ -407,6 +407,9 @@ def test_tooltip_js_supports_multi_pin_and_escape():
     assert "window.COA_TOOLTIPS" in GUIDE_JS      # catalog lookup retained
     assert "Escape" in GUIDE_JS                    # esc clears
     assert "pins" in GUIDE_JS                      # stackable pins
+    assert "pins.has(anchor)" in GUIDE_JS          # pins are tied to clicked targets, not tooltip ids
+    assert "pins.set(anchor" in GUIDE_JS
+    assert "pins.has(id)" not in GUIDE_JS
     assert "is-pinned" in GUIDE_JS                 # gold-border class toggled
     assert 'addEventListener("scroll"' in GUIDE_JS # re-glue on scroll
     assert "event.preventDefault()" in GUIDE_JS    # linked tooltip targets pin instead of navigate

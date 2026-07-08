@@ -232,7 +232,7 @@ GUIDE_JS = """
   }
   function showHover(anchor) {
     const id = anchor.getAttribute("data-tooltip-id");
-    if (!id || pins.has(id)) return;
+    if (!id || pins.has(anchor)) return;
     clearHover();
     hoverEl = makeTip(id, false); hoverAnchor = anchor;
     if (hoverEl) placeTip(hoverEl, anchor);
@@ -240,14 +240,14 @@ GUIDE_JS = """
   function togglePin(anchor) {
     const id = anchor.getAttribute("data-tooltip-id");
     if (!id) return;
-    if (pins.has(id)) {
-      pins.get(id).el.remove(); pins.delete(id);
+    if (pins.has(anchor)) {
+      pins.get(anchor).el.remove(); pins.delete(anchor);
       return;
     }
     clearHover();
     const el = makeTip(id, true);
     if (!el) return;
-    pins.set(id, { el, anchor }); placeTip(el, anchor);
+    pins.set(anchor, { el, anchor }); placeTip(el, anchor);
   }
   function repositionPins() {
     pins.forEach(pin => placeTip(pin.el, pin.anchor));
