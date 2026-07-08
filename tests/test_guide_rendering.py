@@ -567,3 +567,17 @@ def test_spec_card_reskin_marker_stays_off_spec_page_build_cards():
 
     assert 'class="guide-card spec-card"' in index_html
     assert 'class="guide-card spec-card"' not in spec_html
+
+
+def test_spec_nav_is_sticky_and_tree_behavior_preserved():
+    site = _site()
+    spec = next(item for item in site.specs if item.spec_name == "Damage")
+    html = render_spec_html(site, spec)
+    assert 'class="guide-nav"' in html
+    # tree data contracts intact
+    assert 'data-tree-kind="ability_essence"' in html
+    assert "data-tree-level-selector" in html
+    assert 'class="tree-links"' in html
+    # css guarantees from prior milestones still hold
+    assert ".tree-scroll { overflow-x: auto" in GUIDE_CSS
+    assert ".guide-nav { " in GUIDE_CSS and "position: sticky" in GUIDE_CSS
