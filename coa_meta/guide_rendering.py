@@ -132,9 +132,11 @@ a { color: var(--lead); }
 .tree-node.is-over-budget { border-color: var(--warning); box-shadow: 0 0 16px rgba(245,197,66,.28); }
 .tree-rank { position: absolute; right: -7px; bottom: -7px; min-width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; background: #09050f; font-size: .72rem; }
 .leveling-path { margin-top: 14px; }
-.leveling-path summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
-.leveling-list { columns: 220px auto; column-gap: 24px; list-style: none; padding: 8px 0 0; margin: 0; }
-.leveling-list li { break-inside: avoid; margin-bottom: 6px; color: var(--muted); }
+.leveling-path summary { cursor: pointer; }
+.leveling-heading { display: inline-block; margin-right: 8px; font-size: 1.17em; font-weight: 700; }
+.leveling-list { columns: 220px auto; column-gap: 24px; padding: 8px 0 0 1.4rem; margin: 0; }
+.leveling-path li { margin-bottom: 6px; color: var(--muted); }
+.leveling-list li { break-inside: avoid; }
 .tooltip { position: fixed; z-index: 20; max-width: 360px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; background: #09050f; box-shadow: 0 0 28px rgba(143,92,255,.25); }
 .tooltip.is-pinned { border-color: var(--gold); box-shadow: 0 0 24px rgba(var(--gold-rgb),.32); }
 .tooltip table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -902,7 +904,7 @@ def _render_leveling_path(tree_or_panel: Any) -> str:
         for node in selected[:12]
     )
     return (
-        '<details class="leveling-path" open><summary><h3>Leveling Path</h3>'
+        '<details class="leveling-path" open><summary><span class="leveling-heading">Leveling Path</span>'
         '<span class="mono">order to spend your essence</span></summary>'
         f'<ol class="leveling-list">{items}</ol></details>'
     )
@@ -936,7 +938,7 @@ def _render_leveling_path_for_build(build: Any) -> str:
     if warnings:
         warning_html = "<ul>" + "".join(f"<li>{_e(warning)}</li>" for warning in warnings) + "</ul>"
     return (
-        '<details class="leveling-path" open><summary><h3>Leveling Path</h3>'
+        '<details class="leveling-path" open><summary><span class="leveling-heading">Leveling Path</span>'
         '<span class="mono">order to spend your essence</span></summary>'
         f'<ol class="leveling-list">{"".join(items)}</ol>{warning_html}</details>'
     )

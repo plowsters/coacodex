@@ -263,10 +263,46 @@ def test_leveling_path_is_collapsible_and_column_major():
     site = _site()
     spec = next(item for item in site.specs if item.spec_name == "Damage")
     html = render_spec_html(site, spec)
-    assert "<details" in html
+    assert '<details class="leveling-path" open>' in html
+    assert "<summary><span" in html
+    assert "<summary><h3" not in html
     assert "Leveling Path" in html
     assert 'class="leveling-list"' in html
     assert ".leveling-list { columns:" in GUIDE_CSS   # column-major flow
+    assert ".leveling-list { list-style: none" not in GUIDE_CSS
+    assert "list-style: none" not in GUIDE_CSS
+
+
+def test_build_leveling_path_preserves_warning_markup_and_styling():
+    site = _site()
+    base_spec = next(item for item in site.specs if item.spec_name == "Damage")
+    build = GuideBuildCard(
+        **{
+            **base_spec.builds[0].__dict__,
+            "leveling_path": {
+                "steps": [
+                    {
+                        "event_type": "ability",
+                        "level": 10,
+                        "essence_kind": "ability_essence",
+                        "name": "Fel Strike",
+                    }
+                ],
+                "warnings": ["No legal target choice at level 11."],
+            },
+        }
+    )
+    spec = GuideSpec(**{**base_spec.__dict__, "builds": (build,)})
+
+    html = render_spec_html(site, spec)
+
+    assert '<details class="leveling-path" open>' in html
+    assert "<summary><span" in html
+    assert "<summary><h3" not in html
+    assert '<ol class="leveling-list"><li><strong>Level 10</strong>' in html
+    assert '<ul><li>No legal target choice at level 11.</li></ul>' in html
+    assert ".leveling-path li {" in GUIDE_CSS
+    assert ".leveling-list li { break-inside: avoid;" in GUIDE_CSS
 
 
 def test_render_spec_html_includes_separate_tree_groups_and_passive_lane():
