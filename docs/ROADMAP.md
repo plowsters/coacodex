@@ -250,11 +250,21 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
 - **M1.13 Fel/Void Site Redesign.** Status: planned. Externally sourced Claude Design fel/void
   redesign; M1.12 wiring is inherited and restyled. Assets land later in an uncommitted project-root
   folder.
-- **M1.14 Client DBC Data Foundation.** Status: planned. Extract authoritative mechanical spell data
-  and WoW conversion primitives from the CoA client (MPQ→DBC and `Data/Content/*.json`);
-  client-native CoA attribution with the Builder payload as a cross-validation oracle; sunset stale
-  db mechanical enrichment; test-suite integrity audit; memory-bridge/API spike. Design:
+- **M1.14 Client DBC Data Foundation.** Status: planned; decomposed into sub-milestones M1.14A–F.
+  Extract authoritative mechanical spell data and WoW conversion primitives from the CoA client
+  (MPQ→DBC and loose `Data/Content/*.json`); client-native CoA attribution with the Builder payload
+  as a cross-validation oracle; sunset stale db mechanical enrichment; test-suite integrity audit;
+  memory-bridge/API spike. Extraction reads through a project-owned `ArchiveBackend` behind a narrow
+  StormLib ctypes binding, fails closed without StormLib, and keeps the versioned artifact as the
+  architecture (Decision 20). Umbrella design:
   [M1.14 Client DBC Data Foundation](superpowers/specs/2026-07-06-m1-14-client-dbc-data-foundation-design.md).
+  - **M1.14A Client Extraction Core.** Status: planned; specced. `coa_client_extract` module,
+    `coa-client-spell-v1` / `coa-client-content-v1` artifacts, header-driven WDBC reader with
+    schema-drift detection, auditable archive plan, and synthetic-fixture test tiers. Design:
+    [M1.14A Client Extraction Core](superpowers/specs/2026-07-10-m1-14-a-client-extraction-core-design.md).
+  - **M1.14B** attribution · **M1.14C** reconciliation + db sunset · **M1.14D** WoW constants ·
+    **M1.14E** test-suite audit · **M1.14F** memory-bridge/API spike. Delineated in the umbrella;
+    each gets its own spec when next in line.
 - **M1.15 Talent-Tree Correctness.** Status: planned. Full AE/TE essence spend to the target level;
   granular 10–60 level slider; consistent level-gating across all sections; mutually exclusive
   shared-node choices; leveling path never skips a level.

@@ -229,3 +229,35 @@ Reasoning:
 - A tool that presents authoritative-looking numbers from a mechanically hollow model is worse than
   no tool; the analytical model makes Phase 1 numbers defensible without a full simulator.
 - Accurate modeling depends on accurate ability data, so it must follow the client data foundation.
+
+## Decision 20: Client Extraction Uses a Replaceable Backend Behind a Narrow StormLib ctypes Binding
+
+Status: accepted (planned for M1.14A).
+
+Client MPQ extraction (`coa_client_extract`) reads through a project-owned `ArchiveBackend` protocol.
+StormLib sits behind it via a narrow `stormlib_ctypes` surface (library discovery, minimal function
+signatures, context-managed handles) wrapped by `stormlib_backend`; no raw C handle escapes the
+ctypes module. Ascension-specific archive discovery, family filtering (`patch-C*` in; `area-52` and
+`patch-W*` out), load order, and provenance live in an auditable `ArchivePlan` owned by CoA Codex —
+StormLib applies patches, CoA Codex decides which and in what order. Every extracted record carries
+full patch-chain provenance (`base_archive`, `patch_chain`, `effective_archive`, `sha256`), and the
+manifest pins the tested StormLib version range.
+
+StormLib is an extraction-time dependency only: it is never imported by the optimizer, report, or
+guide-rendering paths, and it is not required by the default test suite (which runs against a fake
+in-memory backend and synthetic fixtures), mirroring how Playwright is confined to capture. When
+StormLib is unavailable the regenerate command **fails closed** — it writes no artifacts rather than
+degrading. `mpyq` and external CLI tools are permitted only as diagnostic/cross-validation backends
+and may never produce canonical client artifacts.
+
+Reasoning:
+
+- The correctness claims of M1.14 (correct load order, per-archive provenance, DBC schema-drift
+  detection) require owning the parse in-process, not delegating it to an opaque tool.
+- A replaceable backend keeps the versioned artifact — not the native library — as the lasting
+  architecture, so a future Rust or other backend can be swapped in without changing DBC parsing or
+  downstream contracts.
+- A lower-confidence artifact is not acceptable when the missing capability is fundamental
+  patch/decompression correctness, so silent fallback is disallowed.
+- StormLib is MIT-licensed, so a system install or pinned source build carries no restrictive
+  project-wide license obligation (contrast Decision 9).

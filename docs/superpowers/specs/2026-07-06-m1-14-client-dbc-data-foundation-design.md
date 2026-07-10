@@ -1,4 +1,9 @@
-# M1.14 Client DBC Data Foundation Design
+# M1.14 Client DBC Data Foundation Design (Umbrella)
+
+> Refreshed 2026-07-10: decomposed into sub-milestones M1.14A–F, and the client-extraction
+> architecture was hardened (project-owned `ArchiveBackend` behind a narrow StormLib ctypes binding,
+> auditable archive plan, full patch-chain provenance, fail-closed regeneration). M1.14A now has its
+> own detailed spec and plan; B–F are delineated here and get their own specs when next in line.
 
 ## Purpose
 
@@ -20,39 +25,66 @@ modeling. It produces attributed, provenanced data artifacts and the tooling to 
   Venom: Lifeblood* rather than the current *Adrenal Venom*).
 - The CoA Builder payload is authoritative for the talent graph, legality, tab ownership, AE/TE
   costs, prerequisites, and node descriptions (Decision 1, Decision 15).
+- The mechanical data flow the client must reconcile with is: the Node scraper's
+  `enrich-ascensiondb.mjs` → `coa_db_spell_tooltips.jsonl` → `apply-db-enrichment.mjs` →
+  `coa_entries.enriched.jsonl`, and `build-mechanics-artifacts.mjs` → `coa_mechanics.jsonl`
+  (schema `coa-mechanics-v1`), which `coa_meta`'s `MechanicsRepository` loads by spell ID. The
+  `coa-mechanics-v1` provenance already carries a pluggable `source` field, so a `client_dbc` source
+  slots in additively.
 - No client data is currently ingested. The local install
-  (`…/ascension-live/Data/`) contains classic 3.3.5a MPQ archives and a `Data/Content/*.json` tier.
+  (`…/ascension-live/Data/`, ~44 GB) contains classic 3.3.5a MPQ archives and a loose
+  `Data/Content/*.json` tier.
 
 ## Client Layout Findings
 
-- **Archive-family partitioning attributes content to a game.** `patch-C*` (C, CA…CZ, CZZ) map to
-  Conquest of Azeroth; `Data/area-52/patch-D.MPQ` is Area-52, physically segregated; `patch-W*`
-  (WA, WB, WC…) map to Warcraft Reborn/Bronzebeard; base game is `common/expansion/lichking/patch`.
+- **Archive-family partitioning attributes content to a game.** `patch-C*` (C, CA…CZ, CZZ — 29
+  archives observed) map to Conquest of Azeroth; `Data/area-52/patch-D.MPQ` is Area-52, physically
+  segregated; `patch-W*` (WA, WB, WC…) map to Warcraft Reborn/Bronzebeard; base game is
+  `common/expansion/lichking/patch(-2/-3)`.
 - **MPQ load order overrides.** Later patch archives override earlier ones; extraction must read the
-  effective (latest CoA) record.
-- **Two data tiers.** DBC files under `DBFilesClient/` inside the MPQs, and structured JSON under
-  `Data/Content/` (`SpellRankData.json`, `SpellToStatSuggestionData.json`,
-  `SpellToRoleSuggestionData.json`, `SpellToSpellSuggestionData.json`,
-  `EnchantmentToStatSuggestionData.json`, `ItemVariationData.json`, `CharacterAdvancementData.json`).
+  effective (latest CoA) record. StormLib resolves the patch chain; CoA Codex owns the *policy* for
+  which archives participate and in what order.
+- **Two data tiers, and the JSON tier is loose on disk.** DBC files live under `DBFilesClient/`
+  inside the MPQs (needs StormLib). The `Data/Content/*.json` tier is loose files read directly —
+  `SpellRankData.json`, `SpellToStatSuggestionData.json`, `SpellToRoleSuggestionData.json`,
+  `SpellToSpellSuggestionData.json`, `EnchantmentToStatSuggestionData.json`, `ItemVariationData.json`,
+  `CharacterAdvancementData.json`, and more. The loose tier needs no MPQ tooling.
 - **Ascension likely extends DBC schemas** (extra columns); layout cannot be assumed to match stock
   3.3.5a and must be validated from the DBC header.
 - **Custom numbers and item stats are partly server-side** and not fully present in client DBC.
   `Extensions.dll`/`MemoryBridge.log` indicate a memory bridge that could later read live-computed
   values.
 
+## Sub-Milestone Decomposition
+
+Following the M1.10/M1.11 precedent, M1.14 is split into lettered sub-milestones, each with its own
+spec and implementation plan.
+
+| Sub | Scope | Purpose | Depends on |
+|-----|-------|---------|------------|
+| **M1.14A** | extraction core | `coa_client_extract` module: `ArchiveBackend` protocol + narrow StormLib ctypes backend, auditable `ArchivePlan`, header-driven WDBC reader with schema-drift detection, loose Content-JSON reader, patch-chain provenance + manifest, and the `coa-client-spell-v1` / `coa-client-content-v1` artifacts (attribution deferred). Committed **synthetic** fixtures; three test tiers. | — |
+| **M1.14B** | attribution | Client-native CoA attribution (archive-family + ID-range + skill-line markers), per-record confidence, precision/recall against the Builder oracle, the `805775` acid test. Fills the `coa_attribution` fields on the M1.14A artifacts. | A |
+| **M1.14C** | reconciliation + sunset | Reconcile `coa-client-spell-v1` into `coa-mechanics-v1` via a source-precedence policy in the Node mechanics builder (client mechanical > verified Builder > AscensionDB fallback > inferred tooltip), retaining every competing value + selected-source reason; demote db mechanical enrichment to fallback-only. | A, B |
+| **M1.14D** | wow constants | `coa-wow-constants-v1` — GameTable conversion primitives and documented WotLK constants for the M1.16 engine. | A |
+| **M1.14E** | test audit | Test-suite integrity audit, tooltip-HTML regression test, and modeling-test standards. | — |
+| **M1.14F** | spike | Time-boxed memory-bridge/API investigation with a viable/not-viable/defer recommendation. | — |
+
+A→B→C is a dependency chain. D depends only on A's extraction machinery. E and F are independent and
+can proceed in parallel. Only **M1.14A** is fully specced today (see
+[M1.14A Client Extraction Core](2026-07-10-m1-14-a-client-extraction-core-design.md)); B–F are
+delineated below.
+
 ## Scope
 
 M1.14 includes:
 
-- **A. MPQ extraction tooling** with correct patch-chain/load-order resolution (StormLib).
-- **B. Client-native CoA attribution** with per-record confidence and provenance.
-- **C. DBC parsing** with header-driven layout and schema-drift detection.
-- **D. `Data/Content/*.json` ingestion** for the JSON tier, attributed like the DBC tier.
-- **E. New artifacts and reconciliation** with the Builder pipeline; sunset of stale db mechanical
-  enrichment.
-- **F. WoW conversion primitives** (GameTables and documented constants) for the modeling engine.
-- **G. Test-suite integrity audit** and modeling-test standards.
-- **H. Investigation spike** into the memory bridge and the Ascension API.
+- **A. Extraction core** — MPQ patch-chain resolution behind a project-owned backend, DBC parsing
+  with drift detection, loose Content-JSON ingestion, provenance, and the client artifacts.
+- **B. Client-native CoA attribution** with per-record confidence and Builder-oracle validation.
+- **C. Reconciliation** into the mechanics artifact and sunset of stale db mechanical enrichment.
+- **D. WoW conversion primitives** (GameTables and documented constants) for the modeling engine.
+- **E. Test-suite integrity audit** and modeling-test standards.
+- **F. Investigation spike** into the memory bridge and the Ascension API.
 
 M1.14 does not include:
 
@@ -63,22 +95,60 @@ M1.14 does not include:
 
 ## Design
 
-### A. MPQ extraction tooling
+### Extraction architecture (M1.14A)
 
-Use **StormLib** (via a thin Python wrapper/ctypes binding) because it correctly resolves the MPQ
-patch chain, listfiles, and encryption. `mpyq` is a pure-Python fallback but handles patch overrides
-poorly and is not the primary path. Extraction lives in a new capture module
-(`coa_client_extract/`) that is isolated from the optimizer (extends Decision 3: the optimizer never
-reads client archives). The module:
+The core principle: **use StormLib directly through the smallest replaceable boundary possible, and
+make the versioned artifact — not the native library — the lasting architecture.** StormLib owns MPQ
+semantics; CoA Codex owns Ascension archive policy; Python owns extraction orchestration and WDBC
+parsing.
 
-- Enumerates the CoA archive set and base archives in correct load order.
-- Resolves each needed `DBFilesClient/*.dbc` and `Data/Content/*.json` to its effective (highest
-  priority) version.
-- Records, per extracted file, the source archive, extraction timestamp, and client build.
+- **`ArchiveBackend` protocol.** All extraction reads through a project-owned interface,
+  `read_effective_file(base_archive, patch_archives, logical_path) -> ExtractedMember`, where
+  `ExtractedMember` carries `logical_path`, `data`, `patch_chain`, `effective_archive`,
+  `backend_name`, and `backend_version`. The rest of the module never imports ctypes or knows what
+  StormLib is, so a fake in-memory backend drives unit tests and a future Rust backend is a drop-in.
+- **Narrow ctypes surface.** `stormlib_ctypes.py` contains only shared-library discovery, C typedefs,
+  function signatures (~`SFileOpenArchive`, `SFileOpenPatchArchive`, `SFileOpenFileEx`,
+  `SFileGetFileInfo`, `SFileGetFileSize`, `SFileReadFile`, `SFileCloseFile`, `SFileCloseArchive`,
+  error retrieval), and context-managed handles. **No raw C handle escapes this module.**
+  `stormlib_backend.py` translates those primitives into project objects and exceptions.
+- **Auditable archive plan.** An `ArchivePlan` artifact (`coa-client-archive-plan-v1`) records the
+  base archives, the ordered patch archives, the excluded `area-52`/`patch-W*` families, and the
+  `ordering_rule`. CoA Codex decides which patches participate and in what order; StormLib applies
+  them. The ordering is empirically validated against known-overridden files before it is called
+  canonical (never a blind `sorted(glob("patch-C*"))`).
+- **Full patch-chain provenance.** Because a patched file's effective bytes may come from several
+  incremental patches, each extracted record records `base_archive`, `patch_chain[]`,
+  `effective_archive`, `sha256`, and `byte_length`, plus a manifest `{backend, stormlib_version,
+  wrapper_version, client_build, extraction_date}` against a pinned StormLib release range.
+- **Fail closed.** StormLib is an extraction-time dependency only — never imported by optimizer,
+  report, or guide-rendering paths (it parallels Playwright-for-capture). If StormLib is unavailable,
+  the regenerate command writes **nothing** and says so; it does not silently degrade. **mpyq is
+  demoted** to an optional diagnostic backend for simple archives and may never produce canonical
+  artifacts; external CLI tools are likewise diagnostic/cross-validation only.
 
-Client build is read from the client version where available and recorded on every artifact.
+### DBC parsing with drift detection (M1.14A)
 
-### B. Client-native CoA attribution
+A generic `WDBC` reader parses the header (magic, record count, field count, record size, string
+block size) and reads fixed-width records plus the string block. Per-DBC field layouts are declared
+as specs in `dbc_layouts.py`. Because Ascension may extend schemas, the reader validates the header's
+field count and record size against the expected 3.3.5a layout and emits a **schema-drift warning**
+(mirroring the existing pipeline's drift checks) rather than misreading silently. M1.14A proves the
+machinery end-to-end on the spell family: `Spell`, `SpellCastTimes`, `SpellDuration`, `SpellRange`,
+`SpellRadius`, `SpellCategory`, `SpellRuneCost`, `SpellIcon`, and `SpellDescriptionVariables`.
+`Item`/`ItemDisplayInfo` are deferred (icons already come from M1.11D's AscensionDB assets; item
+stats are M1.18).
+
+### Content JSON ingestion (M1.14A)
+
+Ingest the loose `Data/Content/*.json` tier via direct file reads through the same provenance
+pipeline (no MPQ tooling). Priority files are those relevant to systems correctness: `SpellRankData`
+(rank scaling), `SpellToStatSuggestionData` and `SpellToRoleSuggestionData` (stat-interaction and
+role signals), and `ItemVariationData`. `CharacterAdvancementData` is investigated for whether it is
+CoA or the classless/Area-52 system before any use. Records land in `coa-client-content-v1` with
+source file and provenance; attribution confidence is filled by M1.14B.
+
+### Client-native CoA attribution (M1.14B)
 
 Attribution answers "is this record CoA?" from client-derived signals, producing a confidence and
 provenance per record. Signals, in priority order:
@@ -87,9 +157,8 @@ provenance per record. Signals, in priority order:
    (CoA) versus `area-52/` (Area-52) or `patch-W*` (Reborn). Primary signal.
 2. **ID range** — CoA custom content uses high ID ranges distinct from stock 3.3.5a and from the
    other games' ranges; the observed ranges are learned during implementation and recorded.
-3. **Specialization/skill-line markers** — CoA specialization spells (e.g. the "Conquest of Azeroth
-   Specialization - <Class> (<Spec>)" records) and their skill-line/family associations tag related
-   content.
+3. **Specialization/skill-line markers** — CoA specialization spells and their skill-line/family
+   associations tag related content.
 
 The **CoA Builder payload is a cross-validation oracle only**: the ~3,612 Builder spell IDs are a
 labeled positive set used to measure the attribution heuristic's precision and recall and to tune
@@ -102,48 +171,25 @@ matches the current *Adrenal Venom*, and the Builder cross-check confirms the he
 Additionally, a spot-check confirms that CoA-attributed spells *not* present in the Builder are
 genuinely CoA.
 
-### C. DBC parsing with drift detection
-
-A generic `WDBC` reader parses the header (magic, record count, field count, record size, string
-block size) and reads fixed-width records plus the string block. Per-DBC field layouts are declared
-as specs. Because Ascension may extend schemas, the reader validates the header's field count and
-record size against the expected 3.3.5a layout and emits a **schema-drift warning** (mirroring the
-existing pipeline's drift checks) rather than misreading silently. DBCs parsed include at least:
-`Spell`, `SpellCastTimes`, `SpellDuration`, `SpellRange`, `SpellRadius`, `SpellIcon`,
-`SpellDescriptionVariables`, `SpellCategory`, and `SpellRuneCost`, plus item display DBCs
-(`Item`, `ItemDisplayInfo`) for icon/type/display.
-
-### D. Content JSON ingestion
-
-Ingest the `Data/Content/*.json` tier through the same attribution and provenance pipeline. Priority
-files are those relevant to systems correctness: `SpellRankData` (rank scaling),
-`SpellToStatSuggestionData` and `SpellToRoleSuggestionData` (stat-interaction and role signals), and
-`ItemVariationData`. `CharacterAdvancementData` is investigated for whether it is CoA or the
-classless/Area-52 system before any use. Each ingested record carries its source file and attribution
-confidence.
-
-### E. Artifacts and reconciliation
-
-New artifacts (JSONL/JSON with schema versions and per-field provenance):
-
-- `coa-client-spell-v1` — one record per CoA-attributed spell: cast time, cost, cooldown, GCD
-  category, school, effect base points/coefficients, proc data, icon, duration, range, plus
-  attribution confidence and schema-match confidence.
-- `coa-wow-constants-v1` — see F.
-- Optional `coa-client-content-v1` — normalized records from the attributed Content JSON tier.
+### Artifacts and reconciliation (M1.14C)
 
 Reconciliation joins client records to normalized Builder entries by spell ID. **Builder stays
 authoritative for the talent graph and node descriptions** (per the primary-source decision); the
 **client becomes authoritative for mechanical fields**; db.ascension.gg mechanical enrichment is
-demoted to fallback-only for spells the client does not cover. Disagreements are recorded with both
-values and their sources rather than silently overwritten. The default report path remains
-network-free after artifacts are generated.
+demoted to fallback-only for spells the client does not cover.
+
+The Node/Python seam is preserved: Python extraction produces `coa-client-spell-v1`; the existing
+Node `build-mechanics-artifacts.mjs` gains a **source-precedence policy** — client mechanical field
+> verified Builder field > AscensionDB fallback > inferred tooltip value — and remains the producer
+of `coa-mechanics-v1`, which `coa_meta`'s `MechanicsRepository` loads unchanged. Disagreements are
+recorded with all competing values and the selected-source reason rather than silently overwritten.
+The default report path remains network-free after artifacts are generated.
 
 Changelog currency spot-check: a small sample of recently changed spells from
 `ascension.gg/en/changelog/4` is verified to be reflected in the extracted client data, confirming
 the client is current. This uses the changelog as a verification signal, not a parser.
 
-### F. WoW conversion primitives (modeling inputs)
+### WoW conversion primitives (M1.14D)
 
 Extract and normalize the GameTables and base constants into `coa-wow-constants-v1`:
 
@@ -157,7 +203,7 @@ Extract and normalize the GameTables and base constants into `coa-wow-constants-
 Every constant records its source (DBC/GameTable name or "documented WotLK ruleset") and flags where
 Ascension may deviate, so the M1.16 engine can treat them as inputs with stated assumptions.
 
-### G. Test-suite integrity audit
+### Test-suite integrity audit (M1.14E)
 
 Review every existing test for assertions that lock in incidental or wrong behavior rather than
 intended behavior. The canonical example is commit `84ad112` ("Fix tooltips rendering raw AscensionDB
@@ -172,7 +218,7 @@ rendering bug. Deliverables:
   values (e.g. rating conversions at levels 60/80, known coefficient results), monotonicity property
   tests (more haste → not fewer casts), and provenance/schema-drift/attribution tests for extraction.
 
-### H. Investigation spike (memory bridge + API)
+### Investigation spike (M1.14F)
 
 A time-boxed spike, producing a viable/not-viable/defer recommendation with evidence, for two avenues
 that could later supply the server-side custom numbers M1.14 cannot:
@@ -186,34 +232,74 @@ The spike does not implement either integration; it scopes their value for a lat
 
 ## Module Layout
 
-- `coa_client_extract/` — MPQ/DBC/JSON capture, attribution, drift detection, artifact writers.
-  Depends on StormLib. Isolated from `coa_meta`.
-- `coa_meta` repository layer — loads the new `coa-client-spell-v1` and `coa-wow-constants-v1`
-  artifacts with provenance, alongside existing normalized artifacts.
-- `docs/data/` — schema docs for the new artifacts.
-- `docs/DECISIONS.md` — record the client-authoritative-mechanical-source and client-native
-  attribution decisions.
+```
+coa_client_extract/                # Python. Depends on StormLib at extraction time only.
+├── __init__.py
+├── cli.py                         # regenerate command; fails closed without StormLib
+├── errors.py
+├── archive_backend.py             # ArchiveBackend protocol + ExtractedMember + fake backend
+├── archive_plan.py                # ArchivePlan: family filtering, load order, provenance
+├── stormlib_ctypes.py             # narrow ctypes surface; no raw handle escapes
+├── stormlib_backend.py            # ArchiveBackend impl over stormlib_ctypes
+├── wdbc.py                        # header-driven DBC reader + drift detection
+├── dbc_layouts.py                 # per-DBC field specs (expected 3.3.5a layouts)
+├── content_json.py                # loose Data/Content/*.json reader
+├── manifest.py                    # extraction manifest (backend, versions, build, hashes)
+└── artifacts.py                   # coa-client-spell-v1 / coa-client-content-v1 writers
+```
+
+- `coa_meta` repository layer — loads the reconciled `coa-mechanics-v1` (unchanged loader) and, in
+  M1.14D, the new `coa-wow-constants-v1` artifact with provenance.
+- `coa_scraper/scripts/build-mechanics-artifacts.mjs` — gains the source-precedence policy in M1.14C.
+- `docs/data/` — schema docs for the new artifacts (`client-spell-schema.md`,
+  `client-content-schema.md`, `wow-constants-schema.md`).
+- `docs/DECISIONS.md` — Decision 18 (client-authoritative mechanics) and Decision 20 (client
+  extraction architecture).
+
+## Cross-Cutting Principles
+
+- **Additive, not destructive.** The Builder graph pipeline and normalized artifacts remain. New
+  client-sourced data is layered with provenance and confidence; existing consumers keep working.
+- **The versioned artifact is the architecture, not the native library.** StormLib lives behind a
+  replaceable backend; downstream code depends only on versioned JSONL contracts.
+- **Provenance and attribution on every record.** Every client-sourced field records its source
+  archive/DBC/JSON, patch chain, extraction date, client build, CoA-attribution confidence, and
+  schema-match confidence (extends Decision 10).
+- **Capture is isolated from analysis.** MPQ/DBC/JSON extraction lives in `coa_client_extract`; the
+  optimizer never reads client archives (extends Decision 3). StormLib is not required to run the
+  optimizer or the default test suite.
+- **Fail closed on missing capability.** A lower-confidence artifact is not acceptable when the
+  missing capability is fundamental patch/decompression correctness.
+- **Tests assert intended behavior, not incidental output** (M1.14E), and modeling milestones test
+  formulas against known WotLK reference values.
+- **Redistribution boundary.** Extracting from the user's own client is in scope; committed fixtures
+  are **synthetic** (self-authored), never client asset bytes. The public site hotlinks or uses
+  permissibly sourced assets.
 
 ## Risks and Boundaries
 
 - **Schema drift:** Ascension DBC extensions could break naive parsing; mitigated by header-driven
   layout and drift warnings.
+- **ctypes FFI safety:** a bad binding can crash the process; mitigated by keeping the ctypes surface
+  tiny, context-managing handles, letting no raw handle escape, and pinning a tested StormLib range.
+- **StormLib install friction:** a native dependency for maintainers; mitigated by the fail-closed
+  regenerate path plus synthetic fixtures so tests and ordinary reports never need it.
 - **Attribution error:** archive-family membership is strong but not proven complete; mitigated by
-  Builder cross-validation and confidence flags rather than hard drops.
+  Builder cross-validation and confidence flags rather than hard drops (M1.14B).
 - **Server-side gaps:** custom scaling/proc numbers and item stats are not fully in client DBC; scoped
   to the spike and to M1.18, and documented as a known limitation.
-- **Redistribution:** extracting from the user's own client is in scope; the public site must not
-  redistribute client asset files — it hotlinks or uses permissibly sourced assets.
 
 ## Exit Criteria
 
-- `coa-client-spell-v1` regenerates from a fresh MPQ read via the capture module.
+- `coa-client-spell-v1` regenerates from a fresh MPQ read via `coa_client_extract`, with the
+  StormLib-backed backend, an auditable archive plan, and full patch-chain provenance.
 - Spell `805775` is CoA-attributed by client-native signals and carries current mechanical data
   matching the live client, not the stale db *Fang Venom: Lifeblood*.
 - CoA is separated from Area-52 and Reborn using client-derived signals, with attribution confidence
   measured against the Builder oracle and reported.
 - `coa-wow-constants-v1` is produced with sourced conversion tables and documented constants.
-- Schema-drift detection warns on DBC layout deviations rather than misreading.
+- Schema-drift detection warns on DBC layout deviations rather than misreading, and the regenerate
+  command fails closed when StormLib is unavailable.
 - The test-suite integrity audit is complete, its findings addressed, and the new
   regression/correctness/modeling-standard tests are in place.
 - db.ascension.gg mechanical enrichment is demoted to fallback-only; the Builder graph is unchanged.
