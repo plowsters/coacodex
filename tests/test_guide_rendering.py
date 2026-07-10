@@ -530,6 +530,13 @@ def test_ember_canvas_respects_reduced_motion_and_has_no_network():
     assert "getContext" in GUIDE_JS
     assert "fetch(" not in GUIDE_JS
     assert "XMLHttpRequest" not in GUIDE_JS
+    # The ember canvas sits at negative z-index behind the content. An opaque
+    # background on <html> stops the body background from propagating to the
+    # root, which repaints the body's gradient ABOVE negative-z children and
+    # hides the embers entirely. Keep <html> free of background rules.
+    assert "html {" not in GUIDE_CSS
+    assert "z-index:-2" in GUIDE_JS  # canvas below the vignette (body::before, -1)
+    assert "body::before" in GUIDE_CSS
 
 
 def test_index_shows_unique_spec_stat_line():

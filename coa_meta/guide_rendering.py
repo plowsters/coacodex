@@ -66,7 +66,6 @@ GUIDE_CSS = """
   --line: rgba(168,121,255,.30);
 }
 * { box-sizing: border-box; }
-html { background: var(--bg); }
 body {
   margin: 0; font-family: Barlow, system-ui, sans-serif; font-size: 16px; line-height: 1.55; color: var(--text);
   background:
