@@ -17,7 +17,7 @@ dependencies = []
 coa-meta = "coa_meta.cli:main"
 
 [tool.setuptools]
-packages = ["coa_meta", "coa_meta.combat"]
+packages = ["coa_meta", "coa_meta.combat", "coa_client_extract"]
 
 [tool.setuptools.package-data]
 coa_meta = [
@@ -25,4 +25,11 @@ coa_meta = [
   "data/apl_profiles/*.json",
   "data/role_overrides.json",
   "data/spec_roles.json"
+]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not stormlib and not client'"
+markers = [
+  "stormlib: requires a built/installed StormLib shared library (native integration tier)",
+  "client: requires the local Ascension client install (acceptance tier)",
 ]
