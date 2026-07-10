@@ -39,8 +39,6 @@
 
 ```python
 # tests/test_client_extract_errors.py
-import pytest
-
 from coa_client_extract.errors import (
     ArchiveError,
     BackendUnavailable,
@@ -59,10 +57,11 @@ def test_errors_carry_message():
     assert "expected 234" in str(err)
 
 
-@pytest.mark.stormlib
-def test_stormlib_marker_is_registered():
-    # Presence of this test proves the marker is registered without error.
-    assert True
+def test_pytest_markers_are_registered(pytestconfig):
+    # Real assertion that pyproject.toml registered both extraction tiers.
+    markers = "\n".join(pytestconfig.getini("markers"))
+    assert "stormlib:" in markers
+    assert "client:" in markers
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -121,10 +120,9 @@ markers = [
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_client_extract_errors.py -q`
-Expected: PASS for the two hierarchy tests; the `stormlib`-marked test is **deselected** by `addopts`.
-
-Run: `python -m pytest tests/test_client_extract_errors.py -m stormlib -q`
-Expected: PASS (marker resolves, 1 selected).
+Expected: PASS (3 tests: two hierarchy + marker registration). Marker registration is asserted
+directly from the pytest config; the `stormlib`/`client` tiers get their real marked tests in
+Tasks 9–10.
 
 - [ ] **Step 6: Commit**
 
@@ -1417,7 +1415,7 @@ git commit -m "M1.14A: narrow StormLib ctypes surface and fail-closed backend"
 **Interfaces:**
 - Consumes: everything above.
 - Produces:
-  - `cli.regenerate(client_root: Path, out_dir: Path, *, backend: ArchiveBackend | None = None, stormlib_path: str | None = None) -> dict` — orchestrates plan → backend → DBC parse → assembly → artifacts → manifest; returns the manifest. Injecting `backend` (used by tests) bypasses StormLib; when `backend is None` it constructs `StormLibBackend` and **fails closed** on `BackendUnavailable`.
+  - `cli.regenerate(client_root: Path, out_dir: Path, *, backend: ArchiveBackend | None = None, stormlib_path: str | None = None, layouts: dict[str, DbcLayout] | None = None) -> dict` — orchestrates plan → backend → DBC parse → assembly → artifacts → manifest; returns the manifest. Injecting `backend` (used by tests) bypasses StormLib; when `backend is None` it constructs `StormLibBackend` and **fails closed** on `BackendUnavailable`. `layouts` defaults to the real `SPELL_FAMILY`; tests inject synthetic layouts matching their fake DBC bytes.
   - `cli.main(argv: list[str] | None = None) -> int` — argparse front end; prints the `BackendUnavailable` message to stderr and returns exit code `2` without writing artifacts.
 
 - [ ] **Step 1: Write the failing test**
@@ -1451,7 +1449,6 @@ def _fake_backend():
     def dbc(rows, fc, rs, s=b"\x00"):
         return struct.pack("<4sIIII", b"WDBC", len(rows), fc, rs, len(s)) + b"".join(rows) + s
 
-    from coa_client_extract import dbc_layouts  # noqa: F401 (ensure importable)
     entries = {
         "DBFilesClient\\Spell.dbc": [(Path("common.MPQ"), dbc([spell], 4, 16, strings))],
         "DBFilesClient\\SpellCastTimes.dbc": [(Path("common.MPQ"), dbc([cast], 2, 8))],
@@ -1461,11 +1458,25 @@ def _fake_backend():
     return FakeArchiveBackend(entries)
 
 
+def _synthetic_layouts():
+    from coa_client_extract.wdbc import DbcLayout, FieldSpec
+
+    return {
+        "Spell": DbcLayout("Spell", 4, 16, {
+            "id": FieldSpec(0, "uint32"), "name": FieldSpec(1, "str"),
+            "casting_time_index": FieldSpec(2, "uint32"), "duration_index": FieldSpec(3, "uint32"),
+        }),
+        "SpellCastTimes": DbcLayout("SpellCastTimes", 2, 8, {"id": FieldSpec(0, "uint32"), "base_ms": FieldSpec(1, "int32")}),
+        "SpellDuration": DbcLayout("SpellDuration", 2, 8, {"id": FieldSpec(0, "uint32"), "base_ms": FieldSpec(1, "int32")}),
+        "SpellRange": DbcLayout("SpellRange", 39, 156, {"id": FieldSpec(0, "uint32")}),
+    }
+
+
 def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
-    # The CLI uses simplified synthetic layouts injected via the backend; the real layouts are
-    # exercised by the acceptance test. Here we assert orchestration + fail-open-with-injection.
+    # Inject synthetic layouts matching the fake backend's DBC bytes; real layouts are
+    # exercised by the Task 10 acceptance test. Asserts orchestration end to end.
     out = tmp_path / "out"
-    manifest = regenerate(_client(tmp_path), out, backend=_fake_backend(), spell_layouts="synthetic")
+    manifest = regenerate(_client(tmp_path), out, backend=_fake_backend(), layouts=_synthetic_layouts())
     assert manifest["schema_version"] == "coa-client-extract-manifest-v1"
     assert (out / "coa_client_spell.jsonl").is_file()
     assert (out / "coa_client_content.jsonl").is_file()
@@ -1501,6 +1512,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date
 from pathlib import Path
 
 from .archive_backend import ArchiveBackend
@@ -1510,22 +1522,7 @@ from .content_json import read_content_records
 from .dbc_layouts import SPELL_FAMILY
 from .errors import BackendUnavailable
 from .manifest import build_manifest
-from .wdbc import DbcLayout, FieldSpec, parse_dbc
-
-# Synthetic layouts used only when a fake backend injects test-shaped DBC bytes.
-_SYNTHETIC = {
-    "Spell": DbcLayout("Spell", 4, 16, {
-        "id": FieldSpec(0, "uint32"), "name": FieldSpec(1, "str"),
-        "casting_time_index": FieldSpec(2, "uint32"), "duration_index": FieldSpec(3, "uint32"),
-    }),
-    "SpellCastTimes": DbcLayout("SpellCastTimes", 2, 8, {"id": FieldSpec(0, "uint32"), "base_ms": FieldSpec(1, "int32")}),
-    "SpellDuration": DbcLayout("SpellDuration", 2, 8, {"id": FieldSpec(0, "uint32"), "base_ms": FieldSpec(1, "int32")}),
-    "SpellRange": DbcLayout("SpellRange", 39, 156, {"id": FieldSpec(0, "uint32")}),
-}
-
-
-def _layouts(which: str) -> dict[str, DbcLayout]:
-    return _SYNTHETIC if which == "synthetic" else SPELL_FAMILY
+from .wdbc import DbcLayout, parse_dbc
 
 
 def regenerate(
@@ -1534,19 +1531,18 @@ def regenerate(
     *,
     backend: ArchiveBackend | None = None,
     stormlib_path: str | None = None,
-    spell_layouts: str = "real",
+    layouts: dict[str, DbcLayout] | None = None,
 ) -> dict:
     if backend is None:
         from .stormlib_backend import StormLibBackend
         backend = StormLibBackend(stormlib_path=stormlib_path)  # may raise BackendUnavailable
 
     plan = discover_plan(client_root)
-    layouts = _layouts(spell_layouts)
+    layouts = layouts or SPELL_FAMILY
+    root, attach = plan.open_chain  # StormLib root + all base+patch archives attached on top
 
     def read_table(name: str):
-        member = backend.read_effective_file(
-            plan.base_archives[0], plan.patch_archives, f"DBFilesClient\\{name}.dbc"
-        )
+        member = backend.read_effective_file(root, attach, f"DBFilesClient\\{name}.dbc")
         return member, parse_dbc(member.data, layouts[name])
 
     spell_member, spell = read_table("Spell")
@@ -1559,10 +1555,8 @@ def regenerate(
         "patch_chain": [p.name for p in spell_member.patch_chain],
         "effective_archive": spell_member.effective_archive.name,
         "source_dbcs": {"Spell": spell_member.effective_archive.name},
-        "extraction_date": None,  # filled by build_client_spell_records provenance merge below
+        "extraction_date": date.today().isoformat(),
     }
-    from datetime import date
-    provenance["extraction_date"] = date.today().isoformat()
 
     spell_records = build_client_spell_records(spell, cast, dur, rng, provenance=provenance)
     content_records = read_content_records(client_root / "Content")
