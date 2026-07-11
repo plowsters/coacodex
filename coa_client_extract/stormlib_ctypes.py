@@ -7,7 +7,13 @@ from contextlib import contextmanager
 
 from .errors import ArchiveError, BackendUnavailable
 
-_CANDIDATES = ("storm", "libstorm.so", "libstorm.so.9", "libStorm.dylib", "StormLib.dll")
+_CANDIDATES = ("libstorm.so", "libstorm.so.9", "libStorm.dylib", "StormLib.dll")
+
+STORMLIB_FUNCTIONS = (
+    "SFileOpenArchive", "SFileOpenPatchArchive", "SFileHasFile",
+    "SFileOpenFileEx", "SFileGetFileSize", "SFileReadFile",
+    "SFileCloseFile", "SFileCloseArchive",
+)
 
 
 def load_stormlib(explicit_path: str | None = None) -> ctypes.CDLL:
@@ -58,17 +64,6 @@ def _bind(lib: ctypes.CDLL) -> None:
 
 
 @contextmanager
-def open_archive(lib: ctypes.CDLL, path: str):
-    handle = ctypes.c_void_p()
-    if not lib.SFileOpenArchive(path.encode("utf-8"), 0, 0x00000100, ctypes.byref(handle)):
-        raise ArchiveError(f"SFileOpenArchive failed for {path} (err {ctypes.get_errno()})")
-    try:
-        yield handle
-    finally:
-        lib.SFileCloseArchive(handle)
-
-
-@contextmanager
 def open_file(lib: ctypes.CDLL, archive: ctypes.c_void_p, logical_path: str):
     fh = ctypes.c_void_p()
     if not lib.SFileOpenFileEx(archive, logical_path.encode("utf-8"), 0, ctypes.byref(fh)):
@@ -89,3 +84,33 @@ def read_all(lib: ctypes.CDLL, file_handle: ctypes.c_void_p) -> bytes:
         if read.value != size.value:
             raise ArchiveError("SFileReadFile short read")
     return buffer.raw[: read.value or size.value]
+
+
+@contextmanager
+def open_patched_archive(lib, base_path, patch_paths):
+    """Open the base archive and attach each patch in load order. Always closes the
+    archive handle on exit, even if a patch attach or a read raises."""
+    handle = ctypes.c_void_p()
+    if not lib.SFileOpenArchive(str(base_path).encode("utf-8"), 0, 0x00000100, ctypes.byref(handle)):
+        raise ArchiveError(f"SFileOpenArchive failed for {base_path}")
+    try:
+        for patch in patch_paths:
+            # StormLib returns false for a patch that does not apply to this base; skip it.
+            lib.SFileOpenPatchArchive(handle, str(patch).encode("utf-8"), b"", 0)
+        yield handle
+    finally:
+        lib.SFileCloseArchive(handle)
+
+
+def read_effective_member(lib, base_path, patch_paths, logical_path):
+    """Return the effective bytes of logical_path across the patched archive chain."""
+    with open_patched_archive(lib, base_path, patch_paths) as handle:
+        if not lib.SFileHasFile(handle, logical_path.encode("utf-8")):
+            raise ArchiveError(f"{logical_path}: not found in patched archive chain")
+        with open_file(lib, handle, logical_path) as fh:
+            return read_all(lib, fh)
+
+
+def member_exists(lib, base_path, patch_paths, logical_path):
+    with open_patched_archive(lib, base_path, patch_paths) as handle:
+        return bool(lib.SFileHasFile(handle, logical_path.encode("utf-8")))
