@@ -17,12 +17,21 @@ STORMLIB_FUNCTIONS = (
 
 
 def load_stormlib(explicit_path: str | None = None) -> ctypes.CDLL:
+    # An explicitly configured path (--stormlib or STORMLIB_PATH) is honored strictly:
+    # a failure to load there is a hard BackendUnavailable, never a silent fall-through
+    # to auto-discovery. This keeps the fail-closed guarantee independent of what happens
+    # to be installed on the machine.
+    configured = explicit_path or os.environ.get("STORMLIB_PATH")
+    if configured:
+        try:
+            lib = ctypes.CDLL(configured)
+        except OSError as exc:
+            raise BackendUnavailable(f"StormLib could not be loaded from {configured}: {exc}")
+        _bind(lib)
+        return lib
+
     tried: list[str] = []
     ordered: list[str] = []
-    if explicit_path:
-        ordered.append(explicit_path)
-    if os.environ.get("STORMLIB_PATH"):
-        ordered.append(os.environ["STORMLIB_PATH"])
     found = ctypes.util.find_library("storm")
     if found:
         ordered.append(found)
