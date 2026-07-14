@@ -169,6 +169,18 @@ A field that cannot be resolved to `confidence: high` blocks canonical emission 
 than shipping a nominally complete artifact marked `schema_match_confidence: low`. `schema_match_
 confidence: low` remains reserved for structural WDBC drift, a separate condition.
 
+**The loose `CharacterAdvancementData.json` is only a *partial* decode reference.** A real decode run
+(2026-07-14) showed it is stale and stripped: `MaxRank`/`Row` are absent from it entirely, `Tab`/`Type`
+are display-name strings not ids, and adjacency/cost/investment fields appear in only a small minority
+of entries, so only a few columns (e.g. `required_level`, `col`) prove `high` from it alone. Each field
+is therefore decoded from whatever *independent* evidence proves it — name-mediated FK resolution for
+`tab_type` (loose-JSON `Tab` name → `CharacterAdvancementTabTypes` id), a robust majority numeric→string
+mapping for `entry_type`, and node-id-domain + graph-invariant proof for adjacency. Where the Builder
+`entry_id` crosswalk is used to *propose* a mapping, that field carries `mapping_discovery_source:
+builder_crosswalk` and is accepted only after passing the independent checks above (never Builder
+agreement alone; Builder values are never copied in). Fields no independent evidence can yet prove stay
+`unresolved` and keep the Builder fallback — that is the expected, honest M1.14B outcome, not a failure.
+
 ## Attribution model
 
 Attribution answers **participation**, not exclusive ownership — M1.14C needs "does this spell
@@ -310,15 +322,15 @@ and tab-type tables (with `kind`, internal name, display name, rename provenance
   separate capability (level-by-level build validation, a new **M1.15 sub-milestone**), **not** a
   prerequisite for replacing the Builder as the max-level ownership/graph/legality source. M1.14B
   **extracts it raw with provenance** into `coa-client-essence-v1` (semantics documented as undecoded)
-  so it is present and auditable, and reports **`leveling_progression_ready: false`** — but it is
-  **NOT** a `flip_blocker`. Coupling a proven max-level graph to an unfinished leveling feature would
-  be a scope error.
+  so it is present and auditable, and reports **`leveling_progression_ready: false`** — but this
+  **never blocks** any max-level readiness dimension or `full_builder_retirement_ready`. Coupling a
+  proven max-level graph to an unfinished leveling feature would be a scope error.
 
-The parity report therefore emits **two independent verdicts**: `flip_ready` (max-level: ownership,
-adjacency, prerequisites, costs, gates, ranks, class/tab metadata, and the verified 26/25 caps all
-complete) and `leveling_progression_ready` (the per-level essence table decoded + validated). M1.14B
-targets `flip_ready: true` / `flip_blockers: []` with `leveling_progression_ready: false`. Level-by-level
-build validation gets its own future gate and cannot claim readiness until the progression table is decoded.
+Accordingly `leveling_progression_ready` is one entry in the scoped `readiness` object (see below): it
+stays `false` in M1.14B (the per-level essence table is extracted raw but not decoded), separate from
+and never blocking the max-level dimensions (`attribution_ready`/`ownership_ready`/`adjacency_ready`/
+per-field `legality`) or `full_builder_retirement_ready`. Level-by-level build validation gets its own
+future gate and cannot claim readiness until the progression table is decoded + validated.
 
 ### Decision 1 supersession is per-field, not wholesale (M1.15 adapter)
 
@@ -376,28 +388,45 @@ is unresolved (a flip-blocker), which is caught loudly instead of silently repor
 - **Legality parity (computed, Decision-22 classified):** for every matched node and every adapter
   legality field (`ae_cost`, `te_cost`, `required_level`, `required_tab_ae`, `required_tab_te`,
   `max_rank`, `row`, `col`), compare after normalization and classify: **(a)** the client field is
-  present but not proven `high` → extraction/layout defect → **blocks**; **(b)** client is `high` and
-  the normalized values differ → verified client-current difference → recorded, client wins, **does
-  not block**; **(c)** equal after normalization → representation difference, normalized away, no
-  diff; **(d)** the field is undecoded on the client side while the Builder supplies it, or any
-  difference that cannot be classified → **blocks**. Every difference is listed with its class; the
-  report never claims "no legality discrepancies" merely because no comparison ran.
+  present but not proven `high` → extraction/layout defect → field **`unresolved`**; **(b)** client is
+  `high` and the normalized values differ → verified client-current difference → recorded, client wins,
+  field **`ready`**; **(c)** equal after normalization → representation difference, normalized away,
+  field **`ready`**; **(d)** the field is undecoded on the client side while the Builder supplies it, or
+  any difference that cannot be classified → field **`unresolved`**. The class drives that field's
+  `readiness.legality[field]` (a/d → `unresolved`; b/c/proven-equal → `ready`); `row`/`col` map to
+  cosmetic `readiness.layout` and block nothing. Every difference is listed with its class; the report
+  never claims "no legality discrepancies" merely because no comparison ran.
 - **Currency corroboration:** the `805775` acid test plus a changelog spot-check confirm the client is
   live — used to corroborate that the client is current, not to override it.
 - **Report provenance pins** (Decision 10 reproducibility): client build, per-contributing-DBC sha256
   (CharacterAdvancement, ClassTypes, TabTypes, Essence, Spell), Builder artifact manifest/checksum +
   capture date + slug, extractor commit, the resolved class-type set, the resolved layout version, and
   the decode-report checksum.
-- **Two independent verdicts + `flip_blockers[]`.** The report ends with two booleans. **`flip_ready`**
-  (max-level) requires ALL of: exactly 21 playable CoA classes with the sentinel (35) excluded; the
-  Builder record count equals the pinned expected total (3,612); client and Builder inputs both
-  non-empty; the node-id crosswalk resolved; exact ownership (`builder_only` = `client_only` =
-  `identity_mismatches` = 0); zero adjacency mismatches; every adapter field decoded `high` (no
-  low-confidence field, no unresolved layout column); and zero Decision-22 class (a)/(d) legality
-  defects. Proven class-(b) legality-value differences are recorded but never block. **A raw
-  `essence_progression` table that is undecoded is NOT a `flip_blocker`** — it is reported separately
-  as **`leveling_progression_ready: false`** (the M1.15 leveling gate), because max-level legality
-  needs only the verified 26/25 caps, which are a retained constant, not a decoded value.
+- **Scoped, per-responsibility + per-field readiness (no single boolean).** A single `flip_ready`
+  boolean does not fit the evidence: a real client decode showed the loose `CharacterAdvancementData.json`
+  proves only some columns (e.g. `required_level`, `col`) while `max_rank`/`row` are absent from it
+  entirely and adjacency/`tab_type`/`entry_type` need dedicated decode paths — so ownership can be
+  canonical long before every legality scalar is. Per Decision 21 (per-field supersession) the report
+  instead exposes a `readiness` object, each dimension independently earned:
+
+      "readiness": {
+        "attribution_ready":  true|false,   # from the anchored class_type FK (col 32) — no legality dependency
+        "ownership_ready":     true|false,   # exact node-id ownership + zero identity_mismatches + cardinality/count guards
+        "adjacency_ready":     true|false,   # BOTH edge domains (connected + required) AND their meanings independently proven + zero adjacency_mismatches
+        "legality": { "<field>": "ready"|"unresolved", ... },   # per legality field (required_level, ae_cost, te_cost, required_tab_ae, required_tab_te, max_rank)
+        "layout":   { "row": "ready"|"unresolved", "col": "ready"|"unresolved" },   # cosmetic — NEVER blocks anything
+        "leveling_progression_ready": false,   # essence per-level table (M1.15), separate, never blocks max-level
+        "full_builder_retirement_ready": true|false   # roll-up: attribution+ownership+adjacency ready AND every REQUIRED legality field ready
+      }
+
+  Rules: **a proven field supersedes the Builder for that field alone; an unresolved field keeps the
+  Builder fallback with explicit per-field provenance.** Unresolved legality **does** block flipping
+  *that* legality field (and `full_builder_retirement_ready`) — it does **not** block `attribution_ready`
+  or `ownership_ready`. `layout.row`/`layout.col` are cosmetic and block nothing. The raw essence
+  progression table sets `leveling_progression_ready: false` separately and never blocks max-level
+  ownership. `full_builder_retirement_ready` stays false while any required responsibility is unresolved,
+  so M1.15 cannot claim full Builder retirement prematurely. The goal is honesty: progress is retained,
+  uncertainty stays visible, and no weak oracle is promoted into authority to make a global checkbox green.
 
 ## Decision impacts
 
@@ -411,6 +440,14 @@ is unresolved (a flip-blocker), which is caught loudly instead of silently repor
   semantic-layout validation, both passing for the fields being flipped. Fields the client cannot yet
   supply keep their existing source, explicitly marked. Until M1.15 performs the flip, the Builder
   remains the operative graph authority and the client artifact is validated-but-not-consumed.
+  **Builder-as-discovery-aid boundary.** The Builder `entry_id` crosswalk is valuable for *generating*
+  a column-mapping hypothesis, but Builder agreement can **never** be the sole proof that decodes a
+  field and then "independently" validates parity against itself — that is circular. A Builder-proposed
+  mapping is recorded as `mapping_discovery_source: builder_crosswalk` and is only accepted when it also
+  passes evidence that does not reduce to the Builder: client-wide semantic ranges/distributions, node-id-domain
+  validation, graph invariants, current in-game UI/tooltip spot-checks, and current-client-values winning
+  on disagreement. **Builder values are never copied into the client artifact** — only the client's own
+  decoded cells are emitted.
 - **New Decision 22 (client DBC is the canonical *offline* legality source; live corrections come
   from user-reported overrides, not the Builder).** The current client DBC is the canonical offline
   source for legality (AE/TE cost, gates, prerequisites, level, rank), extending Decision 18 from
@@ -430,43 +467,60 @@ is unresolved (a flip-blocker), which is caught loudly instead of silently repor
   until such an override supersedes it.
 
   Each client-vs-Builder legality difference is classified as: **(a) extraction/layout defect** — the
-  client field is not proven decoded correctly → **blocks the flip**; **(b) verified client-current
-  difference** — client decoded to `high` confidence and simply differs from the Builder → accepted,
-  client wins offline; **(c) representation difference** — same value, different encoding → normalized;
-  **(d) unresolved** — not yet decoded/classified → **blocks the flip** as an extraction concern. Only
-  (a) and (d) block; a genuine proven difference (b) never blocks.
+  client field is not proven decoded correctly → that field stays **`unresolved`** (keeps the Builder
+  fallback, blocks flipping that field and `full_builder_retirement_ready`); **(b) verified
+  client-current difference** — client decoded to `high` confidence and simply differs from the Builder
+  → accepted, client wins offline, field **`ready`**; **(c) representation difference** — same value,
+  different encoding → normalized, field **`ready`**; **(d) unresolved** — not yet decoded/classified →
+  field **`unresolved`**. Only (a) and (d) leave a field unresolved (per-field, not a global flip); a
+  genuine proven difference (b) is `ready`. An unresolved field never blocks `attribution_ready` or
+  `ownership_ready`.
 
-## Flip-gate pass/fail (consumed by M1.15)
+## Readiness gates (consumed by M1.15)
 
-M1.15 may flip the **max-level** canonical source (`flip_ready: true`) only when, for all 21 CoA classes:
+M1.15 supersedes the Builder **per responsibility, and within legality per field** (Decision 21), each
+gate earned independently on its own evidence. No global boolean; each dimension below is what turns its
+`readiness` entry `true`/`ready`.
 
-- Every advancement field feeding the adapter (identity, ownership, cost, gate, prerequisite,
-  adjacency, rank) is decoded at `confidence: high` and passes semantic validation. **Ownership FK
-  fields `tab_type` and `entry_type` are confidence-gated for emission exactly like the legality
-  scalars** — a node's tab and entry type are emitted only when their columns proved `high`, so a
-  wrong column that coincidentally resolves to a valid FK is withheld rather than shipped. The numeric
-  `entry_type` → string mapping is itself proven in the decode report, not hard-coded on faith.
-- **Node-identity ownership is exact** after the alpha→display rename: the client `node_id` set equals
-  the Builder `entry_id` set (both `builder_only` and `client_only` empty), with zero
-  `identity_mismatches` (matched ids whose `(spell_id, class, tab, entry_type)` tuple disagrees). The
-  playable-class set has cardinality exactly 21 and the sentinel (35) is excluded; the Builder record
-  count equals the pinned expected total (3,612); client and Builder inputs are both non-empty.
-- All adjacency references resolve in their proven ID domain (no dangling/unresolved) **and match the
-  Builder per node** (zero `adjacency_mismatches`), proven independently for `ConnectedNodes` and
-  `RequiredIDs`.
-- The per-class/per-tab advancement subgraphs satisfy the graph invariants (roots exist, all nodes
-  reachable, no dangling prerequisites, no forbidden cycles, no orphans).
-- Class/tab metadata artifacts are present and resolve. The verified essence **caps (26/25)** are
-  available as a versioned `verified_constant`/retained fallback (Decision 21) — they are **not**
-  decoded from the DBC and are **not** a blocker.
-- Every remaining client-vs-Builder legality difference is classified per Decision 22, with **zero**
-  in classes (a) extraction/layout defect or (d) unresolved; genuine class-(b) differences (client
-  wins offline) are permitted.
+- **`attribution_ready`** (for all 21 CoA classes): the class-type FK (col 32, structurally anchored)
+  resolves, the playable-CoA set has cardinality exactly 21 with the sentinel (35) excluded, and the
+  participation model (`is_coa`/`modes`/`memberships`) is populated from it. Attribution rests on the
+  anchor, **not** on any decoded legality column, so it can be ready while legality is not.
+- **`ownership_ready`**: node-identity ownership is exact after the alpha→display rename — the client
+  CoA `node_id` set equals the Builder `entry_id` set (both `builder_only` and `client_only` empty),
+  zero `identity_mismatches` (matched ids whose `(spell_id, class, tab, entry_type)` tuple disagrees),
+  the playable set is exactly 21 with 35 excluded, the Builder record count equals the pinned total
+  (3,612), and client and Builder inputs are both non-empty. Independent of legality decode.
+- **`adjacency_ready`**: **both** edge domains AND their **meanings** are independently proven — the
+  `connected` and `required` blocks each resolve in the node-id domain (no dangling/unresolved), their
+  meaning (which block is ConnectedNodes vs RequiredIDs) is established by evidence that does **not**
+  reduce to Builder agreement alone (graph invariants: connected edges reachable from roots, required
+  edges acyclic; plus current-client-wins on disagreement), and they match the Builder per node (zero
+  `adjacency_mismatches`). The Builder crosswalk may *propose* the block→meaning hypothesis
+  (`mapping_discovery_source: builder_crosswalk`) but never be its sole proof.
+- **Per-field `legality[field]`** ∈ {`ready`, `unresolved`}: a field is `ready` only when its column
+  decoded to `confidence: high`, its values pass independent semantic validation (client-wide range /
+  distribution, node-id-domain for reference fields), and its Decision-22 classification is not (a) or
+  (d). An `unresolved` field is **not** promoted: it keeps the Builder fallback with explicit per-field
+  provenance and **blocks flipping that field** (and `full_builder_retirement_ready`), while never
+  blocking attribution or ownership. `tab_type`/`entry_type` are confidence-gated for emission exactly
+  like legality scalars; the numeric `entry_type` → string mapping is proven in the decode report, not
+  hard-coded.
+- **`layout.row`/`layout.col`** ∈ {`ready`, `unresolved`}: cosmetic position fields, recorded for
+  completeness; they **block nothing** (not legality, not attribution, not retirement).
+- **`full_builder_retirement_ready`**: the roll-up — `true` only when `attribution_ready`,
+  `ownership_ready`, `adjacency_ready`, and every **required** legality field (`required_level`,
+  `ae_cost`, `te_cost`, `required_tab_ae`, `required_tab_te`, `max_rank`) are all ready, and the
+  per-class/per-tab subgraphs satisfy the graph invariants (roots exist, all nodes reachable, no
+  dangling prerequisites, no forbidden cycles, no orphans). While any required responsibility is
+  unresolved this stays `false`, so M1.15 cannot claim full Builder retirement prematurely. The verified
+  essence **caps (26/25)** are a versioned `verified_constant`/retained fallback (Decision 21), not a
+  decoded value and not part of this roll-up.
 
 The raw `coa-client-essence-v1` progression table being undecoded sets **`leveling_progression_ready:
-false`** and is **not** a `flip_ready` blocker. Level-by-level build validation is a separate M1.15
-sub-milestone with its own gate (decode + validate the progression table) that consumes
-`leveling_progression_ready`.
+false`** separately; it never blocks max-level ownership or `full_builder_retirement_ready`. Level-by-level
+build validation is a separate M1.15 sub-milestone with its own gate (decode + validate the progression
+table) that consumes `leveling_progression_ready`.
 
 ## Error handling
 
@@ -503,11 +557,14 @@ Same three tiers as M1.14A; all committed fixtures synthetic/self-authored (redi
    - `artifacts`: `coa-client-advancement-v1` schema incl. `field_confidence`, `raw`, per-table
      provenance; stable `memberships[]` for a shared spell (503748 shape); `supersedes` present.
    - `parity`: synthetic mini-oracle vs synthetic graph exercising the real crosswalk — node-id
-     ownership (builder-only AND client-only both block), a semantic-tuple `identity_mismatch`, a
-     computed `adjacency_mismatch` (connected/required differ per node), a computed legality diff of
-     each Decision-22 class (a/b/c/d) with only (a)/(d) blocking, per-class and per-tab counts, the
-     cardinality/expected-count/non-empty gates, and `leveling_progression_ready: false` with an empty
-     `flip_blockers` when the max-level graph is clean.
+     ownership (builder-only AND client-only both block `ownership_ready`), a semantic-tuple
+     `identity_mismatch`, a computed `adjacency_mismatch` (connected/required differ per node), a
+     computed legality diff of each Decision-22 class (a/b/c/d) driving per-field `legality[field]`
+     readiness (only (a)/(d) leave a field `unresolved`), per-class and per-tab counts, the
+     cardinality/expected-count/non-empty gates, and the scoped `readiness` object: `attribution_ready`
+     and `ownership_ready` earned independently of legality, an `unresolved` legality field blocking
+     `full_builder_retirement_ready` but NOT ownership/attribution, `layout.row`/`layout.col` blocking
+     nothing, and `leveling_progression_ready: false` separate.
    - `graph invariants`: synthetic subgraphs exercising a missing root, an unreachable node, a
      prerequisite cycle, and an orphan — each rejected.
    - missing class/tab/essence companion rows handled.
@@ -517,9 +574,12 @@ Same three tiers as M1.14A; all committed fixtures synthetic/self-authored (redi
    the real `regenerate` API; assert exact node-id ownership over the 3,612 Builder records after
    rename (both `builder_only` and `client_only` zero), exactly 21 playable classes (sentinel
    excluded), shared node `503748` yields two Witch Doctor memberships, `805775` →
-   `is_coa: true`/Venomancer/*Adrenal Venom*, each adjacency set matches the Builder per node, the
-   parity report generates with all provenance pins, and the report reads
-   `flip_ready: true` / `flip_blockers: []` / `leveling_progression_ready: false`.
+   `is_coa: true`/Venomancer/*Adrenal Venom*, the parity report generates with all provenance pins,
+   and the scoped `readiness` reads `attribution_ready: true` and `ownership_ready: true`, with
+   `leveling_progression_ready: false` and `full_builder_retirement_ready: false` while required
+   legality/adjacency remain unresolved. Each `readiness.legality[field]` and `adjacency_ready` value
+   matches what the committed decode report actually proved (the test asserts the *structure and
+   consistency* of the readiness object against the decode evidence, not a hard-coded all-green).
 
 Testing standards follow M1.14E: assertions check intended behavior (ownership, semantic validity,
 parity math), never incidental output.
@@ -539,13 +599,16 @@ parity math), never incidental output.
   exact node-id ownership over the 3,612 Builder records after rename (`builder_only` and `client_only`
   both zero, zero `identity_mismatches`), per-class and per-tab node counts, per-node adjacency parity
   (`connected_node_ids` and `required_ids` matched against the Builder), every legality discrepancy
-  classified into the Decision 22 categories (with (a)/(d) flip-blocking), and all Decision 10
-  provenance pins (including extractor commit, Builder capture/slug/manifest, resolved class set, and
-  decode-report checksum).
-- The report emits two verdicts: `flip_ready` (max-level graph/legality complete, per the flip-gate
-  section — including exactly 21 playable classes, sentinel excluded, and the pinned 3,612 Builder
-  count) and `leveling_progression_ready` (false in M1.14B; the raw essence table is extracted but its
-  per-level decode is deferred to the M1.15 leveling sub-milestone and is NOT a `flip_blocker`).
+  classified into the Decision 22 categories (with (a)/(d) leaving that field `unresolved`), and all
+  Decision 10 provenance pins (including extractor commit, Builder capture/slug/manifest, resolved class
+  set, decode-report checksum, and per-Builder-proposed-mapping `mapping_discovery_source`).
+- The report emits the scoped `readiness` object (Decision 21): `attribution_ready` and `ownership_ready`
+  earned from the structural anchors independently of legality; `adjacency_ready` only when both edge
+  domains and their meanings are independently proven; per-field `legality[...]` and cosmetic
+  `layout.row`/`layout.col`; `leveling_progression_ready: false` (essence raw, deferred to M1.15, never
+  blocking); and `full_builder_retirement_ready` false while any required responsibility is unresolved.
+  M1.14B targets `attribution_ready: true` and `ownership_ready: true`; every other dimension reports
+  its honest, evidence-backed state rather than being forced green.
 - The playable-CoA class set is asserted to have cardinality exactly 21; the `ConquestOfAzeroth`
   sentinel is excluded from playable classes.
 - The loose `CharacterAdvancementData.json` is retained only as a QA drift signal; nothing downstream
