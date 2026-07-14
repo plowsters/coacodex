@@ -62,9 +62,10 @@ def read_advancement(ca, class_types, tab_types, layout) -> list[AdvancementNode
     conf_map = L.confidence or {}
     nodes: list[AdvancementNode] = []
     # Ownership FK columns are confidence-gated exactly like legality scalars: a node's tab and entry
-    # type are emitted only when their columns proved `high`. A wrong column that coincidentally
-    # resolves to a valid FK is withheld (tab_type_id=0 / entry_type="") and then blocks in
-    # validate_semantics, rather than being shipped as canonical ownership.
+    # type are emitted only when their columns proved `high`. A wrong (or simply undecoded) column is
+    # withheld (tab_type_id=0 / entry_type="") rather than shipped as canonical ownership. A withheld
+    # field is NOT a semantic error — it is honestly unresolved and reported per-field by the parity
+    # readiness gate (Decision 21); validate_semantics only rejects a *decoded* value that is invalid.
     tab_ok = L.tab_type_col is not None and conf_map.get("tab_type") == "high"
     entry_ok = L.entry_type_col is not None and conf_map.get("entry_type") == "high"
     for row in ca.rows:
@@ -121,10 +122,12 @@ def validate_semantics(nodes, class_types, tab_types) -> None:
             raise DbcSemanticError("node id 0 is invalid")
         if n.class_kind == "unknown":
             raise DbcSemanticError(f"node {n.node_id}: unknown class type {n.class_type_id}")
+        # A *decoded* ownership FK must resolve; a *withheld* one (tab_type_id=0 / entry_type="") is
+        # honestly unresolved (reported by the parity readiness gate), NOT a semantic error — so both
+        # are guarded by presence. entry_type, when present, comes from the proven entry_type_map and
+        # is valid by construction, so it needs no further check.
         if n.tab_type_id and n.tab_type_id not in tab_types:
             raise DbcSemanticError(f"node {n.node_id}: unknown tab type {n.tab_type_id}")
-        if n.entry_type == "":
-            raise DbcSemanticError(f"node {n.node_id}: unknown entry_type")
         for adj_field in _ADJ_FIELDS:
             for ref in n.legality.get(adj_field, []):
                 if ref == n.node_id:

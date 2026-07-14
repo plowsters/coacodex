@@ -98,13 +98,16 @@ def test_validate_semantics_rejects_duplicate_and_zero_node_ids():
         validate_semantics(zero, _class_types(), _tab_types())
 
 
-def test_validate_semantics_rejects_unknown_tab_and_entry():
+def test_validate_semantics_rejects_decoded_unknown_tab_but_allows_unresolved_entry():
+    # a DECODED tab_type_id outside the tab-types domain is real drift -> raises
     bad_tab = read_advancement(_ca([_row(1, 100, 33, tab=777)]), _class_types(), _tab_types(), _layout())
     with pytest.raises(DbcSemanticError, match="unknown tab"):
         validate_semantics(bad_tab, _class_types(), _tab_types())
-    bad_entry = read_advancement(_ca([_row(1, 100, 33, entry=99)]), _class_types(), _tab_types(), _layout())
-    with pytest.raises(DbcSemanticError, match="unknown entry_type"):
-        validate_semantics(bad_entry, _class_types(), _tab_types())
+    # an entry value outside the proven map yields entry_type="" (honestly unresolved for that node);
+    # under the scoped-readiness model that is NOT a semantic error -> must NOT raise.
+    unresolved = read_advancement(_ca([_row(1, 100, 33, entry=99)]), _class_types(), _tab_types(), _layout())
+    assert unresolved[0].entry_type == ""
+    validate_semantics(unresolved, _class_types(), _tab_types())   # no raise
 
 
 def test_validate_semantics_rejects_self_reference_and_excessive_cost():
@@ -118,14 +121,24 @@ def test_validate_semantics_rejects_self_reference_and_excessive_cost():
 
 def test_tab_type_and_entry_type_are_confidence_gated():
     # a layout that did NOT prove tab_type/entry_type high must withhold them (ownership is gated
-    # exactly like legality) -> tab withheld, entry_type "" -> validate_semantics then blocks.
+    # exactly like legality) -> tab withheld, entry_type "". A withheld field is honestly unresolved
+    # (reported by the parity readiness gate), NOT a semantic error -> validate_semantics must NOT raise.
     layout = _layout(confidence={"ae_cost": "high"})   # tab_type/entry_type absent -> not high
     n = read_advancement(_ca([_row(1, 100, 33, tab=1, entry=0)]),
                          _class_types(), _tab_types(), layout)[0]
     assert n.tab_type_id == 0 and n.tab_name == ""     # withheld, not shipped as ownership
     assert n.entry_type == ""
-    with pytest.raises(DbcSemanticError, match="unknown entry_type"):
-        validate_semantics([n], _class_types(), _tab_types())
+    validate_semantics([n], _class_types(), _tab_types())   # withheld metadata does not block
+
+
+def test_withheld_entry_type_alone_does_not_block_extraction():
+    # the real-decode-plausible ASYMMETRIC case: tab_type proves high but entry_type does not. Under
+    # the scoped-readiness model an unresolved entry_type must NOT fail-close the whole extraction
+    # (it is reported per-field by the readiness gate); only a DECODED-but-invalid value would.
+    layout = _layout(confidence={"tab_type": "high"})   # entry_type not high -> withheld
+    nodes = read_advancement(_ca([_row(1, 100, 33, tab=1, entry=0)]), _class_types(), _tab_types(), layout)
+    assert nodes[0].tab_name == "Class" and nodes[0].entry_type == ""
+    validate_semantics(nodes, _class_types(), _tab_types())   # no raise on unresolved metadata
 
 
 def test_graph_invariants_reject_missing_root():
