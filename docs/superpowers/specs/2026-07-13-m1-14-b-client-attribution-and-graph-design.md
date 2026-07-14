@@ -53,10 +53,10 @@ the Builder oracle (`coa_scraper/dist/coa_entries.jsonl`: 3,612 records, 3,611 u
    - **100% unique-spell class attribution** — once the alpha→display class rename (below) is applied,
      every *distinct* Builder spell maps to the expected client class (3,611/3,611 unique spell IDs).
      Without the rename it *looks* like 85.5%; the 523-spell "gap" was exactly the three renamed
-     classes. This is unique-spell, **not** node-level: full node-level parity — the duplicated spell
-     and per-`(tab, entry_type)` multiplicity, measured as a multiset over the **3,612** Builder
-     records — is an M1.14B acceptance deliverable (see §Node-level Builder-parity validation), not yet
-     established.
+     classes. This is unique-spell, **not** node-level: full node-level parity — an exact node-id
+     (`entry_id`↔`node_id`) crosswalk over the **3,612** Builder records, proving ownership, identity,
+     adjacency, and legality per node — is an M1.14B acceptance deliverable (see §Node-level
+     Builder-parity validation), not yet established.
    - **Current** — its row for spell `805775` reads *Adrenal Venom*, while the loose
      `CharacterAdvancementData.json` (a stale 2026-02-08 export of this table) and db.ascension.gg
      still say *Fang Venom: Lifeblood*.
@@ -193,6 +193,13 @@ explicit evidence truth table (no informal "corroboration raises confidence"):
 - **Primary signal = the advancement registry.** Skill-line and ID-range are only consulted for the
   small set of client records *absent* from the graph; ID range alone contributes no mode (it
   separates custom from stock, not CoA from Reborn).
+- **The "CoA skill line" set is proven empirically, not the class-band range.** Discovery showed CoA
+  advancement spells attach to per-**spec** `SkillLine`s (Venomancer → Stalking/Rot/…), not only the
+  class-band display lines 475–495, so a 475–495-only fallback would miss most of them. The set is
+  derived at extraction time as **the `SkillLine`s that carry ≥1 spell already attributed `coa` by the
+  registry** (join `SkillLineAbility` → graph CoA spells → the skill lines those spells belong to);
+  a graph-absent spell sharing one of those proven CoA lines is the only thing the medium-confidence
+  fallback fires on. This keeps the fallback grounded in proven evidence rather than a guessed range.
 - **`archive_family` is retained as raw provenance only** (known uninformative).
 - **The Builder is never an input to membership or mode attribution.** It is the oracle used to
   *measure* this model. Absence from the Builder is never negative evidence.
@@ -288,15 +295,30 @@ Node records alone cannot retire the Builder pipeline, which also consumes class
 (`coa_classes.json`) and essence caps (`coa_essence_caps.json`). M1.14B emits the resolved class-type
 and tab-type tables (with `kind`, internal name, display name, rename provenance).
 
-**Essence (corrected against the real client):** the per-class essence *caps* are uniform documented
-constants (max Ability Essence 26 / Talent Essence 25, identical across classes — verified in
-`coa_essence_caps.json`), not a DBC-decoded quantity, so there is nothing to "decode to `high`" for
-caps. The client `CharacterAdvancementEssence` table (5,440 rows; columns `1..80 × 1..32`) is instead
-per-level/per-tier *essence-progression* data — a leveling input, not caps. M1.14B **extracts that
-table raw with provenance** into `coa-client-essence-v1` (semantics documented as undecoded) so it is
-present and auditable; **decoding its per-level semantics is an M1.15 leveling gate item**, surfaced
-explicitly as an `essence_progression` entry in the parity report's `flip_blockers` (see below), not
-silently deferred.
+**Essence — two distinct quantities, two distinct readiness states (resolved with the project owner):**
+
+- **Caps** (max Ability Essence 26 / Talent Essence 25) are the pool sizes that gate a *completed
+  max-level build*. They are uniform across classes and are carried as a **versioned
+  `verified_constant`** (currently the values in `coa_essence_caps.json`), **not decoded from
+  `CharacterAdvancementEssence`** — the design must never imply they were. Under Decision 21's
+  per-field rule they are an explicitly-retained fallback source with honest provenance
+  (`source: verified_constant`, `corroboration: pending_client_ui`) until corroborated against the
+  live client UI / behavior. Because CoA Codex validates max-level builds, the caps are the only
+  essence quantity the legality flip needs, and they are already available.
+- **Per-level/per-tier progression** — the `CharacterAdvancementEssence` table (5,440 rows; columns
+  `1..80 × 1..32`) — is *leveling* data: how much essence is available at each level/tier. It is a
+  separate capability (level-by-level build validation, a new **M1.15 sub-milestone**), **not** a
+  prerequisite for replacing the Builder as the max-level ownership/graph/legality source. M1.14B
+  **extracts it raw with provenance** into `coa-client-essence-v1` (semantics documented as undecoded)
+  so it is present and auditable, and reports **`leveling_progression_ready: false`** — but it is
+  **NOT** a `flip_blocker`. Coupling a proven max-level graph to an unfinished leveling feature would
+  be a scope error.
+
+The parity report therefore emits **two independent verdicts**: `flip_ready` (max-level: ownership,
+adjacency, prerequisites, costs, gates, ranks, class/tab metadata, and the verified 26/25 caps all
+complete) and `leveling_progression_ready` (the per-level essence table decoded + validated). M1.14B
+targets `flip_ready: true` / `flip_blockers: []` with `leveling_progression_ready: false`. Level-by-level
+build validation gets its own future gate and cannot claim readiness until the progression table is decoded.
 
 ### Decision 1 supersession is per-field, not wholesale (M1.15 adapter)
 
@@ -326,36 +348,56 @@ such field is explicitly marked** so the remaining Builder surface is auditable 
 ## Node-level Builder-parity validation
 
 `parity.py` produces `reports/client_extract/coa_builder_parity_report.json` over all 21 CoA classes.
-It measures node-level, not spell-level:
+It measures node-level, not spell-level, and it **actually computes** every comparison it reports —
+adjacency and legality diffs are derived inside the report from a real crosswalk, never accepted as
+pre-computed inputs a caller might leave empty.
 
-- **Node counts**: advancement nodes per class/spec vs Builder records; client-only and Builder-only
-  node instances enumerated.
-- **Unique-spell recall** and **spell multiplicity** per class/spec (so shared nodes like `503748`
-  are counted, not collapsed).
-- **Compound-key ownership (multiset)**: agreement on `(spell_id, class, tab, entry_type, occurrence)`
-  measured as a multiset over the **3,612** Builder records (or an explicit Builder-entry↔DBC-node
-  crosswalk), so the duplicated spell `503748` and per-tab/type multiplicity are counted, not
-  collapsed. Every mismatch listed.
-- **Adjacency parity**: `ConnectedNodes`/`RequiredIDs` sets compared per node, each in its
-  independently-proven ID domain.
-- **Legality comparison**: AE/TE cost, level, gates — reported as differences, **not** value pass/fail,
-  because the client is the offline authority (Decision 22). Each difference is classified into the
-  Decision 22 categories (a) extraction/layout defect, (b) verified client-current difference,
-  (c) representation difference, (d) unresolved — with (a)/(d) flagged flip-blocking.
-- **Currency corroboration**: the `805775` acid test plus a changelog spot-check confirm the client
-  is live — used to corroborate that the client is current, not to override it.
-- **Report provenance pins** (Decision 10 reproducibility): client build, per-contributing-DBC
-  sha256 (CharacterAdvancement, ClassTypes, TabTypes, Essence, Spell), Builder artifact
-  manifest/checksum + capture date + slug, extractor commit, the resolved class-type set, and the
-  resolved layout version.
-- **`flip_ready` verdict + `flip_blockers[]`.** The report ends with an explicit boolean `flip_ready`
-  and a `flip_blockers` list. Blockers are extraction-correctness failures — **any** ownership or
-  identity mismatch (non-exact multiset: builder-only or client-only CoA node instances ≠ 0), any
-  adjacency mismatch, any field below `high` confidence, an unresolved layout column, or
-  `essence_progression` still undecoded. Proven client-vs-Builder *legality value* differences
-  (Decision 22 class (b)) are recorded but are **not** blockers. Exact multiset ownership equality is
-  required: recall **and** precision over CoA nodes must both be 1.0 — a client graph that contains
-  every Builder node plus extra/wrongly-attributed CoA nodes is **not** flip-ready.
+**Node-identity crosswalk (the foundation).** Each Builder record carries `entry_id` — the
+advancement-row node id — plus `connected_node_ids`, `required_ids`, and every legality field
+(measured: 3,612 records, 3,612 unique `entry_id`s; Builder adjacency references `entry_id`s). The DBC
+node identity is `CharacterAdvancement` col 0. The report crosswalks **client `node_id` ↔ Builder
+`entry_id`** directly, then *proves the id spaces align* rather than assuming it: for every matched id
+it checks the semantic tuple `(spell_id, class_display, tab_name, entry_type)` agrees. A high match
+rate with agreeing tuples proves the shared numbering; near-zero agreement means the crosswalk itself
+is unresolved (a flip-blocker), which is caught loudly instead of silently reporting 100%.
+
+- **Ownership (exact set over node ids):** `builder_only = entry_ids − client_coa_node_ids` and
+  `client_only = client_coa_node_ids − entry_ids`. Both must be empty. A client graph that covers
+  every Builder node but adds extra/wrongly-attributed CoA nodes is **not** flip-ready (`client_only`
+  ≠ 0 blocks — precision as well as recall). `identity_mismatches` = matched ids whose semantic tuple
+  disagrees (a decode/attribution defect; blocks).
+- **Per class AND per tab/spec counts:** node counts, `client_only`, `builder_only`, and mismatch
+  tallies are broken out by class and by `(class, tab)`, not class alone, so the duplicated spell
+  `503748` (two Witch Doctor nodes on different tabs) and per-tab multiplicity are visible.
+- **Adjacency parity (computed):** for every matched node, compare the client `connected_node_ids`
+  set vs the Builder's, and `required_ids` vs the Builder's, each in the shared node-id domain.
+  `adjacency_mismatches` is the count of nodes whose either set differs; each is listed. Any mismatch
+  blocks.
+- **Legality parity (computed, Decision-22 classified):** for every matched node and every adapter
+  legality field (`ae_cost`, `te_cost`, `required_level`, `required_tab_ae`, `required_tab_te`,
+  `max_rank`, `row`, `col`), compare after normalization and classify: **(a)** the client field is
+  present but not proven `high` → extraction/layout defect → **blocks**; **(b)** client is `high` and
+  the normalized values differ → verified client-current difference → recorded, client wins, **does
+  not block**; **(c)** equal after normalization → representation difference, normalized away, no
+  diff; **(d)** the field is undecoded on the client side while the Builder supplies it, or any
+  difference that cannot be classified → **blocks**. Every difference is listed with its class; the
+  report never claims "no legality discrepancies" merely because no comparison ran.
+- **Currency corroboration:** the `805775` acid test plus a changelog spot-check confirm the client is
+  live — used to corroborate that the client is current, not to override it.
+- **Report provenance pins** (Decision 10 reproducibility): client build, per-contributing-DBC sha256
+  (CharacterAdvancement, ClassTypes, TabTypes, Essence, Spell), Builder artifact manifest/checksum +
+  capture date + slug, extractor commit, the resolved class-type set, the resolved layout version, and
+  the decode-report checksum.
+- **Two independent verdicts + `flip_blockers[]`.** The report ends with two booleans. **`flip_ready`**
+  (max-level) requires ALL of: exactly 21 playable CoA classes with the sentinel (35) excluded; the
+  Builder record count equals the pinned expected total (3,612); client and Builder inputs both
+  non-empty; the node-id crosswalk resolved; exact ownership (`builder_only` = `client_only` =
+  `identity_mismatches` = 0); zero adjacency mismatches; every adapter field decoded `high` (no
+  low-confidence field, no unresolved layout column); and zero Decision-22 class (a)/(d) legality
+  defects. Proven class-(b) legality-value differences are recorded but never block. **A raw
+  `essence_progression` table that is undecoded is NOT a `flip_blocker`** — it is reported separately
+  as **`leveling_progression_ready: false`** (the M1.15 leveling gate), because max-level legality
+  needs only the verified 26/25 caps, which are a retained constant, not a decoded value.
 
 ## Decision impacts
 
@@ -396,29 +438,49 @@ It measures node-level, not spell-level:
 
 ## Flip-gate pass/fail (consumed by M1.15)
 
-M1.15 may flip the canonical source only when, for all 21 CoA classes:
+M1.15 may flip the **max-level** canonical source (`flip_ready: true`) only when, for all 21 CoA classes:
 
 - Every advancement field feeding the adapter (identity, ownership, cost, gate, prerequisite,
-  adjacency, rank) is decoded at `confidence: high` and passes semantic validation.
-- Node-level ownership agreement is 100% after the alpha→display rename, measured as a **multiset**
-  over the 3,612 Builder records (compound identity `(spell_id, class, tab, entry_type, occurrence)`,
-  or a direct Builder-entry↔DBC-node crosswalk), not as a set over the 3,611 unique spell IDs; the
-  playable-class set has cardinality exactly 21 and the sentinel is excluded.
-- All adjacency references resolve in their proven ID domain (no dangling/unresolved), proven
-  independently for `ConnectedNodes` and `RequiredIDs`.
-- Class/tab metadata artifacts are present and resolve; the raw `coa-client-essence-v1` table is
-  extracted with provenance, and its per-level decode is listed as an `essence_progression`
-  flip-blocker (an M1.15 leveling item), not silently deferred. Per-class essence caps are documented
-  constants (AE 26 / TE 25), not a DBC-decoded value.
+  adjacency, rank) is decoded at `confidence: high` and passes semantic validation. **Ownership FK
+  fields `tab_type` and `entry_type` are confidence-gated for emission exactly like the legality
+  scalars** — a node's tab and entry type are emitted only when their columns proved `high`, so a
+  wrong column that coincidentally resolves to a valid FK is withheld rather than shipped. The numeric
+  `entry_type` → string mapping is itself proven in the decode report, not hard-coded on faith.
+- **Node-identity ownership is exact** after the alpha→display rename: the client `node_id` set equals
+  the Builder `entry_id` set (both `builder_only` and `client_only` empty), with zero
+  `identity_mismatches` (matched ids whose `(spell_id, class, tab, entry_type)` tuple disagrees). The
+  playable-class set has cardinality exactly 21 and the sentinel (35) is excluded; the Builder record
+  count equals the pinned expected total (3,612); client and Builder inputs are both non-empty.
+- All adjacency references resolve in their proven ID domain (no dangling/unresolved) **and match the
+  Builder per node** (zero `adjacency_mismatches`), proven independently for `ConnectedNodes` and
+  `RequiredIDs`.
+- The per-class/per-tab advancement subgraphs satisfy the graph invariants (roots exist, all nodes
+  reachable, no dangling prerequisites, no forbidden cycles, no orphans).
+- Class/tab metadata artifacts are present and resolve. The verified essence **caps (26/25)** are
+  available as a versioned `verified_constant`/retained fallback (Decision 21) — they are **not**
+  decoded from the DBC and are **not** a blocker.
 - Every remaining client-vs-Builder legality difference is classified per Decision 22, with **zero**
   in classes (a) extraction/layout defect or (d) unresolved; genuine class-(b) differences (client
   wins offline) are permitted.
 
+The raw `coa-client-essence-v1` progression table being undecoded sets **`leveling_progression_ready:
+false`** and is **not** a `flip_ready` blocker. Level-by-level build validation is a separate M1.15
+sub-milestone with its own gate (decode + validate the progression table) that consumes
+`leveling_progression_ready`.
+
 ## Error handling
 
-- Reuses M1.14A's drift path for structural WDBC drift on the new tables.
+- **Canonical regeneration parses strict.** Every contributing table read for a *canonical* artifact
+  is parsed with `strict=True` (`parse_dbc(..., strict=True)` for the named `*Types` tables,
+  `parse_positional(..., strict=True)` for the wide `CharacterAdvancement`/`Essence` tables), so a
+  structural header mismatch raises before any artifact is written — a canonical artifact is never
+  emitted with `header_drift: true`. Non-strict parsing is confined to the diagnostic
+  `decode-advancement` command, which is exploratory and writes no canonical output.
 - **Semantic-validation failure blocks canonical emission** of the affected field (distinct from
   structural drift), with the failing field, expected domain/range, and offending values reported.
+- **Graph-invariant failure blocks canonical emission**: per class/tab, the reader checks for at least
+  one root, reachability of every node from the roots, no dangling prerequisites, no cycles in the
+  prerequisite (`RequiredIDs`) graph, and no orphaned nodes, raising `DbcSemanticError` on violation.
 - A class-type/tab-type FK outside known bands is flagged (possible new CoA class or drift).
 - Fail-closed and effective-chain rules (Decision 20) unchanged: read the effective patch-chain copy
   of every table (not `patch-M` directly), and write nothing without StormLib.
@@ -440,17 +502,24 @@ Same three tiers as M1.14A; all committed fixtures synthetic/self-authored (redi
      true` with the stock membership retained, not overwritten.
    - `artifacts`: `coa-client-advancement-v1` schema incl. `field_confidence`, `raw`, per-table
      provenance; stable `memberships[]` for a shared spell (503748 shape); `supersedes` present.
-   - `parity`: synthetic mini-oracle vs synthetic graph → node counts, unique-spell recall, spell
-     multiplicity, compound-key ownership, adjacency parity, and a required extraction-defect
-     discrepancy flagged as flip-blocking while a client-authoritative value difference is not.
+   - `parity`: synthetic mini-oracle vs synthetic graph exercising the real crosswalk — node-id
+     ownership (builder-only AND client-only both block), a semantic-tuple `identity_mismatch`, a
+     computed `adjacency_mismatch` (connected/required differ per node), a computed legality diff of
+     each Decision-22 class (a/b/c/d) with only (a)/(d) blocking, per-class and per-tab counts, the
+     cardinality/expected-count/non-empty gates, and `leveling_progression_ready: false` with an empty
+     `flip_blockers` when the max-level graph is clean.
+   - `graph invariants`: synthetic subgraphs exercising a missing root, an unreachable node, a
+     prerequisite cycle, and an orphan — each rejected.
    - missing class/tab/essence companion rows handled.
 2. **Native integration test** (`@pytest.mark.stormlib`, miniature MPQs): a base `CharacterAdvancement.dbc`
    overridden by a patch; assert effective-chain resolution and per-table provenance.
-3. **Local-client acceptance test** (`@pytest.mark.client`, real install): extract the real graph;
-   assert 100% **multiset** node-level ownership over the 3,612 Builder records after rename, exactly
-   21 playable classes (sentinel excluded), shared node `503748` yields two Witch Doctor memberships,
-   `805775` → `is_coa: true`/Venomancer/*Adrenal Venom*, each adjacency field resolves in its proven
-   domain, and the parity report generates with all provenance pins.
+3. **Local-client acceptance test** (`@pytest.mark.client`, real install): extract the real graph via
+   the real `regenerate` API; assert exact node-id ownership over the 3,612 Builder records after
+   rename (both `builder_only` and `client_only` zero), exactly 21 playable classes (sentinel
+   excluded), shared node `503748` yields two Witch Doctor memberships, `805775` →
+   `is_coa: true`/Venomancer/*Adrenal Venom*, each adjacency set matches the Builder per node, the
+   parity report generates with all provenance pins, and the report reads
+   `flip_ready: true` / `flip_blockers: []` / `leveling_progression_ready: false`.
 
 Testing standards follow M1.14E: assertions check intended behavior (ownership, semantic validity,
 parity math), never incidental output.
@@ -466,10 +535,17 @@ parity math), never incidental output.
   `coa-client-essence-v1` metadata are emitted.
 - `coa_attribution` on `coa-client-spell-v1` is filled from the truth table; `805775` is
   `is_coa: true`/Venomancer/`high` with current mechanical data.
-- The node-level parity report covers all 21 CoA classes: 100% **multiset** node-level ownership over
-  the 3,612 Builder records after rename, node counts + spell multiplicity + adjacency parity
-  reported, every legality discrepancy classified into the Decision 22 categories (with (a)/(d)
-  flip-blocking), and all Decision 10 provenance pins.
+- The node-level parity report covers all 21 CoA classes and **computes** every comparison it reports:
+  exact node-id ownership over the 3,612 Builder records after rename (`builder_only` and `client_only`
+  both zero, zero `identity_mismatches`), per-class and per-tab node counts, per-node adjacency parity
+  (`connected_node_ids` and `required_ids` matched against the Builder), every legality discrepancy
+  classified into the Decision 22 categories (with (a)/(d) flip-blocking), and all Decision 10
+  provenance pins (including extractor commit, Builder capture/slug/manifest, resolved class set, and
+  decode-report checksum).
+- The report emits two verdicts: `flip_ready` (max-level graph/legality complete, per the flip-gate
+  section — including exactly 21 playable classes, sentinel excluded, and the pinned 3,612 Builder
+  count) and `leveling_progression_ready` (false in M1.14B; the raw essence table is extracted but its
+  per-level decode is deferred to the M1.15 leveling sub-milestone and is NOT a `flip_blocker`).
 - The playable-CoA class set is asserted to have cardinality exactly 21; the `ConquestOfAzeroth`
   sentinel is excluded from playable classes.
 - The loose `CharacterAdvancementData.json` is retained only as a QA drift signal; nothing downstream

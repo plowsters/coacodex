@@ -30,7 +30,7 @@ Design spec: [M1.14B Client Attribution and CoA Advancement Graph](../specs/2026
 - `coa_client_extract/class_types.py` — resolve `CharacterAdvancementClassTypes`/`TabTypes` into a versioned classification (`kind`), apply curated display aliases, assert the 21-class cardinality.
 - `coa_client_extract/advancement.py` — read `CharacterAdvancement`, join companions, build `AdvancementNode`s with legality + `field_confidence` + raw slots; run semantic validators.
 - `coa_client_extract/attribution.py` — participation model (`is_coa`/`modes`/`exclusive_mode`) + `memberships[]` from the node graph; deterministic truth table; skill-line fallback.
-- `coa_client_extract/parity.py` — node-level (multiset) Builder-parity report + flip gate (`flip_ready`/`flip_blockers`).
+- `coa_client_extract/parity.py` — node-id crosswalk Builder-parity report (ownership/identity/adjacency/legality) + two-verdict flip gate (`flip_ready`/`flip_blockers` + `leveling_progression_ready`).
 - `coa_client_extract/decode_advancement.py` — the client-tier decode harness that determines the `CharacterAdvancement` column layout by JSON-correlation + semantic proof and writes a decode report.
 - `tests/test_client_extract_class_types.py`, `tests/test_client_extract_advancement.py`, `tests/test_client_extract_advancement_semantic.py`, `tests/test_client_extract_attribution.py`, `tests/test_client_extract_parity.py`
 - `docs/data/client-advancement-schema.md`, `docs/data/client-class-types-schema.md`
@@ -55,9 +55,10 @@ Design spec: [M1.14B Client Attribution and CoA Advancement Graph](../specs/2026
 - `advancement.validate_semantics(nodes, class_types, tab_types) -> None` (raises `DbcSemanticError`).
 - `attribution.AttributionResult(is_coa:bool, modes:tuple[str,...], exclusive_mode:str|None, confidence:str)`
 - `attribution.attribute(nodes, class_types, skill_line_index=None) -> dict[int, SpellAttribution]` where `SpellAttribution` has `.result: AttributionResult` and `.memberships: list[dict]`.
-- `attribution.build_skill_line_index(skill_line_ability_rows, coa_line_ids=COA_CLASS_BAND_SKILL_LINES) -> dict[int,str]`
-- `parity.build_parity_report(nodes, builder_entries, *, low_confidence_fields=(), unresolved_layout_columns=(), adjacency_mismatches=0, legality_diffs=(), essence_progression_decoded=False, provenance=None) -> dict` (carries `multiset_recall`/`multiset_precision`, `per_class`, `flip_blockers`, `flip_ready`).
-- `parity.flip_gate_inputs(layout) -> tuple[list[str], list[str], int]` — `(low_confidence_fields, unresolved_layout_columns, adjacency_mismatches)` derived from a resolved `CharacterAdvancementLayout`.
+- `attribution.derive_coa_skill_lines(skill_line_ability_rows, coa_spell_ids) -> set[int]` (proven CoA skill-line set) and `attribution.build_skill_line_index(skill_line_ability_rows, coa_line_ids) -> dict[int,str]`
+- `parity.build_parity_report(nodes, builder_entries, *, class_types=None, low_confidence_fields=(), unresolved_layout_columns=(), expected_builder_records=None, provenance=None) -> dict` — computes ownership (entry_id↔node_id crosswalk), `identity_mismatches`, `per_class`/`per_tab` counts, `adjacency_mismatches`, and Decision-22 `legality_diffs` internally; carries `ownership_recall`/`ownership_precision`, `flip_blockers`, `flip_ready`, `leveling_progression_ready`.
+- `parity.flip_gate_inputs(layout) -> tuple[list[str], list[str]]` — `(low_confidence_fields, unresolved_layout_columns)` derived from a resolved `CharacterAdvancementLayout`; adjacency confidence is folded into these two lists.
+- `parity.EXPECTED_BUILDER_RECORDS = 3612` — pinned Builder artifact size; the CLI passes it as `expected_builder_records` to guard against a truncated oracle.
 
 ---
 
@@ -417,13 +418,14 @@ CHARACTER_ADVANCEMENT_ESSENCE = DbcLayout(
     name="CharacterAdvancementEssence", expected_field_count=9, expected_record_size=36,
     columns={"id": FieldSpec(0, "uint32")},   # per-level progression, extracted raw (Task 6)
 )
-# SkillLineAbility: id(0), skill_line(1), spell(2). CoA class-band skill lines are ids 475..495.
+# SkillLineAbility: id(0), skill_line(1), spell(2). The CoA skill-line SET is proven empirically at
+# extraction time (attribution.derive_coa_skill_lines) from the lines that carry graph CoA spells —
+# NOT a hard-coded range, since CoA spells attach to per-spec lines, not only the 475-495 class band.
 CHARACTER_ADVANCEMENT_SKILL_LINE_ABILITY = DbcLayout(
     name="SkillLineAbility", expected_field_count=14, expected_record_size=56,
     columns={"id": FieldSpec(0, "uint32"), "skill_line": FieldSpec(1, "uint32"),
              "spell": FieldSpec(2, "uint32")},
 )
-COA_CLASS_BAND_SKILL_LINES = range(475, 496)   # verified: the 21 CoA class display-name skill lines
 
 
 @dataclass(frozen=True)
@@ -452,6 +454,10 @@ class CharacterAdvancementLayout:
     required_id_cols: tuple[int, ...] = ()
     header_field_count: int = 179
     header_record_size: int = 692
+    # Proven numeric->string entry-type map from the Task 3 decode (JSON keys are strings, e.g.
+    # {"0": "Ability", "1": "Talent"}). read_advancement consumes THIS, never a hard-coded table,
+    # so the mapping is load-bearing proof rather than an assumption. Empty until decode fills it.
+    entry_type_map: dict = field(default_factory=dict)
     # Per-legality-field proof from the Task 3 decode: field name -> "high" | "medium" | "unproven".
     # read_advancement emits a field into `legality` ONLY when its confidence is "high"; a configured
     # column with no "high" confidence is treated as unproven and withheld (never assumed).
@@ -551,9 +557,51 @@ def test_decode_layout_marks_unproven_fields_unproven():
     from coa_client_extract.wdbc import PositionalDbc
     ca = PositionalDbc(179, 173, 692, 200, ca_rows, b"\x00", drift=False)
     layout, report = decode_layout(ca, {}, {}, json_entries)
-    assert layout.confidence.get("ae_cost_col") == "high"
+    # confidence is keyed by the FIELD name read_advancement gates on, NOT the "_col" attribute
+    assert layout.confidence.get("ae_cost") == "high"
+    assert layout.ae_cost_col == 7
     assert report["fields"]["ae_cost_col"]["column"] == 7
     assert report["fields"]["required_level_col"]["confidence"] != "high"  # no clean column
+
+
+def test_decode_layout_resolves_tab_entry_and_both_adjacency_blocks():
+    from coa_client_extract.wdbc import PositionalDbc
+    from coa_client_extract.decode_advancement import load_resolved_layout
+    from coa_client_extract.class_types import resolve_tab_types
+
+    class _T:
+        def __init__(self, rows): self.rows = rows
+    tab_types = resolve_tab_types(_T([{"id": 1, "name": "Class"}, {"id": 49, "name": "Brewing"}]))
+
+    n = 200
+    ca_rows, json_entries = [], []
+    for i in range(n):
+        nid, nxt, prev = 500 + i, 500 + (i + 1) % n, 500 + (i - 1) % n
+        tab = 1 if i % 3 == 0 else 49                             # tab pattern independent of entry type
+        etype_num, etype_str = (0, "Ability") if i % 2 == 0 else (1, "Talent")
+        ca_rows.append({0: nid, 5: 1000 + i, 32: 33,
+                        6: tab, 4: etype_num, 7: i % 4,          # tab col 6, entry col 4, ae col 7
+                        20: nxt, 21: 0, 40: prev})               # connected col 20, required col 40
+        json_entries.append({"ID": nid, "Spells": [1000 + i], "Tab": tab, "Type": etype_str,
+                             "AECost": i % 4, "ConnectedNodes": [nxt], "RequiredIDs": [prev]})
+    ca = PositionalDbc(179, 173, 692, n, ca_rows, b"\x00", drift=False)
+    layout, report = decode_layout(ca, {}, tab_types, json_entries, min_nonzero=50)
+
+    assert layout.tab_type_col == 6 and layout.confidence["tab_type"] == "high"
+    assert layout.entry_type_col == 4 and layout.confidence["entry_type"] == "high"
+    assert report["entry_type_map"] == {"0": "Ability", "1": "Talent"}   # proven, not hard-coded
+    assert layout.connected_node_cols == (20,) and layout.confidence["connected_node_ids"] == "high"
+    assert layout.required_id_cols == (40,) and layout.confidence["required_ids"] == "high"
+
+    # the finished layout round-trips through the report so regenerate loads it with no hand-editing
+    import tempfile, os
+    from coa_client_extract.decode_advancement import write_report
+    path = os.path.join(tempfile.mkdtemp(), "report.json")
+    write_report(report, __import__("pathlib").Path(path))
+    reloaded = load_resolved_layout(path)
+    assert reloaded.tab_type_col == 6 and reloaded.entry_type_col == 4
+    assert reloaded.connected_node_cols == (20,) and reloaded.confidence["required_ids"] == "high"
+    assert reloaded.entry_type_map == {"0": "Ability", "1": "Talent"}   # proven map survives round-trip
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -574,12 +622,12 @@ from pathlib import Path
 
 from .dbc_layouts import CharacterAdvancementLayout
 
-# JSON field (loose CharacterAdvancementData.json) -> layout attribute it resolves. Extend as the
-# decode proves more fields; every entry here is proven, never assumed.
+# JSON field (loose CharacterAdvancementData.json) -> layout attribute it resolves. Every entry
+# here is proven by correlation, never assumed. Names follow the loose JSON's own field names.
 _SCALAR_FIELDS = {
     "AECost": "ae_cost_col", "TECost": "te_cost_col", "RequiredLevel": "required_level_col",
     "RequiredAEInvestment": "required_tab_ae_col", "RequiredTEInvestment": "required_tab_te_col",
-    "Column": "column_col",
+    "MaxRank": "max_rank_col", "Row": "row_col", "Column": "column_col",
 }
 
 
@@ -659,62 +707,23 @@ def _unique_spell_pairs(ca_rows, json_entries):
     return pairs
 
 
-def decode_layout(ca, class_types, tab_types, json_entries, *,
-                  score_threshold: float = 0.85, margin_threshold: float = 0.15,
-                  min_nonzero: int = 50) -> tuple[CharacterAdvancementLayout, dict]:
-    """Resolve the non-anchor columns from the loose-JSON schema key with recorded evidence, and
-    prove adjacency independently for the connection and prerequisite blocks. A scalar field is
-    `high` only when score >= score_threshold AND margin >= margin_threshold AND nonzero >=
-    min_nonzero; otherwise it is left None with confidence 'unproven' (blocks canonical emission).
-    Returns (layout, report). The report is the machine-readable evidence for the flip gate."""
-    ca_rows = ca.rows
-    node_ids = {r.get(0) for r in ca_rows if r.get(0)}
-    pairs = _unique_spell_pairs(ca_rows, json_entries)
-    report = {"schema_version": "coa-ca-decode-report-v2", "unique_pairs": len(pairs),
-              "thresholds": {"score": score_threshold, "margin": margin_threshold,
-                             "min_nonzero": min_nonzero},
-              "fields": {}}
-    kwargs: dict = {}
-    confidence: dict = {}
-
-    def _record(field_attr, proof: ScalarProof | None):
-        if proof is None:
-            report["fields"][field_attr] = {"confidence": "unproven", "column": None}
-            return
-        high = (proof.score >= score_threshold and proof.margin >= margin_threshold
-                and proof.nonzero >= min_nonzero)
-        report["fields"][field_attr] = {
-            "column": proof.column, "score": proof.score, "runner_up": proof.runner_up,
-            "margin": proof.margin, "nonzero": proof.nonzero,
-            "confidence": "high" if high else "low",
-        }
-        if high:
-            kwargs[field_attr] = proof.column
-            confidence[_LEGALITY_NAME.get(field_attr, field_attr)] = "high"
-
-    for json_field, attr in _SCALAR_FIELDS.items():
-        _record(attr, correlate_scalar(pairs, json_field, min_nonzero=min_nonzero))
-
-    # Adjacency: locate contiguous node-ref blocks and prove each independently. The candidate
-    # blocks are discovered by the operator from the decode report's per-column node-id-hit rate
-    # (recorded below); prove them here so an all-zero or out-of-domain block cannot pass.
-    report["node_id_hit_rate"] = _node_id_hit_rate(ca_rows, node_ids)
-    layout = CharacterAdvancementLayout(**kwargs, confidence=confidence)
-    return layout, report
-
-
-# decode attr -> the legality field name read_advancement emits (so confidence keys line up)
+# decode attr -> the legality/ownership field name read_advancement emits (so confidence keys line up
+# with what read_advancement's emit()/gates check — keyed by FIELD name, not the "_col" attribute).
 _LEGALITY_NAME = {
     "ae_cost_col": "ae_cost", "te_cost_col": "te_cost", "required_level_col": "required_level",
     "required_tab_ae_col": "required_tab_ae", "required_tab_te_col": "required_tab_te",
     "max_rank_col": "max_rank", "row_col": "row", "column_col": "col",
+    "tab_type_col": "tab_type", "entry_type_col": "entry_type",
     "connected_node_cols": "connected_node_ids", "required_id_cols": "required_ids",
 }
 
 
+def _json_by_id(json_entries):
+    return {int(e["ID"]): e for e in json_entries if e.get("ID") is not None}
+
+
 def _node_id_hit_rate(ca_rows, node_ids) -> dict:
-    """Per-column fraction of non-zero values that resolve to a node id — the operator uses this
-    to nominate adjacency-block candidates, which decode/validation then prove."""
+    """Per-column fraction of non-zero values that resolve to a node id (recorded evidence)."""
     cols = set().union(*[set(r) for r in ca_rows]) if ca_rows else set()
     out = {}
     for c in sorted(cols):
@@ -722,6 +731,166 @@ def _node_id_hit_rate(ca_rows, node_ids) -> dict:
         if nz:
             out[str(c)] = round(sum(1 for v in nz if v in node_ids) / len(nz), 3)
     return out
+
+
+_ANCHOR_COLS = {0, 5, 32}   # node_id, spell_id, class_type FK — never adjacency, excluded from discovery
+
+
+def _discover_adjacency_blocks(ca_rows, node_ids, *, min_hit=0.9, min_nonzero=50):
+    """Deterministically find contiguous column runs whose non-zero values overwhelmingly resolve to
+    node ids — candidate adjacency blocks. No operator interpretation: the runs are computed here.
+    The three anchor columns (node_id/spell/class) are excluded so col 0 is not mistaken for a block."""
+    cols = [c for c in sorted(set().union(*[set(r) for r in ca_rows])) if c not in _ANCHOR_COLS] \
+        if ca_rows else []
+    good = set()
+    for c in cols:
+        nz = [r[c] for r in ca_rows if r.get(c)]
+        if len(nz) >= min_nonzero and sum(1 for v in nz if v in node_ids) / len(nz) >= min_hit:
+            good.add(c)
+    blocks, run = [], []
+    for c in cols:
+        if c in good:
+            run.append(c)
+        elif run:
+            blocks.append(tuple(run)); run = []
+    if run:
+        blocks.append(tuple(run))
+    return blocks
+
+
+def _classify_adjacency(ca_rows, json_by_id, block):
+    """Match a proven node-ref block to the JSON ConnectedNodes or RequiredIDs field by per-node set
+    agreement. Returns (json_field | None, agreement_fraction)."""
+    best = (None, 0.0)
+    for jf in ("ConnectedNodes", "RequiredIDs"):
+        agree = total = 0
+        for r in ca_rows:
+            je = json_by_id.get(r.get(0))
+            if not je or jf not in je:
+                continue
+            total += 1
+            if {r.get(c) for c in block if r.get(c)} == set(je.get(jf) or []):
+                agree += 1
+        if total and agree / total > best[1]:
+            best = (jf, round(agree / total, 4))
+    return best
+
+
+def _decode_entry_type(pairs, *, min_nonzero=50):
+    """Prove the entry-type column: the numeric cell maps 1:1 onto the JSON 'Type' string over the
+    matched pairs. Returns (column, {str(int): str} mapping, evidence_count) or (None, {}, 0). The
+    mapping is recorded as evidence so the numeric->string interpretation is proven, not hard-coded."""
+    cols = set().union(*[set(r) for _, r in pairs]) if pairs else set()
+    best = (None, {}, 0)
+    for c in sorted(cols):
+        mapping, total, ok = {}, 0, True
+        for je, row in pairs:
+            if "Type" in je and c in row:
+                total += 1
+                k, s = row[c], je["Type"]
+                if mapping.get(k, s) != s:
+                    ok = False
+                    break
+                mapping[k] = s
+        if (ok and total >= min_nonzero and len(mapping) >= 2
+                and len(set(mapping.values())) == len(mapping) and total > best[2]):
+            best = (c, {str(k): v for k, v in mapping.items()}, total)
+    return best
+
+
+def decode_layout(ca, class_types, tab_types, json_entries, *,
+                  score_threshold: float = 0.85, margin_threshold: float = 0.15,
+                  min_nonzero: int = 50) -> tuple[CharacterAdvancementLayout, dict]:
+    """Resolve EVERY non-anchor adapter column from the loose-JSON schema key with recorded evidence,
+    and emit the finished layout (no operator interpretation): scalars by exact-match correlation;
+    the tab FK by correlation AND tag-domain membership; entry_type by a proven numeric->string
+    mapping; and BOTH adjacency blocks by deterministic block discovery + `prove_adjacency_domain` +
+    per-node set-match against the JSON's ConnectedNodes/RequiredIDs. A field is `high` only when its
+    evidence clears the thresholds; otherwise it is left None/unproven (blocks canonical emission).
+    Returns (layout, report); report['resolved_layout'] is the finished layout, loaded back by
+    `load_resolved_layout` so `regenerate` consumes it with zero hand-editing."""
+    ca_rows = ca.rows
+    node_ids = {r.get(0) for r in ca_rows if r.get(0)}
+    pairs = _unique_spell_pairs(ca_rows, json_entries)
+    json_by_id = _json_by_id(json_entries)
+    report = {"schema_version": "coa-ca-decode-report-v3", "unique_pairs": len(pairs),
+              "thresholds": {"score": score_threshold, "margin": margin_threshold,
+                             "min_nonzero": min_nonzero},
+              "fields": {}}
+    kwargs: dict = {}
+    confidence: dict = {}
+
+    def _record_scalar(attr, proof: ScalarProof | None, *, in_domain=True):
+        if proof is None:
+            report["fields"][attr] = {"confidence": "unproven", "column": None}
+            return
+        high = (proof.score >= score_threshold and proof.margin >= margin_threshold
+                and proof.nonzero >= min_nonzero and in_domain)
+        report["fields"][attr] = {
+            "column": proof.column, "score": proof.score, "runner_up": proof.runner_up,
+            "margin": proof.margin, "nonzero": proof.nonzero, "in_fk_domain": bool(in_domain),
+            "confidence": "high" if high else "low"}
+        if high:
+            kwargs[attr] = proof.column
+            confidence[_LEGALITY_NAME[attr]] = "high"
+
+    # 1. scalar legality/position fields
+    for json_field, attr in _SCALAR_FIELDS.items():
+        _record_scalar(attr, correlate_scalar(pairs, json_field, min_nonzero=min_nonzero))
+
+    # 2. tab-type FK: correlate AND require the winning column's non-zero domain to be tab-type ids
+    tab_proof = correlate_scalar(pairs, "Tab", min_nonzero=min_nonzero)
+    tab_domain_ok = bool(tab_types) and tab_proof is not None and all(
+        r[tab_proof.column] in tab_types for r in ca_rows if r.get(tab_proof.column))
+    _record_scalar("tab_type_col", tab_proof, in_domain=tab_domain_ok)
+
+    # 3. entry-type: proven numeric -> JSON 'Type' string mapping
+    et_col, et_map, et_ev = _decode_entry_type(pairs, min_nonzero=min_nonzero)
+    report["fields"]["entry_type_col"] = {
+        "column": et_col, "mapping": et_map, "evidence": et_ev,
+        "confidence": "high" if et_col is not None else "unproven"}
+    report["entry_type_map"] = et_map
+    if et_col is not None:
+        kwargs["entry_type_col"] = et_col
+        kwargs["entry_type_map"] = et_map        # proven map rides into resolved_layout -> the reader
+        confidence["entry_type"] = "high"
+
+    # 4. adjacency: discover node-ref blocks, prove each, classify vs ConnectedNodes / RequiredIDs
+    report["node_id_hit_rate"] = _node_id_hit_rate(ca_rows, node_ids)
+    report["adjacency"] = []
+    for block in _discover_adjacency_blocks(ca_rows, node_ids, min_nonzero=min_nonzero):
+        domain, cols = prove_adjacency_domain(ca_rows, node_ids, block, min_nonzero=min_nonzero)
+        jf, agree = (_classify_adjacency(ca_rows, json_by_id, block)
+                     if domain == "node_id" else (None, 0.0))
+        report["adjacency"].append({"block": list(block), "domain": domain,
+                                    "json_field": jf, "agreement": agree})
+        if domain == "node_id" and agree >= score_threshold:
+            if jf == "ConnectedNodes":
+                kwargs["connected_node_cols"] = cols
+                confidence["connected_node_ids"] = "high"
+            elif jf == "RequiredIDs":
+                kwargs["required_id_cols"] = cols
+                confidence["required_ids"] = "high"
+
+    layout = CharacterAdvancementLayout(**kwargs, confidence=confidence)
+    report["resolved_layout"] = {
+        **{k: (list(v) if isinstance(v, tuple) else v) for k, v in kwargs.items()},
+        "confidence": confidence}
+    return layout, report
+
+
+def load_resolved_layout(path) -> CharacterAdvancementLayout | None:
+    """Reconstruct the resolved CharacterAdvancementLayout from a committed decode report's
+    `resolved_layout` block, so `regenerate` consumes the proven layout with NO hand-editing."""
+    p = Path(path)
+    if not p.is_file():
+        return None
+    rl = json.loads(p.read_text()).get("resolved_layout")
+    if not rl:
+        return None
+    conf = rl.pop("confidence", {})
+    kwargs = {k: (tuple(v) if isinstance(v, list) else v) for k, v in rl.items()}
+    return CharacterAdvancementLayout(**kwargs, confidence=conf)
 
 
 def write_report(report: dict, path: Path) -> None:
@@ -736,23 +905,23 @@ Expected: PASS.
 
 - [ ] **Step 5: Add the executable `decode-advancement` CLI subcommand**
 
-In `cli.py`, add a `decode-advancement` subcommand so Step 6 is reproducible, not manual prose. It opens the client (StormLib), reads `CharacterAdvancement` positionally + the companions + the loose JSON, runs `decode_layout`, writes the report, and prints a ready-to-paste `CHARACTER_ADVANCEMENT = CharacterAdvancementLayout(...)` block (indices + `confidence`) for the operator to commit into `dbc_layouts.py`. Add a default-tier test that the subcommand's arg wiring parses (`main(["decode-advancement","--help"])`-style or a monkeypatched backend), and a `@pytest.mark.client` test that it runs end-to-end and every adapter-fed field it emits is `confidence: high`.
+In `cli.py`, add a `decode-advancement` subcommand so the decode is reproducible and **self-applying** — it opens the client (StormLib), reads `CharacterAdvancement` positionally + the companion `*Types` tables + the loose JSON, runs `decode_layout`, and writes the full report **including its `resolved_layout` block** to `--out`. There is **no** paste-block and no hand-edit of `dbc_layouts.py`: `regenerate` (Task 8) calls `decode_advancement.load_resolved_layout(report_path)` to rebuild the proven `CharacterAdvancementLayout` directly from the committed report, falling back to the anchors-only `CHARACTER_ADVANCEMENT` constant only when no report is present. Add a default-tier test that the subcommand's arg wiring parses (monkeypatched backend), and a `@pytest.mark.client` test that it runs end-to-end and every adapter-fed field it emits is `confidence: high` (i.e. `set(report["resolved_layout"]["confidence"]) ⊇` the adapter field set).
 
 - [ ] **Step 6: Commit + client-tier decode run**
 
 ```bash
 git add coa_client_extract/decode_advancement.py coa_client_extract/cli.py tests/test_client_extract_advancement_semantic.py
-git commit -m "M1.14B: evidence-based CharacterAdvancement decode + decode-advancement command"
+git commit -m "M1.14B: evidence-based CharacterAdvancement decode + self-applying decode-advancement command"
 ```
 
-Then run the real decode (requires `COA_CLIENT_ROOT` + StormLib), which proves adjacency independently for `ConnectedNodes` and `RequiredIDs`, resolves tab/entry/name/icon/rank/row the same evidence-based way, writes `reports/client_extract/coa_ca_decode_report.json`, and emits the `CHARACTER_ADVANCEMENT` constant (indices + `confidence`) to paste into `dbc_layouts.py`. Any field not reaching `high` stays out of `confidence` and is Builder-fallback (adapter). Commit the report + constant:
+Then run the real decode (requires `COA_CLIENT_ROOT` + StormLib). It proves adjacency independently for `ConnectedNodes` and `RequiredIDs`, resolves tab (FK-domain-checked) + entry_type (proven numeric→string map) + the scalar legality/position fields the same evidence-based way, and writes `reports/client_extract/coa_ca_decode_report.json` with the finished `resolved_layout`. Any field not reaching `high` stays out of `confidence` and is Builder-fallback (adapter). Commit the report — that committed file *is* the layout `regenerate` consumes (no `dbc_layouts.py` edit):
 
 ```bash
 python -m coa_client_extract decode-advancement \
   --client-root "$COA_CLIENT_ROOT" \
   --content-json "$COA_CLIENT_ROOT/Content/CharacterAdvancementData.json" \
   --out reports/client_extract/coa_ca_decode_report.json
-git add coa_client_extract/dbc_layouts.py reports/client_extract/coa_ca_decode_report.json
+git add reports/client_extract/coa_ca_decode_report.json
 git commit -m "M1.14B: decoded + validated CharacterAdvancement layout from real client"
 ```
 
@@ -800,7 +969,9 @@ def _layout(confidence=None):
     return CharacterAdvancementLayout(
         node_id_col=0, spell_id_col=5, class_type_col=32, tab_type_col=6, entry_type_col=7,
         ae_cost_col=8, required_level_col=9, connected_node_cols=(10, 11), required_id_cols=(12,),
-        max_rank_col=13, confidence=confidence if confidence is not None else {
+        max_rank_col=13, entry_type_map={"0": "Ability", "1": "Talent"},
+        confidence=confidence if confidence is not None else {
+            "tab_type": "high", "entry_type": "high",
             "ae_cost": "high", "required_level": "high",
             "connected_node_ids": "high", "required_ids": "high", "max_rank": "high",
         },
@@ -887,6 +1058,53 @@ def test_validate_semantics_rejects_self_reference_and_excessive_cost():
     huge = read_advancement(_ca([_row(1, 100, 33, ae=100000)]), _class_types(), _tab_types(), _layout())
     with pytest.raises(DbcSemanticError, match="ae_cost"):
         validate_semantics(huge, _class_types(), _tab_types())
+
+
+def test_tab_type_and_entry_type_are_confidence_gated():
+    # a layout that did NOT prove tab_type/entry_type high must withhold them (ownership is gated
+    # exactly like legality) -> tab withheld, entry_type "" -> validate_semantics then blocks.
+    layout = _layout(confidence={"ae_cost": "high"})   # tab_type/entry_type absent -> not high
+    n = read_advancement(_ca([_row(1, 100, 33, tab=1, entry=0)]),
+                         _class_types(), _tab_types(), layout)[0]
+    assert n.tab_type_id == 0 and n.tab_name == ""     # withheld, not shipped as ownership
+    assert n.entry_type == ""
+    with pytest.raises(DbcSemanticError, match="unknown entry_type"):
+        validate_semantics([n], _class_types(), _tab_types())
+
+
+def test_graph_invariants_reject_missing_root():
+    # two connected nodes in one tab, each requiring the other -> no root
+    rows = [_row(1, 100, 33, tab=1, c1=2, req=2), _row(2, 101, 33, tab=1, c1=1, req=1)]
+    nodes = read_advancement(_ca(rows), _class_types(), _tab_types(), _layout())
+    with pytest.raises(DbcSemanticError, match="no root"):
+        validate_semantics(nodes, _class_types(), _tab_types())
+
+
+def test_graph_invariants_reject_orphan_node():
+    # node 1 is an isolated root; node 2 has a prerequisite (not a root) but NO connected edge,
+    # so it is unreachable from the roots over the visual tree -> orphan.
+    rows = [_row(1, 100, 33, tab=1, c1=0, req=0), _row(2, 101, 33, tab=1, c1=0, req=1)]
+    nodes = read_advancement(_ca(rows), _class_types(), _tab_types(), _layout())
+    with pytest.raises(DbcSemanticError, match="orphan"):
+        validate_semantics(nodes, _class_types(), _tab_types())
+
+
+def test_graph_invariants_reject_prerequisite_cycle():
+    # node 1 is a root connected to 2 and 3; nodes 2 and 3 require each other -> prerequisite cycle
+    # (all three are reachable and a root exists, so only the acyclicity check fires)
+    rows = [_row(1, 100, 33, tab=1, c1=2, c2=3, req=0), _row(2, 101, 33, tab=1, c1=1, req=3),
+            _row(3, 102, 33, tab=1, c1=1, req=2)]
+    nodes = read_advancement(_ca(rows), _class_types(), _tab_types(), _layout())
+    with pytest.raises(DbcSemanticError, match="cycle"):
+        validate_semantics(nodes, _class_types(), _tab_types())
+
+
+def test_graph_invariants_accept_valid_tree():
+    # 1 (root) -> 2 -> 3, a clean chain: root exists, all reachable via connected edges, acyclic
+    rows = [_row(1, 100, 33, tab=1, c1=2, req=0), _row(2, 101, 33, tab=1, c1=3, req=1),
+            _row(3, 102, 33, tab=1, c1=0, req=2)]
+    nodes = read_advancement(_ca(rows), _class_types(), _tab_types(), _layout())
+    validate_semantics(nodes, _class_types(), _tab_types())   # must not raise
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -905,7 +1123,6 @@ from dataclasses import dataclass
 
 from .errors import DbcSemanticError
 
-_ENTRY_TYPES = {0: "Ability", 1: "Talent", 2: "Trait", 3: "TalentAbility"}
 _MAX_LEVEL = 60
 # Plausibility ceilings (cells are unsigned, so a mis-mapped column reads as a huge int — an
 # upper bound catches that where a negative check cannot). Generous but far below a stray uint32.
@@ -962,11 +1179,18 @@ def read_advancement(ca, class_types, tab_types, layout) -> list[AdvancementNode
     L = layout
     conf_map = L.confidence or {}
     nodes: list[AdvancementNode] = []
+    # Ownership FK columns are confidence-gated exactly like legality scalars: a node's tab and entry
+    # type are emitted only when their columns proved `high`. A wrong column that coincidentally
+    # resolves to a valid FK is withheld (tab_type_id=0 / entry_type="") and then blocks in
+    # validate_semantics, rather than being shipped as canonical ownership.
+    tab_ok = L.tab_type_col is not None and conf_map.get("tab_type") == "high"
+    entry_ok = L.entry_type_col is not None and conf_map.get("entry_type") == "high"
     for row in ca.rows:
         cid = row.get(L.class_type_col, 0)
         ct = class_types.get(cid)
-        etype = (_ENTRY_TYPES.get(row.get(L.entry_type_col), "")
-                 if L.entry_type_col is not None else "")
+        tab_id = row.get(L.tab_type_col, 0) if tab_ok else 0
+        # proven numeric->string map from the decode (JSON keys are strings); never hard-coded
+        etype = L.entry_type_map.get(str(row.get(L.entry_type_col, "")), "") if entry_ok else ""
         legality, conf = {}, {}
 
         def emit(name, value):
@@ -993,8 +1217,8 @@ def read_advancement(ca, class_types, tab_types, layout) -> list[AdvancementNode
             class_internal=(ct.internal if ct else ""),
             class_display=(ct.display if ct else ""),
             class_kind=(ct.kind if ct else "unknown"),
-            tab_type_id=row.get(L.tab_type_col, 0) if L.tab_type_col is not None else 0,
-            tab_name=tab_types.get(row.get(L.tab_type_col, 0), "") if L.tab_type_col is not None else "",
+            tab_type_id=tab_id,
+            tab_name=(tab_types.get(tab_id, "") if tab_ok else ""),
             entry_type=etype, essence_kind=_essence_kind(etype),
             legality=legality, field_confidence=conf,
             raw=dict(row),
@@ -1033,12 +1257,80 @@ def validate_semantics(nodes, class_types, tab_types) -> None:
             v = n.legality.get(field_name)
             if v is not None and v > ceiling:
                 raise DbcSemanticError(f"node {n.node_id}: {field_name} {v} exceeds ceiling {ceiling}")
+    _validate_graph_invariants(nodes)
+
+
+def _validate_graph_invariants(nodes) -> None:
+    """Per (class, tab) subgraph, reject a mis-decoded adjacency layout with graph-level invariants
+    that node-level ownership equality does NOT imply (identical (spell, class, tab, type) membership
+    says nothing about whether the adjacency EDGES form a valid graph):
+
+      - every tab with >1 node has a root (a node with no in-subgraph prerequisite);
+      - every node is reachable from the roots over the union of connected/required edges (no orphans);
+      - the prerequisite (required_ids) graph is acyclic.
+
+    Runs only when adjacency was decoded to `high` (present in `legality`); when adjacency is
+    undecoded it is an unresolved flip-blocker handled by the parity gate, not a semantic error here."""
+    from collections import defaultdict, deque
+    if not any("connected_node_ids" in n.legality or "required_ids" in n.legality for n in nodes):
+        return
+    subgraphs = defaultdict(list)
+    for n in nodes:
+        subgraphs[(n.class_type_id, n.tab_type_id)].append(n)
+    for (cid, tid), sub in subgraphs.items():
+        ids = {n.node_id for n in sub}
+        by_id = {n.node_id: n for n in sub}
+        roots = [n.node_id for n in sub
+                 if not [r for r in n.legality.get("required_ids", []) if r in ids]]
+        if len(sub) > 1 and not roots:
+            raise DbcSemanticError(
+                f"class {cid} tab {tid}: no root node (every node has a prerequisite)")
+        # reachability over the undirected connected-node (visual tree) edges, from the roots
+        adj = defaultdict(set)
+        for n in sub:
+            for e in n.legality.get("connected_node_ids", []):
+                if e in ids:
+                    adj[n.node_id].add(e)
+                    adj[e].add(n.node_id)
+        seen, q = set(roots), deque(roots)
+        while q:
+            for nb in adj[q.popleft()]:
+                if nb not in seen:
+                    seen.add(nb)
+                    q.append(nb)
+        orphans = ids - seen
+        if orphans:
+            raise DbcSemanticError(
+                f"class {cid} tab {tid}: {len(orphans)} unreachable/orphan node(s) "
+                f"{sorted(orphans)[:5]}")
+        # prerequisite graph must be acyclic (iterative DFS, three-color)
+        color = dict.fromkeys(ids, 0)   # 0 white, 1 gray, 2 black
+        for start in ids:
+            if color[start] != 0:
+                continue
+            stack = [(start, iter([r for r in by_id[start].legality.get("required_ids", []) if r in ids]))]
+            color[start] = 1
+            while stack:
+                u, it = stack[-1]
+                nxt = next(it, None)
+                if nxt is None:
+                    color[u] = 2
+                    stack.pop()
+                elif color[nxt] == 1:
+                    raise DbcSemanticError(f"class {cid} tab {tid}: prerequisite cycle at node {nxt}")
+                elif color[nxt] == 0:
+                    color[nxt] = 1
+                    stack.append((nxt, iter([r for r in by_id[nxt].legality.get("required_ids", []) if r in ids])))
 ```
 
-Note: `validate_semantics` requires `entry_type` and (when present) `tab_type` to resolve, which
-means those ownership columns must be decoded before extraction passes — enforcing the decode rather
-than shipping a graph with unknown ownership. Per-spec reachability/orphan invariants are covered
-end-to-end by the Task 7 parity report (exact Builder equality implies a well-formed per-spec graph).
+Note: `validate_semantics` requires `entry_type` and (when present) `tab_type` to resolve, so those
+ownership columns must be decoded before extraction passes — enforcing the decode rather than shipping
+a graph with unknown ownership. It also runs the per-(class, tab) **graph invariants** above: exact
+node-level Builder ownership does **not** by itself imply a well-formed graph (identical membership
+says nothing about the adjacency edges), so roots/reachability/acyclicity are checked explicitly.
+These invariants run against real adjacency at the Task 10 acceptance; if the real client legitimately
+violates a specific one (e.g. an intentional disconnected component), that invariant is relaxed with a
+recorded justification rather than silently dropped.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1062,7 +1354,7 @@ git commit -m "M1.14B: CharacterAdvancement graph reader + semantic validators (
 
 **Interfaces:**
 - Consumes: `advancement.AdvancementNode`, `class_types.ClassType`.
-- Produces: `AttributionResult`, `SpellAttribution`, `attribute(nodes, class_types, skill_line_index=None)`, `build_skill_line_index(skill_line_ability_rows, coa_line_ids=COA_CLASS_BAND_SKILL_LINES)`, `COA_CLASS_BAND_SKILL_LINES`.
+- Produces: `AttributionResult`, `SpellAttribution`, `attribute(nodes, class_types, skill_line_index=None)`, `derive_coa_skill_lines(skill_line_ability_rows, coa_spell_ids)`, `build_skill_line_index(skill_line_ability_rows, coa_line_ids)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1096,14 +1388,19 @@ def test_unknown_kind_contributes_no_mode_not_stock():
     assert a.confidence == "low"
 
 
-def test_build_skill_line_index_maps_class_band_spells_only():
-    from coa_client_extract.attribution import build_skill_line_index
+def test_derive_and_build_skill_line_index_from_proven_lines():
+    from coa_client_extract.attribution import derive_coa_skill_lines, build_skill_line_index
+    # spell 900 is a known CoA graph spell attached to spec SkillLine 512 (NOT the 475-495 band);
+    # 7777 is a graph-ABSENT spell on that same proven line -> medium-confidence coa fallback.
     rows = [
-        {0: 1, 1: 480, 2: 7777},   # class-band line (475-495) -> coa
-        {0: 2, 1: 44, 2: 1234},    # stock skill line -> ignored
-        {0: 3, 1: 495, 2: 0},      # class-band but no spell -> ignored
+        {0: 1, 1: 512, 2: 900},    # proven CoA spell 900 on line 512 -> line 512 is a CoA line
+        {0: 2, 1: 512, 2: 7777},   # graph-absent spell on the proven CoA line 512 -> coa (medium)
+        {0: 3, 1: 44, 2: 1234},    # stock line -> ignored
+        {0: 4, 1: 512, 2: 0},      # no spell -> ignored
     ]
-    assert build_skill_line_index(rows) == {7777: "coa"}
+    coa_lines = derive_coa_skill_lines(rows, coa_spell_ids={900})
+    assert coa_lines == {512}                       # derived, not the hard-coded 475-495 range
+    assert build_skill_line_index(rows, coa_lines) == {900: "coa", 7777: "coa"}
 
 
 def test_shared_spell_aggregates_memberships():
@@ -1169,11 +1466,6 @@ from collections import defaultdict
 _KIND_TO_MODE = {"coa_class": "coa", "coa_system": "coa", "reborn": "reborn",
                  "stock": "stock", "meta": "stock"}
 
-# Class-band SkillLines for the 21 CoA classes (SkillLine ids 475-495 inclusive),
-# used only for the medium-confidence fallback below.
-COA_CLASS_BAND_SKILL_LINES = range(475, 496)
-
-
 @dataclass(frozen=True)
 class AttributionResult:
     is_coa: bool
@@ -1188,18 +1480,26 @@ class SpellAttribution:
     memberships: list[dict] = field(default_factory=list)
 
 
-def build_skill_line_index(skill_line_ability_rows, coa_line_ids=COA_CLASS_BAND_SKILL_LINES):
-    """Map spell_id -> "coa" for abilities whose SkillLine is in the CoA class band.
+def derive_coa_skill_lines(skill_line_ability_rows, coa_spell_ids):
+    """PROVE the CoA SkillLine set empirically: the set of SkillLines that already carry at least one
+    spell the registry attributed `coa`. Discovery showed CoA advancement spells attach to per-SPEC
+    skill lines (Venomancer -> Stalking/Rot), not just the class-band lines 475-495, so a hard-coded
+    range would miss most of them. Rows are positional dicts from `parse_positional(SkillLineAbility)`:
+    col 1 = SkillLine FK, col 2 = Spell FK."""
+    coa_spells = set(coa_spell_ids)
+    return {row.get(1) for row in skill_line_ability_rows
+            if row.get(2) in coa_spells and row.get(1)}
 
-    Rows are positional dicts from `parse_positional(SkillLineAbility)`:
-    col 1 = SkillLine FK, col 2 = Spell FK (standard 3.3.5 SkillLineAbility layout).
-    This is a medium-confidence fallback for spells absent from CharacterAdvancement.dbc.
-    """
+
+def build_skill_line_index(skill_line_ability_rows, coa_line_ids):
+    """Map spell_id -> "coa" for abilities whose SkillLine is in the PROVEN CoA skill-line set
+    (`derive_coa_skill_lines`). This is the medium-confidence fallback for spells absent from
+    CharacterAdvancement.dbc — a graph-absent spell sharing a proven CoA line is likely CoA. The
+    caller passes the derived set; there is no hard-coded skill-line range."""
     coa_lines = set(coa_line_ids)
     index: dict[int, str] = {}
     for row in skill_line_ability_rows:
-        skill_line = row.get(1)
-        spell_id = row.get(2)
+        skill_line, spell_id = row.get(1), row.get(2)
         if skill_line in coa_lines and spell_id:
             index[spell_id] = "coa"
     return index
@@ -1434,8 +1734,9 @@ def build_essence_raw_records(essence, *, provenance: dict) -> list[dict]:
 
     This table is per-level/per-tier essence *progression* data, NOT per-class caps (caps are the
     documented uniform constants AE 26 / TE 25). Its per-level semantics are undecoded, so M1.14B
-    ships the raw index-keyed cells + provenance for auditability and lists `essence_progression`
-    as an M1.15 flip-blocker in the parity report. No column meaning is asserted here."""
+    ships the raw index-keyed cells + provenance for auditability; the parity report reflects this as
+    `leveling_progression_ready: false` (an M1.15 leveling gate) and NEVER as a `flip_blocker`. No
+    column meaning is asserted here."""
     return [{"schema_version": "coa-client-essence-v1", "cols": dict(row),
              "provenance": dict(provenance)} for row in essence.rows]
 
@@ -1470,139 +1771,176 @@ git commit -m "M1.14B: advancement/class-type/tab-type/raw-essence writers + fil
 
 ---
 
-## Task 7: Node-level (multiset) Builder-parity report
+## Task 7: Node-level (node-id crosswalk) Builder-parity report
 
 **Files:**
 - Create: `coa_client_extract/parity.py`
 - Test: `tests/test_client_extract_parity.py`
 
 **Interfaces:**
-- Consumes: `advancement.AdvancementNode`; Builder entries as dicts with `spell_id`, `class_name`, `tab_name`, `entry_type` (the shape of `coa_scraper/dist/coa_entries.jsonl`).
-- Produces: `build_parity_report(nodes, builder_entries, *, low_confidence_fields=(), unresolved_layout_columns=(), adjacency_mismatches=0, legality_diffs=(), essence_progression_decoded=False, provenance=None) -> dict`. The report carries `multiset_recall`/`multiset_precision`, `per_class`, `flip_blockers[]`, and the `flip_ready` boolean; the CLI (Task 8) assembles the gate inputs (which adapter fields decoded below `high`, which configured layout columns stayed unproven, adjacency-mismatch count, the Decision-22-classified legality diffs, and whether the essence progression is decoded).
+- Consumes: `advancement.AdvancementNode` (its `node_id` is the node identity, and its `legality` dict carries `high`-confidence `connected_node_ids`/`required_ids` + legality scalars); Builder entries as dicts with `entry_id` (the node identity), `spell_id`, `class_name`, `tab_name`, `entry_type`, `connected_node_ids`, `required_ids`, and legality fields — the real shape of `coa_scraper/dist/coa_entries.jsonl` (verified: 3,612 records, unique `entry_id`s, adjacency references `entry_id`s).
+- Produces: `build_parity_report(nodes, builder_entries, *, class_types=None, low_confidence_fields=(), unresolved_layout_columns=(), expected_builder_records=None, provenance=None) -> dict` and `flip_gate_inputs(layout) -> tuple[list[str], list[str]]`. The report **computes** ownership (node-id `entry_id`↔`node_id` crosswalk), `identity_mismatches`, per-class AND per-tab counts, `adjacency_mismatches`, and Decision-22-classified `legality_diffs` internally — nothing is passed in pre-computed. It emits two verdicts, `flip_ready` and `leveling_progression_ready`; the undecoded raw essence table sets the latter false and is **never** a `flip_blocker`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_client_extract_parity.py
-from coa_client_extract.parity import build_parity_report
+from coa_client_extract.parity import build_parity_report, flip_gate_inputs
 from coa_client_extract.advancement import AdvancementNode
+from coa_client_extract.class_types import ClassType
 
 
-def _node(node_id, spell_id, display, tab, etype="Ability"):
+def _node(node_id, spell_id, display, tab, etype="Ability", *, legality=None):
     return AdvancementNode(
         node_id=node_id, spell_id=spell_id, class_type_id=33, class_internal=display,
         class_display=display, class_kind="coa_class", tab_type_id=1, tab_name=tab,
-        entry_type=etype, essence_kind="ability", legality={}, field_confidence={}, raw={},
+        entry_type=etype, essence_kind="ability", legality=legality or {},
+        field_confidence={}, raw={},
     )
 
 
-def _builder(spell_id, display, tab, etype="Ability"):
-    return {"spell_id": spell_id, "class_name": display, "tab_name": tab, "entry_type": etype}
+def _builder(entry_id, spell_id, display, tab, etype="Ability", *,
+             connected=None, required=None, **legality):
+    b = {"entry_id": entry_id, "spell_id": spell_id, "class_name": display,
+         "tab_name": tab, "entry_type": etype,
+         "connected_node_ids": connected or [], "required_ids": required or []}
+    b.update(legality)      # ae_cost, te_cost, required_level, ...
+    return b
 
 
-def test_multiset_ownership_counts_duplicate_spell():
-    # shared spell 503748 -> two Witch Doctor nodes; both present in Builder
+def _clean_pair():
+    # one Witch Doctor node, identical on both sides; adjacency + legality decoded high and matching
+    nodes = [_node(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                   legality={"ae_cost": 1, "connected_node_ids": [7132], "required_ids": []})]
+    builder = [_builder(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                        connected=[7132], required=[], ae_cost=1)]
+    return nodes, builder
+
+
+def test_exact_node_id_ownership_and_per_tab_counts():
     nodes = [
-        _node(1, 503748, "Witch Doctor", "Brewing", "Talent"),
-        _node(2, 503748, "Witch Doctor", "Class", "Ability"),
+        _node(7131, 503748, "Witch Doctor", "Brewing", "Talent"),
+        _node(12264, 503748, "Witch Doctor", "Class", "Ability"),
     ]
     builder = [
-        _builder(503748, "Witch Doctor", "Brewing", "Talent"),
-        _builder(503748, "Witch Doctor", "Class", "Ability"),
+        _builder(7131, 503748, "Witch Doctor", "Brewing", "Talent"),
+        _builder(12264, 503748, "Witch Doctor", "Class", "Ability"),
     ]
     rep = build_parity_report(nodes, builder)
     assert rep["builder_records"] == 2 and rep["client_nodes"] == 2
-    assert rep["unique_spell_recall"] == 1.0
-    assert rep["multiset_recall"] == 1.0 and rep["multiset_precision"] == 1.0
     assert rep["builder_only_records"] == 0 and rep["client_only_records"] == 0
-    assert rep["per_class"]["Witch Doctor"] == {
-        "client_nodes": 2, "builder_records": 2, "client_only": 0, "builder_only": 0}
+    assert rep["identity_mismatches"] == 0
+    assert rep["ownership_recall"] == 1.0 and rep["ownership_precision"] == 1.0
+    assert rep["per_class"]["Witch Doctor"]["client_nodes"] == 2
+    brewing = next(x for x in rep["per_tab"]
+                   if x["class"] == "Witch Doctor" and x["tab"] == "Brewing")
+    assert brewing["client_nodes"] == 1 and brewing["builder_records"] == 1
+    assert rep["flip_blockers"] == []
+    assert rep["flip_ready"] is True
+    assert rep["leveling_progression_ready"] is False   # essence undecoded, but NOT a blocker
 
 
-def test_missing_multiplicity_blocks_flip_via_recall():
-    nodes = [_node(1, 503748, "Witch Doctor", "Brewing", "Talent")]   # only one of two
+def test_builder_only_node_blocks_flip():
+    nodes = [_node(7131, 503748, "Witch Doctor", "Brewing", "Talent")]   # missing 12264
     builder = [
-        _builder(503748, "Witch Doctor", "Brewing", "Talent"),
-        _builder(503748, "Witch Doctor", "Class", "Ability"),
+        _builder(7131, 503748, "Witch Doctor", "Brewing", "Talent"),
+        _builder(12264, 503748, "Witch Doctor", "Class", "Ability"),
     ]
     rep = build_parity_report(nodes, builder)
-    assert rep["unique_spell_recall"] == 1.0            # spell present
-    assert rep["multiset_recall"] < 1.0                 # but a node instance is missing
-    assert rep["builder_only_records"] == 1
-    assert rep["flip_ready"] is False
-    assert "builder_only_node_instances" in rep["flip_blockers"]
+    assert rep["builder_only_records"] == 1 and 12264 in rep["builder_only_sample"]
+    assert rep["ownership_recall"] < 1.0
+    assert "builder_only_node_instances" in rep["flip_blockers"] and rep["flip_ready"] is False
 
 
-def test_extra_client_node_blocks_flip_via_precision_not_just_recall():
-    # THE false-100% guard: the client covers every Builder node (recall 1.0) but adds an extra
-    # wrongly-attributed CoA node. A recall-only metric reports 100%; precision catches the extra.
+def test_client_only_node_blocks_flip_precision():
+    # client covers every Builder node (recall 1.0) but adds an extra wrongly-attributed CoA node
     nodes = [
-        _node(1, 503748, "Witch Doctor", "Brewing", "Talent"),
-        _node(2, 999999, "Witch Doctor", "Class", "Ability"),   # not in Builder
+        _node(7131, 503748, "Witch Doctor", "Brewing", "Talent"),
+        _node(99999, 999999, "Witch Doctor", "Class", "Ability"),   # not in Builder
     ]
-    builder = [_builder(503748, "Witch Doctor", "Brewing", "Talent")]
+    builder = [_builder(7131, 503748, "Witch Doctor", "Brewing", "Talent")]
     rep = build_parity_report(nodes, builder)
-    assert rep["multiset_recall"] == 1.0                # every Builder node covered
-    assert rep["multiset_precision"] < 1.0              # but the client has an extra
-    assert rep["client_only_records"] == 1
+    assert rep["ownership_recall"] == 1.0 and rep["ownership_precision"] < 1.0
+    assert rep["client_only_records"] == 1 and 99999 in rep["client_only_sample"]
+    assert "client_only_node_instances" in rep["flip_blockers"] and rep["flip_ready"] is False
+
+
+def test_identity_mismatch_same_id_different_tuple_blocks():
+    # node_id matches an entry_id but the semantic tuple disagrees -> decode/attribution defect
+    nodes = [_node(7131, 503748, "Witch Doctor", "Brewing", "Talent")]
+    builder = [_builder(7131, 503748, "Witch Doctor", "Class", "Ability")]   # tab/type differ
+    rep = build_parity_report(nodes, builder)
+    assert rep["builder_only_records"] == 0 and rep["client_only_records"] == 0
+    assert rep["identity_mismatches"] == 1
+    assert "identity_mismatch" in rep["flip_blockers"] and rep["flip_ready"] is False
+
+
+def test_adjacency_mismatch_is_computed_and_blocks():
+    nodes = [_node(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                   legality={"connected_node_ids": [7132, 7133], "required_ids": []})]
+    builder = [_builder(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                        connected=[7132], required=[])]        # client has an extra edge
+    rep = build_parity_report(nodes, builder)
+    assert rep["adjacency_mismatches"] == 1 and 7131 in rep["adjacency_mismatch_sample"]
+    assert "adjacency_mismatch" in rep["flip_blockers"] and rep["flip_ready"] is False
+
+
+def test_legality_class_b_difference_recorded_but_does_not_block():
+    # client decoded ae_cost high; value differs from Builder -> client wins offline (class b)
+    nodes = [_node(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                   legality={"ae_cost": 2, "connected_node_ids": [], "required_ids": []})]
+    builder = [_builder(7131, 503748, "Witch Doctor", "Brewing", "Talent",
+                        connected=[], required=[], ae_cost=1)]
+    rep = build_parity_report(nodes, builder)
+    diffs = [d for d in rep["legality_diffs"] if d["field"] == "ae_cost"]
+    assert diffs and diffs[0]["class"] == "b" and diffs[0]["client"] == 2 and diffs[0]["builder"] == 1
+    assert not any(b.startswith("legality_defect") for b in rep["flip_blockers"])
+    assert rep["flip_ready"] is True                    # class (b) never blocks (Decision 22)
+
+
+def test_undecoded_legality_field_blocks_via_low_confidence():
+    nodes, builder = _clean_pair()
+    rep = build_parity_report(nodes, builder,
+                              low_confidence_fields=["te_cost"],
+                              unresolved_layout_columns=["max_rank"])
+    assert "low_confidence:te_cost" in rep["flip_blockers"]
+    assert "unresolved_layout_column:max_rank" in rep["flip_blockers"]
     assert rep["flip_ready"] is False
-    assert "client_only_node_instances" in rep["flip_blockers"]
 
 
-def test_flip_blockers_only_essence_when_ownership_exact_and_clean():
-    nodes = [_node(1, 503748, "Witch Doctor", "Brewing", "Talent")]
-    builder = [_builder(503748, "Witch Doctor", "Brewing", "Talent")]
-    rep = build_parity_report(nodes, builder)          # essence undecoded by default
-    assert rep["multiset_recall"] == 1.0 and rep["multiset_precision"] == 1.0
-    assert set(rep["flip_blockers"]) == {"essence_progression"}
-    assert rep["flip_ready"] is False                  # M1.14B validates but never flips
-
-
-def test_decision22_class_b_difference_does_not_block_but_class_a_does():
-    nodes = [_node(1, 503748, "Witch Doctor", "Brewing", "Talent")]
-    builder = [_builder(503748, "Witch Doctor", "Brewing", "Talent")]
-    rep = build_parity_report(
-        nodes, builder,
-        low_confidence_fields=["ae_cost"],
-        unresolved_layout_columns=["required_level_col"],
-        adjacency_mismatches=3,
-        legality_diffs=[
-            {"class": "a", "field": "te_cost", "node_id": 1},   # extraction defect -> blocks
-            {"class": "b", "field": "ae_cost", "node_id": 1},   # proven current diff -> no block
-        ],
-        essence_progression_decoded=True,      # this one resolved, so NOT a blocker here
-    )
-    b = set(rep["flip_blockers"])
-    assert "low_confidence:ae_cost" in b
-    assert "unresolved_layout_column:required_level_col" in b
-    assert "adjacency_mismatch" in b
-    assert "legality_defect:te_cost" in b      # class (a) blocks
-    assert "legality_defect:ae_cost" not in b  # class (b) never blocks (Decision 22)
-    assert "essence_progression" not in b
+def test_cardinality_and_expected_count_gates():
+    nodes, builder = _clean_pair()
+    cts = {i: ClassType(i, f"C{i}", f"C{i}", "coa_class") for i in range(14, 34)}  # only 20 playable
+    cts[35] = ClassType(35, "ConquestOfAzeroth", "ConquestOfAzeroth", "coa_system")
+    rep = build_parity_report(nodes, builder, class_types=cts, expected_builder_records=3612)
+    assert "playable_class_count" in rep["flip_blockers"]      # 20 != 21
+    assert "builder_record_count" in rep["flip_blockers"]      # 1 != 3612
     assert rep["flip_ready"] is False
 
 
-def test_provenance_pins_merged():
+def test_empty_inputs_block():
     rep = build_parity_report([], [], provenance={"client_build": "3.3.5a+patch-CZZ"})
+    assert "empty_client_input" in rep["flip_blockers"]
+    assert "empty_builder_input" in rep["flip_blockers"]
     assert rep["provenance"]["client_build"] == "3.3.5a+patch-CZZ"
+    assert rep["flip_ready"] is False
 
 
 def test_flip_gate_inputs_splits_unresolved_from_low_confidence():
-    from coa_client_extract.parity import flip_gate_inputs
     from coa_client_extract.dbc_layouts import CharacterAdvancementLayout
     layout = CharacterAdvancementLayout(
         tab_type_col=3, entry_type_col=4,
         ae_cost_col=5,                       # resolved but not proven high -> low_confidence
         required_level_col=None,             # never resolved -> unresolved
-        connected_node_cols=(7, 8),          # resolved but not proven high -> adjacency mismatch
+        connected_node_cols=(7, 8),          # resolved but not proven high -> low_confidence
         required_id_cols=(),                 # never resolved -> unresolved
         confidence={"ae_cost": "medium", "connected_node_ids": "low",
                     "tab_type": "high", "entry_type": "high"},
     )
-    low, unresolved, adj = flip_gate_inputs(layout)
-    assert "ae_cost" in low
+    low, unresolved = flip_gate_inputs(layout)
+    assert "ae_cost" in low and "connected_node_ids" in low
     assert "required_level" in unresolved and "required_ids" in unresolved
-    assert adj == 1                          # connected_node_ids resolved but < high
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1615,10 +1953,7 @@ Expected: FAIL with `ModuleNotFoundError: coa_client_extract.parity`.
 # coa_client_extract/parity.py
 from __future__ import annotations
 
-from collections import Counter
-
-# adapter fields -> the CharacterAdvancementLayout attribute holding their column index.
-# Scalar/FK columns first, then the two adjacency slot-lists (handled separately).
+# adapter columns -> the CharacterAdvancementLayout attribute holding their column index.
 _SCALAR_FIELD_COLS = {
     "ae_cost": "ae_cost_col", "te_cost": "te_cost_col", "required_level": "required_level_col",
     "required_tab_ae": "required_tab_ae_col", "required_tab_te": "required_tab_te_col",
@@ -1627,129 +1962,168 @@ _SCALAR_FIELD_COLS = {
 }
 _ADJACENCY_FIELD_COLS = {"connected_node_ids": "connected_node_cols", "required_ids": "required_id_cols"}
 
+# legality scalars compared per node when the client decoded them to `high`.
+_LEGALITY_FIELDS = ("ae_cost", "te_cost", "required_level", "required_tab_ae",
+                    "required_tab_te", "max_rank", "row", "col")
+
+EXPECTED_BUILDER_RECORDS = 3612   # pinned Builder artifact size (the CLI passes this to guard truncation)
+
 
 def flip_gate_inputs(layout):
-    """Derive (low_confidence_fields, unresolved_layout_columns, adjacency_mismatches) from a
-    resolved CharacterAdvancementLayout, for `build_parity_report`. A field whose column was never
-    resolved (None / empty) is 'unresolved'; a field whose column IS resolved but did not prove to
-    `high` confidence is 'low_confidence' (or, for the two adjacency slot-lists, an adjacency
-    mismatch). Both categories block the flip."""
+    """Derive (low_confidence_fields, unresolved_layout_columns) from a resolved
+    CharacterAdvancementLayout. A column never resolved (None / empty tuple) is 'unresolved'; a
+    resolved column that did not prove to `high` confidence is 'low_confidence'. Both block the flip.
+    Adjacency columns are handled the same way here — their *value* agreement with the Builder is
+    measured separately (adjacency_mismatches), but if adjacency never decoded high it is unresolved."""
     conf = layout.confidence or {}
-    low: list[str] = []
-    unresolved: list[str] = []
-    for field, attr in _SCALAR_FIELD_COLS.items():
+    low, unresolved = [], []
+    for field, attr in {**_SCALAR_FIELD_COLS, **_ADJACENCY_FIELD_COLS}.items():
         col = getattr(layout, attr)
-        if col is None:
+        resolved = col is not None and col != ()
+        if not resolved:
             unresolved.append(field)
         elif conf.get(field) != "high":
             low.append(field)
-    adjacency_mismatches = 0
-    for field, attr in _ADJACENCY_FIELD_COLS.items():
-        cols = getattr(layout, attr)
-        if not cols:
-            unresolved.append(field)
-        elif conf.get(field) != "high":
-            adjacency_mismatches += 1
-    return low, unresolved, adjacency_mismatches
+    return low, unresolved
 
 
-def _key(spell_id, class_name, tab_name, entry_type):
+def _tuple(spell_id, class_name, tab_name, entry_type):
     return (int(spell_id), class_name, tab_name, entry_type)
 
 
-def build_parity_report(nodes, builder_entries, *,
-                        low_confidence_fields=(),
-                        unresolved_layout_columns=(),
-                        adjacency_mismatches=0,
-                        legality_diffs=(),
-                        essence_progression_decoded=False,
-                        provenance=None) -> dict:
-    """Node-level (multiset) Builder-parity report + flip gate.
+def _norm(v):
+    # normalize representation differences (Decision 22 class c): missing/None == 0
+    return 0 if v is None else v
 
-    Ownership is a multiset over the compound identity (spell_id, class, tab, entry_type): the
-    shared spell 503748 is two distinct Witch Doctor nodes, counted twice, not collapsed. The flip
-    gate requires EXACT multiset equality — both recall AND precision must be 1.0 — so a client
-    graph that covers every Builder node but adds extra/wrongly-attributed CoA nodes is NOT
-    flip-ready (recall alone would falsely report 100%). `legality_diffs` are already classified
-    into the Decision 22 buckets; only classes (a) extraction defect and (d) unresolved block —
-    class (b) proven-current differences are recorded but never block (the client wins offline)."""
-    # Scope the client side to CoA-class nodes; the Builder oracle is CoA-only, so Reborn/stock
-    # nodes would otherwise flood client_only_records with meaningless entries.
-    coa_nodes = [n for n in nodes if n.spell_id and n.class_kind == "coa_class"]
-    client_keys = Counter(
-        _key(n.spell_id, n.class_display, n.tab_name, n.entry_type) for n in coa_nodes)
-    builder_keys = Counter(
-        _key(e["spell_id"], e["class_name"], e.get("tab_name", ""), e.get("entry_type", ""))
-        for e in builder_entries)
 
-    inter = client_keys & builder_keys        # Counter intersection = min multiplicity per key
-    inter_total = sum(inter.values())
-    client_total = sum(client_keys.values())
-    builder_total = sum(builder_keys.values())
-    builder_only = builder_keys - client_keys
-    client_only = client_keys - builder_keys
-    builder_only_total = sum(builder_only.values())
-    client_only_total = sum(client_only.values())
+def build_parity_report(nodes, builder_entries, *, class_types=None,
+                        low_confidence_fields=(), unresolved_layout_columns=(),
+                        expected_builder_records=None, provenance=None) -> dict:
+    """Node-level Builder-parity report + two readiness verdicts, computing every comparison from a
+    real node-id crosswalk.
 
+    The Builder's `entry_id` and the client's `node_id` are the same advancement-row identity; the
+    report crosswalks them directly and proves the id spaces align by checking each matched id's
+    semantic tuple (spell_id, class, tab, entry_type) — `identity_mismatches`. Ownership is an exact
+    SET over node ids: `builder_only` AND `client_only` must both be empty (a client graph that covers
+    every Builder node but adds extras is not flip-ready). Adjacency and legality are compared per
+    matched node. Legality differences are classified per Decision 22 — only (a)/(d) block; class (b)
+    proven-current differences are recorded but never block (the client wins offline). The raw essence
+    progression table is undecoded in M1.14B: it sets `leveling_progression_ready=False` and is NOT a
+    flip_blocker — max-level legality needs only the verified 26/25 caps constant."""
+    coa_nodes = [n for n in nodes if n.class_kind == "coa_class"]
+    client_by_id = {n.node_id: n for n in coa_nodes}
+    builder_by_id = {int(e["entry_id"]): e for e in builder_entries}
+    client_ids, builder_ids = set(client_by_id), set(builder_by_id)
+    matched = client_ids & builder_ids
+    builder_only_ids = sorted(builder_ids - client_ids)
+    client_only_ids = sorted(client_ids - builder_ids)
+
+    # identity: matched ids whose semantic tuple disagrees (decode/attribution defect)
+    identity_mismatch_ids = [
+        nid for nid in matched
+        if _tuple(client_by_id[nid].spell_id, client_by_id[nid].class_display,
+                  client_by_id[nid].tab_name, client_by_id[nid].entry_type)
+        != _tuple(builder_by_id[nid]["spell_id"], builder_by_id[nid]["class_name"],
+                  builder_by_id[nid].get("tab_name", ""), builder_by_id[nid].get("entry_type", ""))]
+
+    # adjacency parity (computed) over matched nodes that decoded adjacency to `high`
+    adjacency_mismatch_ids = set()
+    for nid in matched:
+        n, e = client_by_id[nid], builder_by_id[nid]
+        for field in ("connected_node_ids", "required_ids"):
+            if field in n.legality and set(n.legality[field]) != set(e.get(field) or []):
+                adjacency_mismatch_ids.add(nid)
+
+    # legality parity (computed, Decision-22 classified) over matched nodes. Only fields the client
+    # decoded to `high` (present in n.legality) are value-compared -> class (b) or (c); a field the
+    # client could not decode is captured globally by low_confidence/unresolved (class a/d).
+    legality_diffs = []
+    for nid in matched:
+        n, e = client_by_id[nid], builder_by_id[nid]
+        for f in _LEGALITY_FIELDS:
+            if f in e and f in n.legality:
+                cv, bv = _norm(n.legality[f]), _norm(e[f])
+                if cv != bv:                     # proven-high client value differs -> client wins
+                    legality_diffs.append({"node_id": nid, "field": f,
+                                           "client": cv, "builder": bv, "class": "b"})
+
+    # per-class and per-tab node counts (+ the asymmetric-only tallies)
+    def _counts(key):
+        cc = {}
+        blank = lambda: {"client_nodes": 0, "builder_records": 0, "client_only": 0, "builder_only": 0}
+        for n in coa_nodes:
+            cc.setdefault(key(n.class_display, n.tab_name), blank())["client_nodes"] += 1
+        for e in builder_entries:
+            cc.setdefault(key(e["class_name"], e.get("tab_name", "")), blank())["builder_records"] += 1
+        for nid in client_only_ids:
+            n = client_by_id[nid]
+            cc[key(n.class_display, n.tab_name)]["client_only"] += 1
+        for nid in builder_only_ids:
+            e = builder_by_id[nid]
+            cc[key(e["class_name"], e.get("tab_name", ""))]["builder_only"] += 1
+        return cc
+
+    per_class = _counts(lambda cls, tab: cls)
+    per_tab = [{"class": cls, "tab": tab, **v}
+               for (cls, tab), v in sorted(_counts(lambda cls, tab: (cls, tab)).items())]
+
+    ownership_recall = round(len(matched) / len(builder_ids), 4) if builder_ids else 1.0
+    ownership_precision = round(len(matched) / len(client_ids), 4) if client_ids else 1.0
     client_spells = {n.spell_id for n in coa_nodes}
     builder_spells = {int(e["spell_id"]) for e in builder_entries}
 
-    # per-class client vs builder node counts (+ the asymmetric-only tallies)
-    client_by_class = Counter(n.class_display for n in coa_nodes)
-    builder_by_class = Counter(e["class_name"] for e in builder_entries)
-    only_client_by_class, only_builder_by_class = Counter(), Counter()
-    for k, c in client_only.items():
-        only_client_by_class[k[1]] += c
-    for k, c in builder_only.items():
-        only_builder_by_class[k[1]] += c
-    per_class = {}
-    for cls in set(client_by_class) | set(builder_by_class):
-        per_class[cls] = {
-            "client_nodes": client_by_class.get(cls, 0),
-            "builder_records": builder_by_class.get(cls, 0),
-            "client_only": only_client_by_class.get(cls, 0),
-            "builder_only": only_builder_by_class.get(cls, 0),
-        }
-
-    multiset_recall = round(inter_total / builder_total, 4) if builder_total else 1.0
-    multiset_precision = round(inter_total / client_total, 4) if client_total else 1.0
-
-    # Flip gate: any ownership/identity/adjacency/confidence defect blocks. A proven legality VALUE
-    # difference (Decision 22 class (b)) is recorded but does NOT block. essence_progression is a
-    # standing M1.14B blocker (undecoded) until M1.15 decodes it.
-    legality_blockers = [d for d in legality_diffs if d.get("class") in ("a", "d")]
+    # ---- flip gate (max-level). The undecoded essence progression is NOT here; it is reported as
+    # leveling_progression_ready below.
     flip_blockers: list[str] = []
-    if builder_only_total:
+    if not coa_nodes:
+        flip_blockers.append("empty_client_input")
+    if not builder_entries:
+        flip_blockers.append("empty_builder_input")
+    if class_types is not None:
+        if sum(1 for c in class_types.values() if c.kind == "coa_class") != 21:
+            flip_blockers.append("playable_class_count")
+        sentinel = class_types.get(35)
+        if sentinel is not None and sentinel.kind == "coa_class":
+            flip_blockers.append("sentinel_not_excluded")
+    if expected_builder_records is not None and len(builder_entries) != expected_builder_records:
+        flip_blockers.append("builder_record_count")
+    if builder_only_ids:
         flip_blockers.append("builder_only_node_instances")
-    if client_only_total:
+    if client_only_ids:
         flip_blockers.append("client_only_node_instances")
-    if adjacency_mismatches:
+    if identity_mismatch_ids:
+        flip_blockers.append("identity_mismatch")
+    if adjacency_mismatch_ids:
         flip_blockers.append("adjacency_mismatch")
     flip_blockers += [f"low_confidence:{f}" for f in low_confidence_fields]
     flip_blockers += [f"unresolved_layout_column:{c}" for c in unresolved_layout_columns]
-    flip_blockers += [f"legality_defect:{d.get('field', '?')}" for d in legality_blockers]
-    if not essence_progression_decoded:
-        flip_blockers.append("essence_progression")
+    flip_blockers += [f"legality_defect:{d['field']}" for d in legality_diffs if d["class"] in ("a", "d")]
 
     report = {
         "schema_version": "coa-builder-parity-v1",
-        "builder_records": builder_total,
-        "client_nodes": client_total,
+        "builder_records": len(builder_entries),
+        "client_nodes": len(coa_nodes),
         "unique_spell_recall": round(len(client_spells & builder_spells) / len(builder_spells), 4)
                                if builder_spells else 1.0,
-        "multiset_recall": multiset_recall,
-        "multiset_precision": multiset_precision,
-        "builder_only_records": builder_only_total,
-        "client_only_records": client_only_total,
-        "builder_only_sample": [list(k) for k in list(builder_only)[:20]],
-        "client_only_sample": [list(k) for k in list(client_only)[:20]],
+        "ownership_recall": ownership_recall,
+        "ownership_precision": ownership_precision,
+        "builder_only_records": len(builder_only_ids),
+        "client_only_records": len(client_only_ids),
+        "builder_only_sample": builder_only_ids[:20],
+        "client_only_sample": client_only_ids[:20],
+        "identity_mismatches": len(identity_mismatch_ids),
+        "identity_mismatch_sample": sorted(identity_mismatch_ids)[:20],
         "per_class": per_class,
-        "adjacency_mismatches": adjacency_mismatches,
-        "legality_diffs": [dict(d) for d in legality_diffs],
+        "per_tab": per_tab,
+        "adjacency_mismatches": len(adjacency_mismatch_ids),
+        "adjacency_mismatch_sample": sorted(adjacency_mismatch_ids)[:20],
+        "legality_diffs": legality_diffs,
         "flip_blockers": flip_blockers,
-        # Exact multiset equality (recall AND precision == 1.0) plus no other blocker.
-        "flip_ready": (not flip_blockers
-                       and multiset_recall == 1.0 and multiset_precision == 1.0),
+        "flip_ready": not flip_blockers,
+        # M1.14B extracts the raw essence progression table but does not decode it; that is a
+        # separate leveling capability (M1.15), NOT a max-level flip blocker.
+        "leveling_progression_ready": False,
     }
     if provenance:
         report["provenance"] = dict(provenance)   # Decision 10 reproducibility pins
@@ -1759,13 +2133,13 @@ def build_parity_report(nodes, builder_entries, *,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_client_extract_parity.py -v`
-Expected: PASS (7 tests).
+Expected: PASS (11 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add coa_client_extract/parity.py tests/test_client_extract_parity.py
-git commit -m "M1.14B: node-level (multiset) Builder-parity report + flip gate"
+git commit -m "M1.14B: crosswalk-based node-level Builder-parity report + two-verdict flip gate"
 ```
 
 ---
@@ -1871,28 +2245,36 @@ In `coa_client_extract/cli.py`, after the existing spell/content extraction and 
 import hashlib
 from .class_types import resolve_class_types, resolve_tab_types, assert_playable_cardinality
 from .advancement import read_advancement, validate_semantics
-from .attribution import attribute, build_skill_line_index
+from .attribution import attribute, derive_coa_skill_lines, build_skill_line_index
 from .artifacts import (
     build_advancement_records, build_class_type_records, build_tab_type_records,
     build_essence_raw_records, fill_spell_attribution,
 )
+from .decode_advancement import load_resolved_layout
 from .wdbc import parse_dbc, parse_positional
 from .dbc_layouts import (
     CHARACTER_ADVANCEMENT_CLASS_TYPES, CHARACTER_ADVANCEMENT_TAB_TYPES, CHARACTER_ADVANCEMENT,
     CHARACTER_ADVANCEMENT_ESSENCE, CHARACTER_ADVANCEMENT_SKILL_LINE_ABILITY,
 )
 
+# CANONICAL emission parses STRICT: a structural header mismatch raises before anything is written,
+# so no canonical artifact is ever emitted with header drift. (Non-strict parsing lives only in the
+# exploratory decode-advancement command.)
 def read_named(name, layout):
     m = backend.read_effective_file(root, attach, f"DBFilesClient\\{name}.dbc")
-    return m, parse_dbc(m.data, layout)          # named columns incl. "name" (col 1)
+    return m, parse_dbc(m.data, layout, strict=True)          # named columns incl. "name" (col 1)
 
 def read_positional(name, fc, rs):
     m = backend.read_effective_file(root, attach, f"DBFilesClient\\{name}.dbc")
-    return m, parse_positional(m.data, fc, rs)   # {index: value} rows
+    return m, parse_positional(m.data, fc, rs, strict=True)   # {index: value} rows
 
 ct_member, ct_tbl = read_named("CharacterAdvancementClassTypes", CHARACTER_ADVANCEMENT_CLASS_TYPES)
 tt_member, tt_tbl = read_named("CharacterAdvancementTabTypes", CHARACTER_ADVANCEMENT_TAB_TYPES)
-ca_layout = (layouts.get("CharacterAdvancementLayout") if layouts else None) or CHARACTER_ADVANCEMENT
+# The layout is the PROVEN one from the committed decode report (self-applying, no hand-edit); tests
+# inject a synthetic layout; the anchors-only constant is only a last resort.
+ca_layout = ((load_resolved_layout(ca_decode_report) if ca_decode_report else None)
+             or (layouts.get("CharacterAdvancementLayout") if layouts else None)
+             or CHARACTER_ADVANCEMENT)
 ca_member, ca_raw = read_positional("CharacterAdvancement",
                                     ca_layout.header_field_count, ca_layout.header_record_size)
 ess_member, ess_raw = read_positional("CharacterAdvancementEssence",
@@ -1911,16 +2293,26 @@ tab_types = resolve_tab_types(tt_tbl)
 assert_playable_cardinality(class_types)         # exactly 21 playable CoA classes (raises otherwise)
 
 nodes = read_advancement(ca_raw, class_types, tab_types, ca_layout)
-validate_semantics(nodes, class_types, tab_types)   # raises before any write -> fail closed
-skill_index = build_skill_line_index(sla_raw.rows)  # medium-confidence fallback for graph-absent spells
+validate_semantics(nodes, class_types, tab_types)   # FK/adjacency/range + graph invariants; fail closed
+# skill-line fallback set is PROVEN from the graph's own CoA spells (per-spec lines, not a fixed range)
+coa_spell_ids = {n.spell_id for n in nodes if n.class_kind == "coa_class" and n.spell_id}
+coa_skill_lines = derive_coa_skill_lines(sla_raw.rows, coa_spell_ids)
+skill_index = build_skill_line_index(sla_raw.rows, coa_skill_lines)
 spell_attr = attribute(nodes, class_types, skill_line_index=skill_index)
 
 adv_provenance = {
     "client_build": _client_build(plan),
     "source_dbcs": {"CharacterAdvancement": ca_member.effective_archive.name,
-                    "CharacterAdvancementClassTypes": ct_member.effective_archive.name},
+                    "CharacterAdvancementClassTypes": ct_member.effective_archive.name,
+                    "CharacterAdvancementTabTypes": tt_member.effective_archive.name,
+                    "Spell": spell_member.effective_archive.name},
     "supersedes": {"source_file": "CharacterAdvancementData.json"},
-    "header_drift": ca_raw.drift,                # header vs layout-expected header; recorded for audit
+    "extraction_date": date.today().isoformat(),
+}
+essence_provenance = {                           # names its OWN source table, not CharacterAdvancement
+    "client_build": _client_build(plan),
+    "source_dbcs": {"CharacterAdvancementEssence": ess_member.effective_archive.name},
+    "semantics": "undecoded_per_level_progression",
     "extraction_date": date.today().isoformat(),
 }
 # current names come from the already-extracted spell records (Spell.dbc), not the CA string block
@@ -1929,7 +2321,7 @@ adv_records = build_advancement_records(nodes, provenance=adv_provenance,
                                         spell_names=spell_names, attribution=spell_attr)
 class_type_records = build_class_type_records(class_types)
 tab_type_records = build_tab_type_records(tab_types)
-essence_records = build_essence_raw_records(ess_raw, provenance=adv_provenance)  # raw; semantics undecoded
+essence_records = build_essence_raw_records(ess_raw, provenance=essence_provenance)  # raw; undecoded
 spell_records = fill_spell_attribution(spell_records, spell_attr)
 ```
 
@@ -1943,18 +2335,21 @@ outputs["coa_client_tab_types.jsonl"] = write_jsonl(tab_type_records, out_dir / 
 outputs["coa_client_essence.jsonl"] = write_jsonl(essence_records, out_dir / "coa_client_essence.jsonl")
 ```
 
-If a `--builder-entries` path is provided, also build and write the parity report with the flip-gate
-inputs derived from the resolved layout (essence progression is undecoded in M1.14B, so it is always a
-standing blocker — the report validates the graph but never reports `flip_ready`):
+If a `--builder-entries` path is provided, also build and write the parity report. `build_parity_report`
+**computes** ownership/identity/adjacency/legality itself; `flip_gate_inputs` only surfaces which layout
+columns are unresolved or low-confidence so the report can gate on them. `flip_ready` may be `true` here —
+essence progression is NOT a flip-blocker (it sets the separate `leveling_progression_ready` verdict
+false); a flip is blocked only by ownership/adjacency/legality/cardinality/count defects (Decision 22):
 
 ```python
 if builder_entries_path:
-    from .parity import build_parity_report, flip_gate_inputs
+    from .parity import build_parity_report, flip_gate_inputs, EXPECTED_BUILDER_RECORDS
     builder_path = Path(builder_entries_path)
     builder_entries = [json.loads(l) for l in builder_path.read_text().splitlines()]
-    low_conf, unresolved_cols, adj_mismatches = flip_gate_inputs(ca_layout)
+    low_conf, unresolved_cols = flip_gate_inputs(ca_layout)          # 2-tuple; adjacency folded in
     pins = {
         "client_build": _client_build(plan),
+        "extractor_commit": _extractor_commit(),                    # git HEAD of this extractor tree
         "source_dbc_sha256": {
             "CharacterAdvancement": hashlib.sha256(ca_member.data).hexdigest(),
             "CharacterAdvancementClassTypes": hashlib.sha256(ct_member.data).hexdigest(),
@@ -1964,22 +2359,45 @@ if builder_entries_path:
         },
         "builder_entries_file": builder_path.name,
         "builder_entries_sha256": hashlib.sha256(builder_path.read_bytes()).hexdigest(),
+        "builder_record_count": len(builder_entries),
+        "builder_build_slugs": sorted({e.get("build_slug") for e in builder_entries
+                                       if e.get("build_slug")}),
+        "decode_report_sha256": (hashlib.sha256(Path(ca_decode_report).read_bytes()).hexdigest()
+                                 if ca_decode_report and Path(ca_decode_report).is_file() else None),
+        "resolved_class_set": sorted(c.class_type_id for c in class_types.values()
+                                     if c.kind == "coa_class"),
         "layout_version": "m1-14-b",
-        "playable_class_count": sum(1 for c in class_types.values() if c.kind == "coa_class"),
         "extraction_date": date.today().isoformat(),
     }
     report = build_parity_report(
-        nodes, builder_entries,
+        nodes, builder_entries, class_types=class_types,
         low_confidence_fields=low_conf, unresolved_layout_columns=unresolved_cols,
-        adjacency_mismatches=adj_mismatches, essence_progression_decoded=False, provenance=pins,
+        expected_builder_records=EXPECTED_BUILDER_RECORDS, provenance=pins,
     )
     outputs["coa_builder_parity_report.json"] = write_json(
         report, out_dir / "coa_builder_parity_report.json")
 ```
 
 Add the `--builder-entries` argument to the `regenerate` subparser (and the `builder_entries_path`
-parameter to `regenerate(...)`, default `None`) and thread it through. `ExtractedMember.data` carries
-the raw bytes for the sha256 pins.
+parameter to `regenerate(...)`, default `None`) and thread it through. Also add `--decode-report`
+(→ `ca_decode_report` parameter). **Split the defaults so tests are not clobbered:** the `regenerate(...)`
+parameter defaults to `None` (a direct call with an injected synthetic `layouts` uses that injected
+layout, never a committed report), while the argparse `--decode-report` default is the committed
+`reports/client_extract/coa_ca_decode_report.json` so a real CLI run loads the proven layout rather than
+the anchors-only fallback. `ExtractedMember.data` carries the raw bytes for the sha256 pins.
+`_extractor_commit()` is a small best-effort helper:
+
+```python
+def _extractor_commit():
+    """Best-effort git HEAD of the extractor tree, for parity/artifact provenance."""
+    import subprocess
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True,
+            cwd=str(Path(__file__).resolve().parent), stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return "unknown"
+```
 
 - [ ] **Step 4: Run the full client-extract test module**
 
@@ -2007,7 +2425,7 @@ Document `coa-client-advancement-v1`: every field from the Task 6 record shape (
 
 - [ ] **Step 2: Write `docs/data/client-class-types-schema.md` (also covering tab-types + raw essence)**
 
-Document `coa-client-class-types-v1`: `class_type_id`, `internal`, `display`, `kind` (`coa_class`/`coa_system`/`reborn`/`stock`/`meta`), `display_source` (`client`|`curated_alias`), `display_evidence`. State the bands (14–34 playable, 35 sentinel, 36–46 Reborn) and the three curated aliases with provenance. In the same file, document the two companion metadata artifacts emitted alongside it: `coa-client-tab-types-v1` (`tab_type_id`, `name`) and `coa-client-essence-v1` (index-keyed `cols` + `provenance`) — stating explicitly that the essence artifact is the raw per-level *progression* table with undecoded semantics (an `essence_progression` flip-blocker for M1.15), and that per-class essence *caps* are the documented constants AE 26 / TE 25, not a decoded DBC value.
+Document `coa-client-class-types-v1`: `class_type_id`, `internal`, `display`, `kind` (`coa_class`/`coa_system`/`reborn`/`stock`/`meta`), `display_source` (`client`|`curated_alias`), `display_evidence`. State the bands (14–34 playable, 35 sentinel, 36–46 Reborn) and the three curated aliases with provenance. In the same file, document the two companion metadata artifacts emitted alongside it: `coa-client-tab-types-v1` (`tab_type_id`, `name`) and `coa-client-essence-v1` (index-keyed `cols` + `provenance` naming `CharacterAdvancementEssence` as its own source) — stating explicitly that the essence artifact is the raw per-level *progression* table with undecoded semantics. Its undecoded state sets the parity report's `leveling_progression_ready` verdict to `false` and is **never** a `flip_blocker` (an M1.15 leveling gate, not a max-level flip blocker — Decision 22). Per-class essence *caps* are the documented constants AE 26 / TE 25, a versioned `verified_constant` (Decision 21 fallback provenance, to be corroborated against the client UI), not a decoded DBC value.
 
 - [ ] **Step 3: Update `client-spell-schema.md` and `client-content-schema.md`**
 
@@ -2017,9 +2435,9 @@ In `client-spell-schema.md`, replace the M1.14A `coa_attribution.status: "unknow
 
 Amend Decision 18 (archive-family mechanism replaced by the `CharacterAdvancement.dbc` registry; principle unchanged). Add Decision 21 (staged, per-field Decision 1 supersession, gated on node-level parity + semantic validation) and Decision 22 (client DBC = canonical offline legality source; live corrections via user-reported verified overrides; Builder removed from the authority chain; four-way discrepancy classification with only extraction/unresolved blocking). Copy the precedence and classification wording verbatim from the spec's Decision impacts section.
 
-- [ ] **Step 5: Update the umbrella spec + roadmap status**
+- [ ] **Step 5: Update the umbrella spec + roadmap status + add the M1.15 leveling sub-milestone**
 
-In the M1.14 umbrella spec, update the M1.14B row/section: attribution source is `CharacterAdvancement.dbc` (not archive family), and it also carries the graph/legality (staged to M1.15). In `docs/ROADMAP.md`, mark M1.14B status and link this spec + plan.
+In the M1.14 umbrella spec, update the M1.14B row/section: attribution source is `CharacterAdvancement.dbc` (not archive family), and it also carries the graph/legality (staged to M1.15). In `docs/ROADMAP.md`, mark M1.14B status and link this spec + plan. In the same `docs/ROADMAP.md` edit, add an **M1.15 sub-milestone: "Level-by-level build validation"** — decode `CharacterAdvancementEssence` per-level progression, wire the two essence readiness signals (this is the feature that flips `leveling_progression_ready` to `true`), and validate a build's AE/TE spend against per-level essence availability rather than only the max-level caps. Note that M1.14B deliberately leaves this gated: it emits the raw essence table and reports `leveling_progression_ready: false` without blocking the max-level flip.
 
 - [ ] **Step 6: Commit**
 
@@ -2058,12 +2476,18 @@ In `tests/test_client_extract_integration_stormlib.py` (M1.14A's native tier, `@
 
 The acceptance test drives the **real `regenerate` API** (the same entry point M1.14A's acceptance
 test uses — `regenerate(CLIENT_ROOT, tmp_path, ...)`), not hand-assembled fixtures. It reads the
-emitted artifacts and the parity report. Note the strict `flip_blockers == {"essence_progression"}`
-bar: it only holds once Task 3's client-tier decode has proven every adapter field to `high` and
-written the resolved columns + confidence into the `CHARACTER_ADVANCEMENT` layout constant. A
-different blocker is a real finding — a field that failed to decode (fix the layout) or a
-client-vs-Builder legality diff misclassified as (a)/(d) instead of a genuine (b) client-wins
-difference (Decision 22).
+emitted artifacts and the parity report. The bar is the two-verdict model: **`flip_ready is True` and
+`flip_blockers == []`, while `leveling_progression_ready is False`.** The undecoded raw essence
+progression table is NOT a flip-blocker (Decision 22: the max-level ownership/graph/legality flip does
+not depend on per-level leveling data); it only holds `leveling_progression_ready` false, which is an
+M1.15 gate. `flip_ready` holds only once Task 3's client-tier decode has proven every adapter field to
+`high` and the committed decode report supplies the resolved columns + confidence. A standing
+`flip_blocker` is therefore a real finding: a field that failed to decode (fix the decode/layout), an
+ownership/identity/adjacency mismatch (an extraction defect), or a cardinality/count guard trip.
+**Decision 22 note:** an ownership mismatch always blocks (`builder_only_node_instances` /
+`client_only_node_instances` / `identity_mismatch`); "client wins" applies ONLY to a legality *value*
+difference on an already-matched node (class (b) — recorded, never a blocker), never to a node-set
+disagreement.
 
 ```python
 # append to tests/test_client_extract_acceptance.py
@@ -2088,17 +2512,18 @@ def test_real_client_advancement_parity(tmp_path):
     assert len(playable) == 21
     assert all(c["class_type_id"] != 35 for c in playable)
 
-    # --- node-level (multiset) Builder-parity: EXACT ownership (recall AND precision) after rename ---
+    # --- node-id crosswalk Builder-parity: EXACT ownership (recall AND precision) after rename ---
     report = json.loads((tmp_path / "coa_builder_parity_report.json").read_text())
     assert report["unique_spell_recall"] == 1.0
-    assert report["multiset_recall"] == 1.0 and report["multiset_precision"] == 1.0
+    assert report["ownership_recall"] == 1.0 and report["ownership_precision"] == 1.0
     assert report["builder_only_records"] == 0 and report["client_only_records"] == 0
+    assert report["identity_mismatches"] == 0 and report["adjacency_mismatches"] == 0
     assert report["provenance"]["source_dbc_sha256"]["CharacterAdvancement"]   # reproducibility pins
-    assert report["provenance"]["playable_class_count"] == 21
-    # M1.14B validates but never flips: essence progression is undecoded, so once every adapter
-    # field is proven `high` it is the SOLE standing blocker (adjacency proven -> no adjacency_mismatch).
-    assert set(report["flip_blockers"]) == {"essence_progression"}
-    assert report["flip_ready"] is False
+    assert report["provenance"]["resolved_class_set"] == list(range(14, 35))   # 21 playable CoA ids
+    # Two-verdict model: max-level flip is READY (no blockers); only per-level leveling stays pending.
+    assert report["flip_blockers"] == []
+    assert report["flip_ready"] is True
+    assert report["leveling_progression_ready"] is False   # essence undecoded, but NOT a blocker
 
     # --- 805775 is current "Adrenal Venom" on a Venomancer node; attribution filled ---
     adv = [json.loads(l) for l in
@@ -2119,7 +2544,7 @@ def test_real_client_advancement_parity(tmp_path):
 - [ ] **Step 3: Run the acceptance test against the real client**
 
 Run: `COA_CLIENT_ROOT="$HOME/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live/Data" python -m pytest tests/test_client_extract_acceptance.py -m client -v`
-Expected: PASS. If `multiset_recall`/`multiset_precision` < 1.0, inspect `builder_only_sample`/`client_only_sample` — a builder-only gap is an undecoded column or a genuine client-vs-Builder difference (client wins per Decision 22; it must not be an extraction defect); a client-only entry is an over-attributed or mis-renamed node (an extraction defect — fix it).
+Expected: PASS. If `ownership_recall`/`ownership_precision` < 1.0, inspect `builder_only_sample`/`client_only_sample` — a builder-only node id is an undecoded/mis-attributed node (an extraction defect — fix it); a client-only id is an over-attributed or mis-renamed node (also an extraction defect). Note: unlike a legality *value* difference (class (b), client wins per Decision 22), a node-set disagreement is never "client wins" — it always blocks.
 
 - [ ] **Step 4: Regenerate the real artifacts + parity report**
 
@@ -2129,7 +2554,7 @@ python -m coa_client_extract regenerate \
   --out reports/client_extract \
   --builder-entries coa_scraper/dist/coa_entries.jsonl
 ```
-Confirm `reports/client_extract/` contains `coa_client_advancement.jsonl`, `coa_client_class_types.jsonl`, `coa_client_tab_types.jsonl`, `coa_client_essence.jsonl`, `coa_client_spell.jsonl` (attribution filled), and `coa_builder_parity_report.json` with `multiset_recall: 1.0` and `multiset_precision: 1.0` (and `flip_blockers: ["essence_progression"]`).
+Confirm `reports/client_extract/` contains `coa_client_advancement.jsonl`, `coa_client_class_types.jsonl`, `coa_client_tab_types.jsonl`, `coa_client_essence.jsonl`, `coa_client_spell.jsonl` (attribution filled), and `coa_builder_parity_report.json` with `ownership_recall: 1.0` and `ownership_precision: 1.0`, `flip_ready: true`, `flip_blockers: []`, and `leveling_progression_ready: false`.
 
 - [ ] **Step 5: Full suite + commit**
 
@@ -2137,7 +2562,7 @@ Run: `python -m pytest` (default tier — must be green without StormLib/client)
 
 ```bash
 git add tests/test_client_extract_acceptance.py tests/test_client_extract_integration_stormlib.py
-git commit -m "M1.14B: stormlib-tier CA override + client-tier acceptance (exact multiset parity, essence-only blocker)"
+git commit -m "M1.14B: stormlib-tier CA override + client-tier acceptance (exact crosswalk parity, flip_ready true / leveling pending)"
 ```
 
 ---
@@ -2147,5 +2572,5 @@ git commit -m "M1.14B: stormlib-tier CA override + client-tier acceptance (exact
 - **Decode dependency:** Tasks 4–10 reference the `CHARACTER_ADVANCEMENT` layout constant produced by Task 3 Step 6 (client tier). Synthetic unit tests supply their own `CharacterAdvancementLayout`, so Tasks 4–8 are fully testable *without* the client; only Task 3 Step 6 and Task 10 require the real install. Do Task 3's client decode before Task 10.
 - **Reader split in `regenerate`:** M1.14A's `regenerate` has a local `read_table(name)` for the spell family. Task 8 adds `read_named(name, layout)` (named columns — companion `*Types` tables, whose `name` is the verified col 1, no decode needed) and `read_positional(name, fc, rs)` (index-keyed cells — the wide `CharacterAdvancement`/`Essence` tables). Keep `read_table` for the spell family untouched.
 - **Only `high`-confidence fields are emitted into `legality`/adapter.** A field left `None` in the layout is simply absent from `legality`; that is intended (it becomes Builder-fallback in M1.15), not a bug.
-- **Essence: caps are constants, the table is extracted raw.** Per-class essence *caps* are the documented uniform constants (AE 26 / TE 25) and live in the existing `coa_scraper/dist/coa_essence_caps.json`; M1.14B does **not** decode caps from a DBC. `CharacterAdvancementEssence` is per-level *progression* data: `build_essence_raw_records` emits it raw (index-keyed cells + provenance) as `coa-client-essence.jsonl`, and its per-level decode is surfaced as the `essence_progression` entry in the parity report's `flip_blockers` — an M1.15 leveling-gate item, not an M1.14B blocker. Do not add an essence-cap column layout or fabricate cap column indices.
+- **Essence: caps are constants, the table is extracted raw, progression is NOT a flip-blocker.** Per-class essence *caps* are the documented uniform constants (AE 26 / TE 25), a versioned `verified_constant` (Decision 21 fallback provenance, corroborate against client UI later) living in the existing `coa_scraper/dist/coa_essence_caps.json`; M1.14B does **not** decode caps from a DBC. `CharacterAdvancementEssence` is per-level *progression* data: `build_essence_raw_records` emits it raw (index-keyed cells + provenance naming its own source table) as `coa-client-essence.jsonl`. Its undecoded state sets the parity report's `leveling_progression_ready` verdict to `false` and is **never** added to `flip_blockers` — per Decision 22 the max-level flip does not depend on per-level leveling data. Level-by-level build validation is a separate M1.15 sub-milestone. Do not add an essence-cap column layout or fabricate cap column indices.
 - **Do not rewire `coa_meta`.** If any task tempts you to touch `repository.py` or reports, stop — that is M1.15.
