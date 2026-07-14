@@ -127,4 +127,10 @@ def test_real_client_advancement_parity(tmp_path):
     spells = {json.loads(l)["spell_id"]: json.loads(l) for l in
               (tmp_path / "coa_client_spell.jsonl").read_text().splitlines()}
     assert 503748 in spells and len(spells[503748]["memberships"]) == 2
-    assert all(m["class_display"] == "Witch Doctor" for m in spells[503748]["memberships"])
+    # the client ships its NATIVE class label (CamelCase "WitchDoctor"); class 15 is not one of the 3
+    # curated semantic aliases, so it stays client-native. The Builder's spaced "Witch Doctor" is a
+    # representation difference normalized only for parity (canonical_class_label), never rewritten into
+    # the artifact — so both memberships canonicalize to the Witch Doctor class.
+    from coa_client_extract.parity import canonical_class_label
+    assert all(canonical_class_label(m["class_display"]) == canonical_class_label("Witch Doctor")
+               for m in spells[503748]["memberships"])
