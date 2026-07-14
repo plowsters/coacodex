@@ -63,15 +63,16 @@ spec and implementation plan.
 | Sub | Scope | Purpose | Depends on |
 |-----|-------|---------|------------|
 | **M1.14A** | extraction core | `coa_client_extract` module: `ArchiveBackend` protocol + narrow StormLib ctypes backend, auditable `ArchivePlan`, header-driven WDBC reader with schema-drift detection, loose Content-JSON reader, patch-chain provenance + manifest, and the `coa-client-spell-v1` / `coa-client-content-v1` artifacts (attribution deferred). Committed **synthetic** fixtures; three test tiers. | — |
-| **M1.14B** | attribution | Client-native CoA attribution (archive-family + ID-range + skill-line markers), per-record confidence, precision/recall against the Builder oracle, the `805775` acid test. Fills the `coa_attribution` fields on the M1.14A artifacts. | A |
+| **M1.14B** | attribution + advancement graph | Extracts `CharacterAdvancement.dbc` — the client's own CoA advancement graph, discovered to supersede the archive-family/ID-range/skill-line attribution plan sketched below — as `coa-client-advancement-v1` (node-level, 100% unique-spell recall/attribution against the Builder oracle), plus `coa-client-class-types-v1`/`coa-client-tab-types-v1`/`coa-client-essence-v1` and the filled `coa_attribution` participation block on `coa-client-spell-v1`. Node-level Builder-parity report (`coa-builder-parity-v2`) with a scoped, per-field `readiness` object (Decision 21). M1.14B **extracts and proves** the graph and legality; it does not rewire the legality/tree pipeline to consume it — that staged, per-field Decision 1 supersession is **M1.15**'s job (Decision 21/22). See [M1.14B design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md). | A |
 | **M1.14C** | reconciliation + sunset | Reconcile `coa-client-spell-v1` into `coa-mechanics-v1` via a source-precedence policy in the Node mechanics builder (client mechanical > verified Builder > AscensionDB fallback > inferred tooltip), retaining every competing value + selected-source reason; demote db mechanical enrichment to fallback-only. | A, B |
 | **M1.14D** | wow constants | `coa-wow-constants-v1` — GameTable conversion primitives and documented WotLK constants for the M1.16 engine. | A |
 | **M1.14E** | test audit | Test-suite integrity audit, tooltip-HTML regression test, and modeling-test standards. | — |
 | **M1.14F** | spike | Time-boxed memory-bridge/API investigation with a viable/not-viable/defer recommendation. | — |
 
 A→B→C is a dependency chain. D depends only on A's extraction machinery. E and F are independent and
-can proceed in parallel. Only **M1.14A** is fully specced today (see
-[M1.14A Client Extraction Core](2026-07-10-m1-14-a-client-extraction-core-design.md)); B–F are
+can proceed in parallel. **M1.14A** and **M1.14B** are now fully specced (see
+[M1.14A Client Extraction Core](2026-07-10-m1-14-a-client-extraction-core-design.md) and
+[M1.14B Client Attribution and CoA Advancement Graph Design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md)); C–F are
 delineated below.
 
 ## Scope
@@ -80,7 +81,9 @@ M1.14 includes:
 
 - **A. Extraction core** — MPQ patch-chain resolution behind a project-owned backend, DBC parsing
   with drift detection, loose Content-JSON ingestion, provenance, and the client artifacts.
-- **B. Client-native CoA attribution** with per-record confidence and Builder-oracle validation.
+- **B. Client-native CoA attribution and advancement graph** — the `CharacterAdvancement.dbc`
+  registry, node-level Builder-oracle parity, and per-record confidence. Extracts and proves the
+  graph and legality; does not rewire the legality/tree pipeline to consume it (staged to M1.15).
 - **C. Reconciliation** into the mechanics artifact and sunset of stale db mechanical enrichment.
 - **D. WoW conversion primitives** (GameTables and documented constants) for the modeling engine.
 - **E. Test-suite integrity audit** and modeling-test standards.
@@ -92,6 +95,8 @@ M1.14 does not include:
 - Item stat ingestion/ranking (M1.18) beyond icon/type/display captured incidentally.
 - Extraction of server-side custom scaling/proc numbers (scouted by the spike; not solved).
 - Any visual/report changes beyond consuming richer mechanical fields where already rendered.
+- Rewiring the legality/tree pipeline to consume the client advancement graph and retiring the
+  Builder scrape (the staged, per-field Decision 1 supersession) — that is **M1.15** (Decision 21/22).
 
 ## Design
 
@@ -148,7 +153,47 @@ role signals), and `ItemVariationData`. `CharacterAdvancementData` is investigat
 CoA or the classless/Area-52 system before any use. Records land in `coa-client-content-v1` with
 source file and provenance; attribution confidence is filled by M1.14B.
 
-### Client-native CoA attribution (M1.14B)
+### Client-native CoA attribution and advancement graph (M1.14B)
+
+> **Superseded by discovery.** The archive-family/ID-range/skill-line plan originally sketched in this
+> section (below) was disproven by a pre-implementation discovery pass against the real client on
+> 2026-07-13: `patch-C*` contains only art assets, zero DBC files, so archive-family membership cannot
+> attribute a DBC row to CoA. The discovery pass found a far better source — see the
+> [M1.14B design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md) for the full, current
+> design. This subsection is retained for history; the paragraphs immediately below describe what
+> actually shipped.
+
+M1.14B's real primary signal is **`DBFilesClient/CharacterAdvancement.dbc`** — the client's own CoA
+advancement graph (12,037 rows), extracted as `coa-client-advancement-v1` (one record per advancement
+*node*, not per spell; see [client-advancement-schema.md](../../data/client-advancement-schema.md)).
+Measured against the Builder oracle (3,612 records, 3,611 unique spell IDs): 100% unique-spell recall,
+and — once the three alpha→display class renames are applied (see
+[client-class-types-schema.md](../../data/client-class-types-schema.md)) — 100% unique-spell class
+attribution. Archive family is demoted to raw provenance only (known uninformative); skill-line
+membership and ID range remain only as a medium/low-confidence fallback for the small set of records
+absent from the advancement graph (Decision 18, amended).
+
+Attribution answers **participation**, not exclusive ownership: `attribution.py` emits, per spell,
+`is_coa`/`modes[]`/`exclusive_mode`/`confidence` plus a stable `memberships[]` array, from an explicit
+evidence truth table (advancement membership by class-type band is `high` confidence; skill-line-only
+is `medium`; ID-range-only with no advancement/skill-line signal is `low` and `is_coa: false`). The CoA
+Builder payload remains a cross-validation oracle only, never a whitelist gate.
+
+M1.14B also proves the graph node-by-node against the Builder via the node-level parity report
+(`coa-builder-parity-v2`) and emits a scoped, per-field `readiness` object (`attribution_ready`,
+`ownership_ready`, `adjacency_ready`, per-field `legality`, `leveling_progression_ready`,
+`full_builder_retirement_ready` — Decision 21). Per the agreed scope, M1.14B **extracts and proves**
+the graph and legality; it does **not** rewire the legality/tree pipeline to consume the client
+graph — that staged, per-field Decision 1 supersession, gated on this parity report and semantic-layout
+validation passing, is **M1.15**'s job (Decision 21/22).
+
+Acid test: spell `805775` is attributed to CoA (Venomancer, `high` confidence) and its advancement-graph
+row carries the current *Adrenal Venom* name, while the loose `CharacterAdvancementData.json` and
+db.ascension.gg still say the stale *Fang Venom: Lifeblood* — confirming the client is both correct
+and current.
+
+<details>
+<summary>Original (superseded) sketch, retained for history</summary>
 
 Attribution answers "is this record CoA?" from client-derived signals, producing a confidence and
 provenance per record. Signals, in priority order:
@@ -170,6 +215,8 @@ Acid test: spell `805775` is attributed to CoA by client-native signals, its cli
 matches the current *Adrenal Venom*, and the Builder cross-check confirms the heuristic caught it.
 Additionally, a spot-check confirms that CoA-attributed spells *not* present in the Builder are
 genuinely CoA.
+
+</details>
 
 ### Artifacts and reconciliation (M1.14C)
 
@@ -252,9 +299,11 @@ coa_client_extract/                # Python. Depends on StormLib at extraction t
   M1.14D, the new `coa-wow-constants-v1` artifact with provenance.
 - `coa_scraper/scripts/build-mechanics-artifacts.mjs` — gains the source-precedence policy in M1.14C.
 - `docs/data/` — schema docs for the new artifacts (`client-spell-schema.md`,
-  `client-content-schema.md`, `wow-constants-schema.md`).
-- `docs/DECISIONS.md` — Decision 18 (client-authoritative mechanics) and Decision 20 (client
-  extraction architecture).
+  `client-content-schema.md`, `client-advancement-schema.md`, `client-class-types-schema.md`,
+  `wow-constants-schema.md`).
+- `docs/DECISIONS.md` — Decision 18 (client-authoritative mechanics, amended in M1.14B for
+  advancement-registry attribution), Decision 20 (client extraction architecture), Decision 21
+  (staged per-field Decision 1 supersession), and Decision 22 (client DBC canonical offline legality).
 
 ## Cross-Cutting Principles
 
@@ -284,8 +333,10 @@ coa_client_extract/                # Python. Depends on StormLib at extraction t
   tiny, context-managing handles, letting no raw handle escape, and pinning a tested StormLib range.
 - **StormLib install friction:** a native dependency for maintainers; mitigated by the fail-closed
   regenerate path plus synthetic fixtures so tests and ordinary reports never need it.
-- **Attribution error:** archive-family membership is strong but not proven complete; mitigated by
-  Builder cross-validation and confidence flags rather than hard drops (M1.14B).
+- **Attribution error:** archive-family membership was assumed strong but turned out uninformative
+  (the entire DBC tier is unified across game modes); mitigated by switching the primary signal to the
+  `CharacterAdvancement.dbc` registry itself, measured against Builder cross-validation with confidence
+  flags rather than hard drops (M1.14B).
 - **Server-side gaps:** custom scaling/proc numbers and item stats are not fully in client DBC; scoped
   to the spike and to M1.18, and documented as a known limitation.
 
@@ -295,8 +346,11 @@ coa_client_extract/                # Python. Depends on StormLib at extraction t
   StormLib-backed backend, an auditable archive plan, and full patch-chain provenance.
 - Spell `805775` is CoA-attributed by client-native signals and carries current mechanical data
   matching the live client, not the stale db *Fang Venom: Lifeblood*.
-- CoA is separated from Area-52 and Reborn using client-derived signals, with attribution confidence
-  measured against the Builder oracle and reported.
+- CoA is separated from Area-52 and Reborn using client-derived signals — primarily
+  `CharacterAdvancement.dbc` registry membership — with attribution confidence measured against the
+  Builder oracle and reported. The node-level parity report (`coa-builder-parity-v2`) and its scoped
+  `readiness` object (Decision 21) are produced, with `attribution_ready`/`ownership_ready` true and
+  every other dimension reporting its honest, evidence-backed state.
 - `coa-wow-constants-v1` is produced with sourced conversion tables and documented constants.
 - Schema-drift detection warns on DBC layout deviations rather than misreading, and the regenerate
   command fails closed when StormLib is unavailable.

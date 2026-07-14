@@ -203,6 +203,19 @@ CoA attribution is derived from client-native signals — primarily archive-fami
 skill-line markers. The CoA Builder payload is used only as a cross-validation oracle to measure the
 attribution heuristic's precision/recall. It is never a whitelist gate.
 
+**Amended (M1.14B, 2026-07-13).** The archive-family mechanism above does not work: `patch-C*`
+contains only art assets (`Character/`, `Creature/` models/textures) — zero DBC files. The entire DBC
+tier is unified tables shared by all game modes, so `effective_archive` says nothing about which mode
+owns a row. CoA attribution is replaced with the **`CharacterAdvancement.dbc` registry** — the client's
+own CoA advancement graph — as the primary signal: it achieves 100% unique-spell recall and, once the
+alpha→display class rename is applied, 100% unique-spell class attribution against the Builder oracle
+(see [client-advancement-schema.md](data/client-advancement-schema.md) and
+[client-class-types-schema.md](data/client-class-types-schema.md)). `archive_family` is demoted to raw
+provenance only (known uninformative for CoA-vs-other partitioning); skill-line membership and ID
+range are retained only as a medium/low-confidence fallback for the small set of records absent from
+the advancement graph. The principle is unchanged: the client is authoritative and current, and the
+Builder is used only as a cross-validation oracle, never a whitelist gate.
+
 Reasoning:
 
 - Using the Builder as a whitelist would silently make it canonical over the client, discard the
@@ -261,3 +274,80 @@ Reasoning:
   patch/decompression correctness, so silent fallback is disallowed.
 - StormLib is MIT-licensed, so a system install or pinned source build carries no restrictive
   project-wide license obligation (contrast Decision 9).
+
+## Decision 21: Decision 1 Supersession Is Staged and Per-Field, Not Wholesale
+
+Status: accepted (planned for M1.15).
+
+The CoA client advancement graph (`CharacterAdvancement.dbc`, extracted as `coa-client-advancement-v1`
+— see [client-advancement-schema.md](data/client-advancement-schema.md)) is the candidate canonical
+source for the talent graph and legality, superseding Decision 1's "Builder is the Phase 1 source of
+truth" **by responsibility, one field at a time** (see the adapter field matrix in the
+[M1.14B design](superpowers/specs/2026-07-13-m1-14-b-client-attribution-and-graph-design.md)), not
+wholesale. The flip is **gated** on: (a) the node-level parity report, and (b) the semantic-layout
+validation, both passing for the fields being flipped. Fields the client cannot yet supply keep their
+existing source, explicitly marked. Until M1.15 performs the flip, the Builder remains the operative
+graph authority and the client artifact is validated-but-not-consumed.
+
+**Builder-as-discovery-aid boundary.** The Builder `entry_id` crosswalk is valuable for *generating* a
+column-mapping hypothesis, but Builder agreement can **never** be the sole proof that decodes a field
+and then "independently" validates parity against itself — that is circular. A Builder-proposed
+mapping is recorded as `mapping_discovery_source: builder_crosswalk` and is only accepted when it also
+passes evidence that does not reduce to the Builder: client-wide semantic ranges/distributions,
+node-id-domain validation, graph invariants, current in-game UI/tooltip spot-checks, and
+current-client-values winning on disagreement. **Builder values are never copied into the client
+artifact** — only the client's own decoded cells are emitted.
+
+Reasoning:
+
+- A field the client has genuinely proven should not wait on every other field to decode before it can
+  supersede the Builder; conversely, an undecoded field must not be silently promoted just because
+  neighboring fields are ready.
+- Per-field staging keeps the migration honest and auditable: `readiness.legality[field]` (Decision 22)
+  and `full_builder_retirement_ready` in the parity report (`coa-builder-parity-v2`) expose exactly
+  which responsibilities have flipped and which still fall back to the Builder.
+- Allowing the Builder to validate a decode it also proposed would be circular; requiring independent
+  evidence (ranges, graph invariants, UI spot-checks) keeps the client the true source of the proof.
+
+## Decision 22: Client DBC Is the Canonical Offline Legality Source; Live Corrections Come From User-Reported Overrides, Not the Builder
+
+Status: accepted (planned for M1.15).
+
+The current client DBC is the canonical offline source for legality (AE/TE cost, gates,
+prerequisites, level, rank), extending Decision 18 from mechanics to legality. It is **not** assumed
+identical to live server enforcement — the server can hotfix costs, hidden prerequisites, scripted
+rank behavior, or level gates the client does not reflect — so the precedence is:
+
+    user-reported, reproducibly-verified live override
+      >  current client DBC
+      >  (Builder / stale JSON / AscensionDB — informational only, never authoritative)
+
+The Builder is removed from the legality authority chain entirely: it is itself an offline,
+possibly-stale source of unknown fidelity to the server, so a Builder disagreement is informational,
+never authoritative, and never value-blocking. Live corrections are captured through a versioned,
+reviewable **manual-override layer fed by user-reported inaccuracies** (the mechanism the public site
+will expose; its implementation is a later milestone, not M1.14B). A proven client value is used until
+such an override supersedes it.
+
+Each client-vs-Builder legality difference is classified as: **(a) extraction/layout defect** — the
+client field is not proven decoded correctly → that field stays **`unresolved`** (keeps the Builder
+fallback, blocks flipping that field and `full_builder_retirement_ready`); **(b) verified
+client-current difference** — client decoded to `high` confidence and simply differs from the Builder
+→ accepted, client wins offline, field **`ready`**; **(c) representation difference** — same value,
+different encoding → normalized, field **`ready`**; **(d) unresolved** — not yet decoded/classified →
+field **`unresolved`**. Only (a) and (d) leave a field unresolved (per-field, not a global flip); a
+genuine proven difference (b) is `ready`. An unresolved field never blocks `attribution_ready` or
+`ownership_ready`.
+
+Reasoning:
+
+- The Builder is itself an unauthoritative scrape of unknown fidelity to the live server; keeping it
+  in the legality authority chain would let a stale or wrong Builder value silently override a proven
+  current client value.
+- A four-way classification (rather than a binary match/mismatch) is what lets the parity report
+  distinguish "we haven't decoded this yet" (blocks) from "the client is simply right and current"
+  (does not block) — collapsing them would either stall the flip on values that are already correct,
+  or ship an undecoded field as if it were proven.
+- Routing live corrections through a versioned, user-reported override layer (rather than falling back
+  to the Builder) keeps the authority chain honest: the client is default-canonical offline, and only a
+  reproducibly-verified live report — not another offline scrape — can override it.

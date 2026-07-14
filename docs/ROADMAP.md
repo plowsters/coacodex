@@ -262,12 +262,39 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     `coa-client-spell-v1` / `coa-client-content-v1` artifacts, header-driven WDBC reader with
     schema-drift detection, auditable archive plan, and synthetic-fixture test tiers. Design:
     [M1.14A Client Extraction Core](superpowers/specs/2026-07-10-m1-14-a-client-extraction-core-design.md).
-  - **M1.14B** attribution · **M1.14C** reconciliation + db sunset · **M1.14D** WoW constants ·
-    **M1.14E** test-suite audit · **M1.14F** memory-bridge/API spike. Delineated in the umbrella;
-    each gets its own spec when next in line.
+  - **M1.14B Client Attribution and CoA Advancement Graph.** Status: code-complete (native StormLib
+    integration and local-client acceptance tests pending). Supersedes the
+    archive-family/ID-range attribution sketch in the umbrella: extracts `CharacterAdvancement.dbc`
+    (the client's own CoA advancement graph) as `coa-client-advancement-v1`, node-level Builder-parity
+    proven (100% unique-spell recall/attribution against the Builder oracle), plus
+    `coa-client-class-types-v1`/`coa-client-tab-types-v1`/`coa-client-essence-v1` and the filled
+    `coa_attribution` participation block on `coa-client-spell-v1`. Emits the node-level parity report
+    (`coa-builder-parity-v2`) with the scoped, per-field `readiness` object (Decision 21). Extracts and
+    proves the graph/legality; does not rewire the legality/tree pipeline to consume it — that's
+    M1.15 (Decision 21/22). Schema docs:
+    [client-advancement-schema.md](data/client-advancement-schema.md),
+    [client-class-types-schema.md](data/client-class-types-schema.md). Design:
+    [M1.14B Client Attribution and CoA Advancement Graph](superpowers/specs/2026-07-13-m1-14-b-client-attribution-and-graph-design.md).
+    Plan: [M1.14B Implementation Plan](superpowers/plans/2026-07-13-m1-14-b-client-attribution-and-graph.md).
+  - **M1.14C** reconciliation + db sunset · **M1.14D** WoW constants · **M1.14E** test-suite audit ·
+    **M1.14F** memory-bridge/API spike. Delineated in the umbrella; each gets its own spec when next
+    in line.
 - **M1.15 Talent-Tree Correctness.** Status: planned. Full AE/TE essence spend to the target level;
   granular 10–60 level slider; consistent level-gating across all sections; mutually exclusive
-  shared-node choices; leveling path never skips a level.
+  shared-node choices; leveling path never skips a level. **Per-field Builder supersession (Decision
+  21):** M1.15 consumes the M1.14B `coa-client-advancement-v1` graph and its `coa-builder-parity-v2`
+  parity report — each `readiness.legality[field]` that reached `ready` may independently supersede
+  the Builder for that field alone, while a field still `unresolved` keeps the Builder fallback until
+  decoded; `full_builder_retirement_ready` is the roll-up that gates full Builder retirement, staying
+  false while any required attribution/ownership/adjacency/legality responsibility is unresolved.
+  - **M1.15 sub-milestone: Level-by-level build validation.** Decode `CharacterAdvancementEssence`
+    (extracted raw, undecoded semantics, as `coa-client-essence-v1` in M1.14B — see
+    [client-class-types-schema.md](data/client-class-types-schema.md)) per-level progression — the
+    feature that flips `readiness.leveling_progression_ready` to `true` — and validate a build's AE/TE
+    spend against per-level essence availability at each level, rather than only the max-level caps
+    (AE 26 / TE 25). M1.14B deliberately leaves this gated: it emits the raw essence table and reports
+    `leveling_progression_ready: false` without blocking any max-level readiness dimension or
+    `full_builder_retirement_ready`.
 - **M1.16 Analytical Player-Power Model.** Status: planned. Deterministic engine: rating→% at level,
   coefficient-based per-cast damage/heal, haste→GCD and resource regen, crit/hit/expertise/armor,
   DoT/HoT. Rewire scoring and rotation simulation to consume real numbers. Full event-driven
