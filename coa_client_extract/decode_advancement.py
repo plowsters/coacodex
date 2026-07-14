@@ -1,8 +1,7 @@
-# coa_client_extract/decode_advancement.py
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -168,7 +167,6 @@ def _decode_entry_type(pairs, *, min_nonzero=50, score_threshold=0.85):
     candidate column map each numeric value to its MOST-COMMON JSON 'Type' string, and accept the column
     only when that mapping explains >= score_threshold of pairs, is injective, and has >= 2 classes.
     Returns (column, {str(int): str} mapping, evidence_count) or (None, {}, 0)."""
-    from collections import Counter, defaultdict
     cols = set().union(*[set(r) for _, r in pairs]) if pairs else set()
     best = (None, {}, 0.0, 0)
     for c in sorted(cols):
@@ -244,7 +242,8 @@ def decode_layout(ca, class_types, tab_types, json_entries, *,
     _record_scalar("tab_type_col", tab_proof, in_domain=tab_domain_ok)
 
     # 3. entry-type: proven numeric -> JSON 'Type' string mapping
-    et_col, et_map, et_ev = _decode_entry_type(pairs, min_nonzero=min_nonzero)
+    et_col, et_map, et_ev = _decode_entry_type(pairs, min_nonzero=min_nonzero,
+                                                score_threshold=score_threshold)
     report["fields"]["entry_type_col"] = {
         "column": et_col, "mapping": et_map, "evidence": et_ev,
         "confidence": "high" if et_col is not None else "unproven"}
