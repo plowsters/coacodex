@@ -369,9 +369,12 @@ advancement-row node id — plus `connected_node_ids`, `required_ids`, and every
 (measured: 3,612 records, 3,612 unique `entry_id`s; Builder adjacency references `entry_id`s). The DBC
 node identity is `CharacterAdvancement` col 0. The report crosswalks **client `node_id` ↔ Builder
 `entry_id`** directly, then *proves the id spaces align* rather than assuming it: for every matched id
-it checks the semantic tuple `(spell_id, class_display, tab_name, entry_type)` agrees. A high match
-rate with agreeing tuples proves the shared numbering; near-zero agreement means the crosswalk itself
-is unresolved (a flip-blocker), which is caught loudly instead of silently reporting 100%.
+it checks the **anchored** tuple `(spell_id, class)` agrees — only the structurally-verified anchors
+(spell col 5, class-type FK col 32), NOT `tab_name`/`entry_type`, which are decode-gated and would
+otherwise fabricate a mismatch when merely undecoded (keeping ownership independent of metadata decode,
+per Decision 21). A high match rate with agreeing tuples proves the shared numbering; near-zero agreement
+means the crosswalk itself is unresolved (blocking `ownership_ready`), caught loudly instead of silently
+reporting 100%.
 
 - **Ownership (exact set over node ids):** `builder_only = entry_ids − client_coa_node_ids` and
   `client_only = client_coa_node_ids − entry_ids`. Both must be empty. A client graph that covers
@@ -488,9 +491,10 @@ gate earned independently on its own evidence. No global boolean; each dimension
   anchor, **not** on any decoded legality column, so it can be ready while legality is not.
 - **`ownership_ready`**: node-identity ownership is exact after the alpha→display rename — the client
   CoA `node_id` set equals the Builder `entry_id` set (both `builder_only` and `client_only` empty),
-  zero `identity_mismatches` (matched ids whose `(spell_id, class, tab, entry_type)` tuple disagrees),
-  the playable set is exactly 21 with 35 excluded, the Builder record count equals the pinned total
-  (3,612), and client and Builder inputs are both non-empty. Independent of legality decode.
+  zero `identity_mismatches` (matched ids whose anchored `(spell_id, class)` tuple disagrees — anchors
+  only, so an undecoded tab/entry_type never fabricates a mismatch), the playable set is exactly 21 with
+  35 excluded, the Builder record count equals the pinned total (3,612), and client and Builder inputs
+  are both non-empty. Independent of legality/metadata decode.
 - **`adjacency_ready`**: **both** edge domains AND their **meanings** are independently proven — the
   `connected` and `required` blocks each resolve in the node-id domain (no dangling/unresolved), their
   meaning (which block is ConnectedNodes vs RequiredIDs) is established by evidence that does **not**
