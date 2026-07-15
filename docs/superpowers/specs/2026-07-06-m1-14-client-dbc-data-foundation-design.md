@@ -63,16 +63,17 @@ spec and implementation plan.
 | Sub | Scope | Purpose | Depends on |
 |-----|-------|---------|------------|
 | **M1.14A** | extraction core | `coa_client_extract` module: `ArchiveBackend` protocol + narrow StormLib ctypes backend, auditable `ArchivePlan`, header-driven WDBC reader with schema-drift detection, loose Content-JSON reader, patch-chain provenance + manifest, and the `coa-client-spell-v1` / `coa-client-content-v1` artifacts (attribution deferred). Committed **synthetic** fixtures; three test tiers. | — |
-| **M1.14B** | attribution + advancement graph | Extracts `CharacterAdvancement.dbc` — a unified all-class registry (12,037 rows: stock/coa_class/meta/reborn/`None`), the client's own CoA advancement graph living in its `coa_class` subgraph, discovered to supersede the archive-family/ID-range/skill-line attribution plan sketched below — as `coa-client-advancement-v1`, scoped to `coa_class` for validate/emit/parity while `attribute()` still runs over the full node set (node-level, 100% unique-spell recall/attribution against the Builder oracle), plus `coa-client-class-types-v1`/`coa-client-tab-types-v1`/`coa-client-essence-v1` and the filled `coa_attribution` participation block on `coa-client-spell-v1`. Node-level Builder-parity report (`coa-builder-parity-v3`) with a scoped, per-field `readiness` object (Decision 21) and an adjudicated-ownership model: the client legitimately leads the Builder oracle on a small client-only set, accepted only via curated `client_only_classification`, and class-label formatting differences are canonicalized rather than treated as hard identity mismatches (Decision 22). M1.14B **extracts and proves** the graph and legality; it does not rewire the legality/tree pipeline to consume it — that staged, per-field Decision 1 supersession is **M1.15**'s job (Decision 21/22). See [M1.14B design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md). | A |
-| **M1.14C** | reconciliation + sunset | Reconcile `coa-client-spell-v1` into `coa-mechanics-v1` via a source-precedence policy in the Node mechanics builder (client mechanical > verified Builder > AscensionDB fallback > inferred tooltip), retaining every competing value + selected-source reason; demote db mechanical enrichment to fallback-only. | A, B |
+| **M1.14B** | attribution + advancement graph | Extracts `CharacterAdvancement.dbc` — a unified all-class registry (12,037 rows: stock/coa_class/meta/reborn/`None`), the client's own CoA advancement graph living in its `coa_class` subgraph, discovered to supersede the archive-family/ID-range/skill-line attribution plan sketched below — as `coa-client-advancement-v1`, scoped to `coa_class` for validate/emit/parity while `attribute()` still runs over the full node set (node-level, 100% unique-spell recall/attribution against the Builder oracle), plus `coa-client-class-types-v1`/`coa-client-tab-types-v1`/`coa-client-essence-v1` and the filled `coa_attribution` participation block on `coa-client-spell-v1`. Node-level Builder-parity report (`coa-builder-parity-v3`) with a scoped, per-field `readiness` object (Decision 21) and an adjudicated-ownership model: the client legitimately leads the Builder oracle on a small client-only set, accepted only via curated `client_only_classification`, and class-label formatting differences are canonicalized rather than treated as hard identity mismatches (Decision 22). M1.14B **extracts** the graph and **proves** ownership plus the individually ready legality fields (most legality fields remain legitimately unresolved from the stale loose JSON); it does not rewire the legality/tree pipeline to consume it — that staged, per-field Decision 1 supersession is **M1.15**'s job (Decision 21/22). See [M1.14B design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md). | A |
+| **M1.14C** | reconciliation + sunset | Reconcile `coa-client-spell-v1` into `coa-mechanics-v1` via a **per-field** source-precedence policy in the Node mechanics builder (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred), fed by an attribution-scoped (`is_coa`) client-spell projection, retaining every competing value + a stable selection reason in an additive `field_provenance`; demote db mechanical enrichment to fallback-only; keep `coa-mechanics-v1`. Fails closed without a valid projection. See [M1.14C design](2026-07-14-m1-14-c-reconciliation-db-sunset-design.md). | A, B |
 | **M1.14D** | wow constants | `coa-wow-constants-v1` — GameTable conversion primitives and documented WotLK constants for the M1.16 engine. | A |
-| **M1.14E** | test audit | Test-suite integrity audit, tooltip-HTML regression test, and modeling-test standards. | — |
+| **M1.14E** | test audit | Test-suite integrity audit, tooltip-HTML regression test, modeling-test standards, and the carried-forward M1.14B parity-report `per_class`/`per_tab` canonicalization fix (M1 follow-up). | — |
 | **M1.14F** | spike | Time-boxed memory-bridge/API investigation with a viable/not-viable/defer recommendation. | — |
 
 A→B→C is a dependency chain. D depends only on A's extraction machinery. E and F are independent and
-can proceed in parallel. **M1.14A** and **M1.14B** are now fully specced (see
-[M1.14A Client Extraction Core](2026-07-10-m1-14-a-client-extraction-core-design.md) and
-[M1.14B Client Attribution and CoA Advancement Graph Design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md)); C–F are
+can proceed in parallel. **M1.14A**, **M1.14B**, and **M1.14C** are now fully specced (see
+[M1.14A Client Extraction Core](2026-07-10-m1-14-a-client-extraction-core-design.md),
+[M1.14B Client Attribution and CoA Advancement Graph Design](2026-07-13-m1-14-b-client-attribution-and-graph-design.md), and
+[M1.14C Reconciliation and DB Sunset](2026-07-14-m1-14-c-reconciliation-db-sunset-design.md)); D–F are
 delineated below.
 
 ## Scope
@@ -82,8 +83,10 @@ M1.14 includes:
 - **A. Extraction core** — MPQ patch-chain resolution behind a project-owned backend, DBC parsing
   with drift detection, loose Content-JSON ingestion, provenance, and the client artifacts.
 - **B. Client-native CoA attribution and advancement graph** — the `CharacterAdvancement.dbc`
-  registry, node-level Builder-oracle parity, and per-record confidence. Extracts and proves the
-  graph and legality; does not rewire the legality/tree pipeline to consume it (staged to M1.15).
+  registry, node-level Builder-oracle parity, and per-record confidence. Extracts the graph and
+  proves ownership plus the individually ready legality fields (most legality fields remain
+  legitimately unresolved); does not rewire the legality/tree pipeline to consume it (staged to
+  M1.15).
 - **C. Reconciliation** into the mechanics artifact and sunset of stale db mechanical enrichment.
 - **D. WoW conversion primitives** (GameTables and documented constants) for the modeling engine.
 - **E. Test-suite integrity audit** and modeling-test standards.
@@ -190,9 +193,11 @@ or `extraction_defect` client-only node still blocks `ownership_ready`. Identity
 canonicalized (`class_label_normalization: "nfkc-casefold-remove-whitespace-v1"`) so a pure
 class-label formatting difference is a `representation_difference`, not a hard mismatch — only a
 `hard_identity_mismatch` (semantic class change or spell-ID divergence) blocks. Per the agreed scope,
-M1.14B **extracts and proves** the graph and legality; it does **not** rewire the legality/tree
-pipeline to consume the client graph — that staged, per-field Decision 1 supersession, gated on this
-parity report and semantic-layout validation passing, is **M1.15**'s job (Decision 21/22).
+M1.14B **extracts** the graph and **proves** ownership plus the individually ready legality fields
+(most legality fields remain legitimately unresolved from the stale loose JSON); it does **not**
+rewire the legality/tree pipeline to consume the client graph — that staged, per-field Decision 1
+supersession, gated on this parity report and semantic-layout validation passing, is **M1.15**'s job
+(Decision 21/22).
 
 Acid test: spell `805775` is attributed to CoA (Venomancer, `high` confidence) and its advancement-graph
 row carries the current *Adrenal Venom* name, while the loose `CharacterAdvancementData.json` and
@@ -271,6 +276,17 @@ rendering bug. Deliverables:
 - Testing standards for the modeling milestones: formulas checked against known WotLK reference
   values (e.g. rating conversions at levels 60/80, known coefficient results), monotonicity property
   tests (more haste → not fewer casts), and provenance/schema-drift/attribution tests for extraction.
+- **Carried-forward M1.14B parity-report diagnostic fix (M1 follow-up).** The shipped
+  `coa-builder-parity-v3` report groups its `per_class`/`per_tab` breakdown tables on raw,
+  un-canonicalized class labels, so the four CamelCase CoA classes (`WitchDoctor`, `WitchHunter`,
+  `KnightOfXoroth`, `SunCleric`) appear as phantom split rows alongside their spaced Builder form.
+  The defect is diagnostic-only — the breakdowns feed no readiness or adjudication gate — but it must
+  be fixed before M1.14 closes. Group the `per_class`/`per_tab` breakdowns through the same versioned
+  `canonical_class_label` (`nfkc-casefold-remove-whitespace-v1`) already used for identity comparison,
+  preserve the raw labels inside the diagnostic samples, and add a regression asserting the 21 CoA
+  classes do not split into CamelCase/spaced duplicates. The fix must not alter any readiness or
+  adjudication value. It touches only `coa_client_extract/parity.py`'s breakdown grouping (M1.14B
+  code), is independent of the extraction machinery, and does **not** block M1.14C/D/F.
 
 ### Investigation spike (M1.14F)
 

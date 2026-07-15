@@ -262,8 +262,8 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     `coa-client-spell-v1` / `coa-client-content-v1` artifacts, header-driven WDBC reader with
     schema-drift detection, auditable archive plan, and synthetic-fixture test tiers. Design:
     [M1.14A Client Extraction Core](superpowers/specs/2026-07-10-m1-14-a-client-extraction-core-design.md).
-  - **M1.14B Client Attribution and CoA Advancement Graph.** Status: code-complete, real-client
-    verified. Supersedes the archive-family/ID-range attribution sketch in the umbrella:
+  - **M1.14B Client Attribution and CoA Advancement Graph.** Status: implemented, merged, and
+    real-client verified. Supersedes the archive-family/ID-range attribution sketch in the umbrella:
     `CharacterAdvancement.dbc` is a **unified all-class registry** (12,037 rows: stock 4,383, coa_class
     3,614, meta 2,591, reborn 1,325, `None`/unknown 124); M1.14B extracts, validates, and Builder-parity
     checks only the `coa_class` subgraph as `coa-client-advancement-v1` (node-level, 100%
@@ -274,16 +274,36 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     scoped, per-field `readiness` object (Decision 21) — ownership is no longer exact-set equality but
     **adjudicated**: the client legitimately leads the Builder oracle on 2 CoA nodes, accepted via a
     curated `client_only_classification` (Decision 22), and a class-label formatting difference (708
-    of 3,612 matched nodes) is canonicalized rather than treated as a hard mismatch. Extracts and
-    proves the graph/legality; does not rewire the legality/tree pipeline to consume it — that's
+    of 3,612 matched nodes) is canonicalized rather than treated as a hard mismatch. Extracts the
+    graph and proves ownership plus the individually ready legality fields (most legality fields
+    remain legitimately unresolved from the stale loose JSON — `full_builder_retirement_ready` stays
+    false); does not rewire the legality/tree pipeline to consume it — that's
     M1.15 (Decision 21/22). Schema docs:
     [client-advancement-schema.md](data/client-advancement-schema.md),
     [client-class-types-schema.md](data/client-class-types-schema.md). Design:
     [M1.14B Client Attribution and CoA Advancement Graph](superpowers/specs/2026-07-13-m1-14-b-client-attribution-and-graph-design.md).
     Plan: [M1.14B Implementation Plan](superpowers/plans/2026-07-13-m1-14-b-client-attribution-and-graph.md).
-  - **M1.14C** reconciliation + db sunset · **M1.14D** WoW constants · **M1.14E** test-suite audit ·
-    **M1.14F** memory-bridge/API spike. Delineated in the umbrella; each gets its own spec when next
-    in line.
+  - **M1.14C Reconciliation and DB Sunset.** Status: planned; specced. Attribution-scoped
+    (`is_coa`) client-spell projection plus per-field source-precedence reconciliation
+    (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred) in the Node mechanics builder,
+    retaining every competing value + a stable selection reason in an additive `field_provenance`;
+    demotes db.ascension.gg mechanical enrichment to fallback-only; keeps `coa-mechanics-v1`
+    (loader round-trips the new field). Fails closed without a valid projection
+    (`--allow-fallback-mechanics` writes a separate degraded artifact); real projection/manifest stay
+    untracked. Design:
+    [M1.14C Reconciliation and DB Sunset](superpowers/specs/2026-07-14-m1-14-c-reconciliation-db-sunset-design.md).
+  - **M1.14D** WoW constants · **M1.14E** test-suite audit · **M1.14F** memory-bridge/API spike.
+    Delineated in the umbrella; each gets its own spec when next in line.
+  - **M1.14E carried-forward audit item (from M1.14B, M1 follow-up).** The `coa-builder-parity-v3`
+    `per_class`/`per_tab` breakdown tables group on raw, un-canonicalized class labels, so the four
+    CamelCase CoA classes (`WitchDoctor`, `WitchHunter`, `KnightOfXoroth`, `SunCleric`) surface
+    phantom split rows next to their spaced Builder form. It is diagnostic-only — it feeds no
+    readiness or adjudication gate — but it must be fixed before M1.14 closes: group the breakdowns
+    through the same versioned `canonical_class_label` (`nfkc-casefold-remove-whitespace-v1`) already
+    used for identity comparison, preserve the raw labels in the diagnostic samples, add a regression
+    asserting the 21 CoA classes do not split into CamelCase/spaced duplicates, and change no
+    readiness or adjudication value. It does **not** block M1.14C/D/F. Detailed in the umbrella
+    M1.14E section.
 - **M1.15 Talent-Tree Correctness.** Status: planned. Full AE/TE essence spend to the target level;
   granular 10–60 level slider; consistent level-gating across all sections; mutually exclusive
   shared-node choices; leveling path never skips a level. **Per-field Builder supersession (Decision
@@ -294,6 +314,19 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
   false while any required attribution/ownership/adjacency/legality responsibility is unresolved —
   `ownership_ready` itself already reads `true` on the real-client capture via the Decision-22
   ownership adjudication, but that alone does not flip the roll-up.
+  - **M1.15 mandatory entry condition: adjacency-domain hardening (from M1.14B, M2 follow-up).**
+    Before M1.15 changes any build legality or rendering, decoding and consuming the
+    `ConnectedNodes`/`RequiredIDs` adjacency must use a **split validation domain**: resolve edge
+    *reference existence* against the full unified `CharacterAdvancement` node-ID domain (all 12,037
+    nodes), apply CoA ownership/tree invariants only to the 3,614-node `coa_class` subgraph, and
+    **retain and classify** cross-mode edges (CoA→stock/meta/Reborn) by target class kind rather than
+    rejecting or silently dropping them; only a genuinely dangling reference (a target absent from all
+    12,037 nodes) stays blocking. This guards `validate_semantics`, whose current CoA-scoped foreign-key
+    domain would false-raise a legitimate CoA→non-CoA edge the moment adjacency is decoded. Tests must
+    cover CoA→CoA, CoA→stock/meta/Reborn, and genuinely missing targets. This is a hard entry
+    condition and must not disappear during M1.15 decomposition; it is expected to land as the first
+    bounded "readiness-aware adapter and adjacency-domain hardening" sub-milestone, ahead of any
+    build-legality or rendering change.
   - **M1.15 sub-milestone: Level-by-level build validation.** Decode `CharacterAdvancementEssence`
     (extracted raw, undecoded semantics, as `coa-client-essence-v1` in M1.14B — see
     [client-class-types-schema.md](data/client-class-types-schema.md)) per-level progression — the
