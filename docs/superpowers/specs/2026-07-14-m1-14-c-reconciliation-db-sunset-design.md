@@ -386,7 +386,7 @@ or `range_yards`→structured object). Provenance and the additive `schools` sib
 | Projection present + valid | **Canonical** build → `coa_mechanics.jsonl` (+ canonical manifest). |
 | A single client field legitimately absent (`null`) for a spell | field-level fallback to the next eligible tier; build stays **canonical**. |
 | Projection **absent**, no flag | **Fail before writing anything.** |
-| Projection absent + `--allow-fallback-mechanics` | Write a **degraded** artifact to `coa_mechanics.fallback.jsonl` (+ `coa_mechanics.fallback.manifest.json`). Overwriting the canonical filename requires the further explicit `--overwrite-canonical`. |
+| Projection absent + `--allow-fallback-mechanics` | Write a **degraded** artifact to `coa_mechanics.fallback.jsonl` (+ `coa_mechanics.fallback.manifest.json`). A fallback build **never** writes the canonical `coa_mechanics.jsonl`/`.manifest.json` — only a validated projection may produce the canonical filename. (`MechanicsRepository` reads the JSONL directly and never consults the manifest, so degraded bytes must never occupy the canonical filename regardless of a `canonical:false` marker.) |
 | Projection **present but** malformed / wrong schema / checksum-invalid / per-table drift / unknown mask-enum / `is_coa:false` row / coverage gap | **Fail even with** `--allow-fallback-mechanics`. |
 
 The manifest (`coa-mechanics-manifest-v1`) binds status **and all reconciliation inputs** to the output
@@ -429,12 +429,11 @@ legitimately absent (recorded explicitly, not silently).
 with the **same schema** but degraded values: `canonical: false`, `client_source: "absent"`,
 `fallback_authorized: true`, `inputs.projection` and `inputs.projection_manifest` set to
 `{ "path": null, "sha256": null }`, `client_build: null`, and `coverage: null` (there is no projection to
-cover the domain). `outputs.mechanics_jsonl` points to `coa_mechanics.fallback.jsonl`. `--overwrite-canonical` writes the
-degraded JSONL to `coa_mechanics.jsonl` **and generates a second degraded manifest**
-(`coa_mechanics.manifest.json`) whose `outputs.mechanics_jsonl` names `coa_mechanics.jsonl` and whose
-`outputs.sha256` matches that file — **not** a raw copy of the fallback manifest (which would still name
-`coa_mechanics.fallback.jsonl`). That regenerated manifest **still reads `canonical: false`**: writing to
-the canonical *path* never launders a degraded build into a canonical *status*.
+cover the domain). `outputs.mechanics_jsonl` points to `coa_mechanics.fallback.jsonl`. The degraded build
+writes **only** the `coa_mechanics.fallback.*` files and leaves the canonical `coa_mechanics.jsonl`/
+`.manifest.json` untouched — there is deliberately **no** flag to place degraded bytes at the canonical
+filename, because `MechanicsRepository` reads the JSONL directly and would ingest them as canonical
+regardless of a `canonical:false` marker in a sidecar manifest.
 
 ## Projection validation (beyond the file hash)
 
@@ -484,10 +483,10 @@ These ship **in** M1.14C because client data cannot be reconciled correctly on t
 - **Projection input:** `coa_client_spell_coa.jsonl` + its manifest. Absence → fail-closed unless
   `--allow-fallback-mechanics`.
 - **CLI flags & defaults:** `--builder-entries` (default `dist/coa_entries.jsonl`), `--db-spells`
-  (default `dist/coa_db_spell_tooltips.jsonl`), `--projection` (default
-  `reports/client_extract/coa_client_spell_coa.jsonl`), `--projection-manifest`,
-  `--out` (default `dist`), `--reports` (default `reports`), `--allow-fallback-mechanics`,
-  `--overwrite-canonical`.
+  (default `dist/coa_db_spell_tooltips.jsonl`), `--projection` (default the repo-root
+  `reports/client_extract/coa_client_spell_coa.jsonl`, reached as `../reports/...` when run from
+  `coa_scraper/`), `--projection-manifest`, `--out` (default `dist`), `--allow-fallback-mechanics`.
+  There is deliberately no flag to write degraded bytes to the canonical filename.
 - **Item generation is a separate command** (`build-item-artifacts.mjs`, producing `coa_items.jsonl`)
   so canonical-mechanics fail-closed behavior never entangles item output and vice-versa.
 - **Separate canonical vs fallback package commands (maintainer workflow).** Because the projection is

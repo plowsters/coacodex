@@ -388,9 +388,9 @@ def write_client_spell_projection(
     interruption never leaves a new JSONL beside a stale manifest."""
     projected = [r for r in records if r.get("coa_attribution", {}).get("is_coa") is True]
     spell_ids = [r["spell_id"] for r in projected]
-    dupes = {s for s in spell_ids if spell_ids.count(s) > 1}
+    dupes = sorted(s for s, n in Counter(spell_ids).items() if n > 1)  # single pass, not O(n^2)
     if dupes:
-        raise ValueError(f"projection has duplicate spell_ids: {sorted(dupes)[:5]}")
+        raise ValueError(f"projection has duplicate spell_ids: {dupes[:5]}")
 
     proj_path = out_dir / "coa_client_spell_coa.jsonl"
     manifest_path = out_dir / "coa_client_spell_projection.manifest.json"
@@ -432,7 +432,7 @@ def write_client_spell_projection(
     return manifest
 ```
 
-Add `from datetime import date` and `import os` to the top of `artifacts.py`, and add this atomic helper near `_sha256_bytes`:
+Add `from datetime import date`, `import os`, and `from collections import Counter` to the top of `artifacts.py`, and add this atomic helper near `_sha256_bytes`:
 
 ```python
 def _atomic_write_bytes(data: bytes, path: Path) -> None:
@@ -692,6 +692,8 @@ export const REASON = Object.freeze({
   ONLY_CANDIDATE: "only_candidate",
   DB_FALLBACK: "db_fallback",
   INFERRED_LAST_RESORT: "inferred_last_resort",
+  INFERRED_FROM_TEXT: "inferred_from_text",
+  KIND_NODE_DISAGREEMENT_RESOLVED: "kind_node_disagreement_resolved",
   OMITTED_UNRESOLVED_CONFLICT: "omitted_unresolved_conflict",
   OMITTED_NO_ELIGIBLE_CANDIDATE: "omitted_no_eligible_candidate",
   SAME_TIER_CONFLICT: "same_tier_conflict",
@@ -787,7 +789,7 @@ git commit -m "M1.14C Task 5: per-field reconciliation engine (tier/eligibility/
 
 **Interfaces:**
 - Consumes: `normalizeName` from `lib/ascensiondb.mjs`.
-- Produces: `dbIdentityReference({ clientName, builderNames })` → string|null; `applyDbIdentityGate({ dbRow, referenceName })` → `{ excluded: boolean }` (used by Task 8 to bar an identity-mismatched db row from every contribution).
+- Produces: `dbIdentityReference({ clientName, builderNames, dbName })` → string|null; `applyDbIdentityGate({ dbRow, referenceName })` → `{ excluded: boolean, reason: string|null }` (`reason` is a `REASON` code — `db_identity_mismatch`/`db_identity_unverifiable` — consumed by Task 8 to bar an identity-mismatched db row from every contribution and record why).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1072,6 +1074,11 @@ test("buildMechanicsRows: one row per spell_id, client field wins, schools + fie
   assert.deepEqual(r.schools, ["nature"]);
   assert.equal(r.cooldown_ms, 30000); // db-only field survives (identity matched)
   assert.equal(r.field_provenance.cast_time_ms.selected_source, "client_dbc");
+  assert.equal(r.field_provenance.effects.selected_source, "inferred"); // effects field has provenance
+  assert.deepEqual(r.raw.tags, ["damage"]); // builder tags carried under raw, not a top-level v1 field
+  assert.equal(r.tags, undefined); // NOT a top-level field (would be dropped by the v1 loader)
+  // the identity-matched db tooltip participated in classifying kind → recorded as a db candidate
+  assert(r.field_provenance.kind.candidates.some((c) => c.source === "ascension_db" && c.source_field === "tooltip_text"));
 });
 
 test("buildMechanicsRows: identity-mismatched db row supplies zero fields", () => {
@@ -1087,6 +1094,9 @@ test("buildMechanicsRows: identity-mismatched db row supplies zero fields", () =
   assert.equal(rows[0].cooldown_ms ?? null, null); // db excluded → no cooldown leaks
   // and the excluded db cooldown candidate is recorded as ineligible (audit retained)
   assert.equal(rows[0].field_provenance.cooldown_ms.candidates[0].eligible, false);
+  // the excluded db row must not leak into kind classification either (no db tooltip candidate)
+  assert(!rows[0].field_provenance.kind.candidates.some((c) => c.source === "ascension_db"));
+  assert(!rows[0].provenance.some((p) => p.source === "ascension_db")); // nothing db survives
 });
 
 test("buildMechanicsRows: output is input-node-order-independent (canonicalized by entry_id)", () => {
@@ -1101,7 +1111,7 @@ test("buildMechanicsRows: output is input-node-order-independent (canonicalized 
   const forward = buildMechanicsRows({ entries: [a, b], spellRows: [], projection });
   const reversed = buildMechanicsRows({ entries: [b, a], spellRows: [], projection });
   assert.equal(JSON.stringify(forward), JSON.stringify(reversed));
-  assert.deepEqual(forward[0].tags, ["damage", "dot"]); // set-like union, sorted
+  assert.deepEqual(forward[0].raw.tags, ["damage", "dot"]); // set-like union, sorted, under raw
 });
 
 test("buildMechanicsRows: db-derived cooldown always leaves a db provenance entry", () => {
@@ -1195,20 +1205,33 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
       if (fp) fieldProvenance[field] = fp;
     }
 
-    // kind: derived from ALL nodes, order-independent, single-source provenance
-    const tooltipForKind = dbUsable ? (dbRow.tooltip_text || "") : (nodes.map((n) => n.description_text).filter(Boolean)[0] || "");
-    const { kind, provenance: kindProv } = resolveKind(nodes, tooltipForKind);
+    // Tooltip used to classify kind and infer effects. When the identity-matched db row supplies
+    // the tooltip, that participation is recorded in provenance (not silently attributed to the
+    // builder); otherwise fall back to the first builder description in entry_id order.
+    const dbTooltip = dbUsable && dbRow.tooltip_text ? String(dbRow.tooltip_text) : "";
+    const builderTooltip = nodes.map((n) => n.description_text).filter(Boolean)[0] || "";
+    const tooltipText = dbTooltip || builderTooltip;
+    const tooltipMeta = dbTooltip
+      ? { text: dbTooltip, source: "ascension_db", tier: "ascension_db", source_id: `ascension_db:${dbRow.id}` }
+      : { text: builderTooltip, source: "builder", tier: "verified_builder", source_id: `builder_node:${nodes[0]?.entry_id}` };
+
+    // kind: derived from ALL nodes (order-independent) + the tooltip's real source
+    const { kind, provenance: kindProv } = resolveKind(nodes, tooltipText, tooltipMeta);
     fieldProvenance.kind = kindProv;
 
     const schools = selected.schools || [];
-    const tags = [...new Set(nodes.flatMap((n) => n.tags || []))].sort();
+    // Effects derive from a deterministic MERGED node view (tags unioned across all nodes, sorted)
+    // plus the tooltip — never one arbitrary node — so output is input-order-independent.
+    const mergedTags = [...new Set(nodes.flatMap((n) => n.tags || []))].sort();
+    const mergedEntry = { tags: mergedTags, description_text: builderTooltip };
+    const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: dbUsable ? dbRow : null, schools, durationMs: selected.duration_ms ?? null });
+    fieldProvenance.effects = effectsProvenance({ effects, tooltip: tooltipMeta });
 
     rows.push({
       schema_version: MECHANICS_SCHEMA_VERSION,
       spell_id: sid,
       name,
       kind,
-      tags,
       source_node_ids: [...new Set(nodes.map((n) => Number(n.entry_id)).filter(Number.isFinite))].sort((a, b) => a - b),
       source_urls: dbUsable ? sourceUrls(dbRow) : [],
       school: schools.length === 1 ? schools[0] : "",
@@ -1222,11 +1245,12 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
       costs: dbUsable ? costsObject(dbRow.power_costs) : {},
       generates: {},
       spends: {},
-      effects: inferEffects({ entry: nodes[0], tooltipText: tooltipForKind, spellRow: dbUsable ? dbRow : null, schools, durationMs: selected.duration_ms ?? null }),
+      effects,
       field_provenance: fieldProvenance,
       provenance: buildProvenance(fieldProvenance),
       confidence: recordConfidence(fieldProvenance),
       raw: {
+        tags: mergedTags, // set-like builder tags; not a top-level coa-mechanics-v1 field, so carried in raw
         category: clientRec?.mechanics?.category ?? null,
         spell_icon_id: clientRec?.mechanics?.spell_icon_id ?? null,
         school_mask: clientRec?.mechanics?.school_mask ?? null,
@@ -1269,28 +1293,68 @@ function dbOnlyProvenance({ field, dbRow, dbUsable, gate }) {
   };
 }
 
-function resolveKind(nodes, tooltipText) {
+// kind is classified from every node's entry_type AND the tooltip text (the tooltip can flip the
+// classification). The tooltip candidate carries its REAL source, and is marked `contributed` when
+// it is db-derived so the db's participation surfaces in record-level provenance.
+function resolveKind(nodes, tooltipText, tooltip) {
   const perNode = nodes.map((n) => ({ node: n, kind: classifyMechanicKind(n, tooltipText) }));
   const distinct = [...new Set(perNode.map((x) => x.kind))];
   const chosen = distinct.slice().sort((a, b) => (KIND_BEHAVIOR_ORDER[a] ?? 9) - (KIND_BEHAVIOR_ORDER[b] ?? 9))[0];
+  const candidates = perNode.map((x) => ({
+    source: "builder", precedence_tier: "verified_builder", source_id: `builder_node:${x.node.entry_id}`,
+    source_field: "entry_type", raw_value: x.node.entry_type, normalized_value: x.kind,
+    confidence: "medium", eligible: true, eligibility_reasons: [], contributed: true,
+  }));
+  if (tooltip && tooltip.text) {
+    candidates.push({
+      source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
+      source_field: "tooltip_text", raw_value: null, normalized_value: chosen,
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+    });
+  }
   return {
     kind: chosen,
     provenance: {
       selected_source: "builder", selected_tier: "verified_builder", selected_value: chosen,
-      selection_reason: distinct.length > 1 ? "kind_node_disagreement_resolved" : REASON.ONLY_CANDIDATE,
+      selection_reason: distinct.length > 1 ? REASON.KIND_NODE_DISAGREEMENT_RESOLVED : REASON.ONLY_CANDIDATE,
       warnings: distinct.length > 1 ? ["kind_node_disagreement"] : [],
-      candidates: perNode.map((x) => ({
-        source: "builder", precedence_tier: "verified_builder", source_id: `builder_node:${x.node.entry_id}`,
-        source_field: "entry_type", raw_value: x.node.entry_type, normalized_value: x.kind,
-        confidence: "medium", eligible: true, eligibility_reasons: [],
-      })),
+      candidates,
     },
   };
 }
 
+// effects are heuristically inferred from the tooltip + merged builder tags. Provenance records the
+// tooltip's real source (db participation marked `contributed`); when no effects were inferred the
+// field contributes nothing.
+function effectsProvenance({ effects, tooltip }) {
+  const has = effects.length > 0;
+  const candidates = [];
+  if (has && tooltip && tooltip.text) {
+    candidates.push({
+      source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
+      source_field: "tooltip_text", raw_value: null, normalized_value: effects.length,
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+    });
+  }
+  return {
+    selected_source: has ? "inferred" : null,
+    selected_tier: has ? "inferred" : null,
+    selected_value: effects.length,
+    selection_reason: has ? REASON.INFERRED_FROM_TEXT : REASON.OMITTED_NO_ELIGIBLE_CANDIDATE,
+    warnings: [], candidates,
+  };
+}
+
+// Record-level provenance is the union of every field's selected source PLUS every candidate that
+// actually shaped an emitted value (`contributed`) — so a db tooltip that informed kind/effects, or
+// a db-fallback cooldown, always leaves a db provenance entry even when no db value was "selected".
 function buildProvenance(fieldProvenance) {
   const used = new Set();
-  for (const fp of Object.values(fieldProvenance)) if (fp && fp.selected_source) used.add(fp.selected_source);
+  for (const fp of Object.values(fieldProvenance)) {
+    if (!fp) continue;
+    if (fp.selected_source) used.add(fp.selected_source);
+    for (const c of fp.candidates || []) if (c.contributed) used.add(c.source);
+  }
   const conf = { client_dbc: "high", builder: "medium", ascension_db: "medium", inferred: "low" };
   const notes = { client_dbc: "client_dbc_mechanical", builder: "verified_builder_or_inferred", ascension_db: "db_fallback", inferred: "inferred" };
   const out = [];
@@ -1322,12 +1386,12 @@ function inferEffects({ entry, tooltipText, spellRow, schools = [], durationMs =
   const amount = inferAmount(tooltipText);
 ```
 
-and in each returned effect object replace `duration_ms: durationMs` with `duration_ms: resolvedDuration` and `period_ms: periodMs` with `tick_interval_ms: periodMs`.
+and in each returned effect object replace `duration_ms: durationMs` with `duration_ms: resolvedDuration` and `period_ms: periodMs` with `tick_interval_ms: periodMs`. Because the merged entry no longer carries `damage_schools`, also update the damage branch condition from `if (tags.includes("dot") || entry.damage_schools?.length || /\bdamage\b/i.test(tooltipText))` to `if (tags.includes("dot") || schools.length || /\bdamage\b/i.test(tooltipText))` so the reconciled schools drive the damage effect.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run (from `coa_scraper/`): `node --test tests/pipeline-scripts.test.mjs`
-Expected: PASS for the two new `buildMechanicsRows` tests.
+Expected: PASS for the four new `buildMechanicsRows` tests (client field wins + effects/kind provenance + raw.tags; identity-mismatched db supplies zero fields and leaks nothing; input-order independence; db cooldown always leaves a db provenance entry).
 
 - [ ] **Step 5: Commit**
 
@@ -1345,7 +1409,7 @@ git commit -m "M1.14C Task 8: per-field reconciled mechanics rows (one per spell
 - Test: `coa_scraper/tests/pipeline-scripts.test.mjs`
 
 **Interfaces:**
-- Produces: `loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds })` → `{ projection, coverage, ok, errors }`. Throws `MechanicsBuildError` on a malformed present projection; returns `{ absent: true }` when the file does not exist.
+- Produces: `loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds })` → `{ absent: false, projection, coverage, projection_sha256, manifest_sha256 }` on success, or `{ absent: true }` when **both** files are missing. Throws `MechanicsBuildError` on any malformed present projection (bad JSON, wrong schema, torn pair, type/enum/mask violations, confidence drift, sha/byte/count mismatch, or a Builder coverage gap).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1360,17 +1424,18 @@ function writeProjectionFixture(dir, records) {
   const body = records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : "");
   fs.writeFileSync(proj, body);
   const sha = crypto.createHash("sha256").update(body).digest("hex");
+  const uniq = new Set(records.map((r) => r.spell_id)).size;
   fs.writeFileSync(man, JSON.stringify({
     schema_version: "coa-client-spell-projection-v1",
     projection: { path: "p.jsonl", sha256: sha, byte_length: Buffer.byteLength(body) },
-    counts: { projected_records: records.length },
+    counts: { projected_records: records.length, unique_spell_ids: uniq, source_records: records.length },
   }));
   return { proj, man };
 }
 
 function validProjRec(spell_id) {
   return {
-    schema_version: "coa-client-spell-v1", spell_id,
+    schema_version: "coa-client-spell-v1", spell_id, name: `S${spell_id}`,
     mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30, category: 0, spell_icon_id: 1 },
     provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
     coa_attribution: { is_coa: true, confidence: "high" },
@@ -1410,6 +1475,107 @@ test("loadAndValidateProjection: both files absent returns { absent: true }", ()
   const out = loadAndValidateProjection({ projectionPath: "/no/such.jsonl", manifestPath: "/no/such.json", builderSpellIds: new Set() });
   assert.equal(out.absent, true);
 });
+
+test("loadAndValidateProjection: non-numeric cast_time_ms throws (no string leaks to canonical)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "badnum-"));
+  const rec = validProjRec(1);
+  rec.mechanics.cast_time_ms = "2000"; // string, not number
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /cast_time_ms must be number\|null/,
+  );
+});
+
+test("loadAndValidateProjection: negative school_mask throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "negmask-"));
+  const rec = validProjRec(1);
+  rec.mechanics.school_mask = -8;
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /school_mask must be a non-negative integer/,
+  );
+});
+
+test("loadAndValidateProjection: fractional school_mask throws (bitmask must be integer)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fracmask-"));
+  const rec = validProjRec(1);
+  rec.mechanics.school_mask = 8.5;
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /school_mask must be integer\|null/,
+  );
+});
+
+test("loadAndValidateProjection: unknown school-mask bit throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "badbit-"));
+  const rec = validProjRec(1);
+  rec.mechanics.school_mask = 1 << 20; // no such school
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /unknown school-mask bits/,
+  );
+});
+
+test("loadAndValidateProjection: unknown power_type enum throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "badpwr-"));
+  const rec = validProjRec(1);
+  rec.mechanics.power_type = 99;
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /unknown power_type/,
+  );
+});
+
+test("loadAndValidateProjection: confidence value outside {high,low} throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "badconf-"));
+  const rec = validProjRec(1);
+  rec.provenance.schema_match_confidence_by_dbc.SpellDuration = "medium";
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /must map .* to high\|low/,
+  );
+});
+
+test("loadAndValidateProjection: low Spell confidence throws (name + every field unreliable)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spelldrift-"));
+  const rec = validProjRec(1);
+  rec.provenance.schema_match_confidence_by_dbc.Spell = "low";
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /Spell table drift/,
+  );
+});
+
+test("loadAndValidateProjection: missing manifest.counts member throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nocounts-"));
+  const { proj, man } = writeProjectionFixture(dir, [validProjRec(1)]);
+  const parsed = JSON.parse(fs.readFileSync(man, "utf8"));
+  delete parsed.counts.unique_spell_ids;
+  fs.writeFileSync(man, JSON.stringify(parsed));
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /manifest.counts must have integer/,
+  );
+});
+
+test("loadAndValidateProjection: manifest byte_length disagreeing with the file throws", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "badlen-"));
+  const { proj, man } = writeProjectionFixture(dir, [validProjRec(1)]);
+  const parsed = JSON.parse(fs.readFileSync(man, "utf8"));
+  parsed.projection.byte_length += 1; // still an integer, but wrong
+  fs.writeFileSync(man, JSON.stringify(parsed));
+  assert.throws(
+    () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
+    /byte_length mismatch/,
+  );
+});
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1437,14 +1603,37 @@ const FIELD_TABLES = {
   power_type: ["Spell"],
 };
 
-// Throws on any semantic defect: unknown mask bit / power enum, or per-table drift on a field the
-// record actually populates. Runs BEFORE reconciliation, so a canonical build never emits on drift.
+const NUMERIC_FIELDS = ["cast_time_ms", "duration_ms", "range_min_yd", "range_max_yd"];
+const INT_FIELDS = ["school_mask", "power_type", "category", "spell_icon_id"];
+const CONF = new Set(["high", "low"]);
+
+function isNumOrNull(v) { return v === null || v === undefined || (typeof v === "number" && Number.isFinite(v)); }
+function isIntOrNull(v) { return v === null || v === undefined || Number.isInteger(v); }
+
+function parseJson(text, what) {
+  try { return JSON.parse(text); }
+  catch (e) { throw new MechanicsBuildError(`${what}: invalid JSON: ${e.message}`); }
+}
+
+// Throws on ANY malformed value that could reach a canonical artifact: wrong types, negative mask,
+// bad confidence enum, unknown mask bit / power enum, or per-table drift on a populated field (Spell
+// is foundational — name + every field depends on it). Runs BEFORE reconciliation.
 function assertRecordSemantics(rec) {
+  if (typeof rec.name !== "string") throw new MechanicsBuildError(`projection ${rec.spell_id}: name must be a string`);
   const m = rec.mechanics || {};
-  const byDbc = rec.provenance?.schema_match_confidence_by_dbc;
-  if (!byDbc || ["Spell", "SpellCastTimes", "SpellDuration", "SpellRange"].some((t) => !byDbc[t])) {
-    throw new MechanicsBuildError(`projection ${rec.spell_id}: missing schema_match_confidence_by_dbc`);
+  for (const f of NUMERIC_FIELDS) if (!isNumOrNull(m[f])) throw new MechanicsBuildError(`projection ${rec.spell_id}: ${f} must be number|null`);
+  for (const f of INT_FIELDS) if (!isIntOrNull(m[f])) throw new MechanicsBuildError(`projection ${rec.spell_id}: ${f} must be integer|null`);
+  if (isPresent(m.school_mask) && (!Number.isInteger(m.school_mask) || m.school_mask < 0)) {
+    throw new MechanicsBuildError(`projection ${rec.spell_id}: school_mask must be a non-negative integer`);
   }
+
+  const byDbc = rec.provenance?.schema_match_confidence_by_dbc;
+  const tables = ["Spell", "SpellCastTimes", "SpellDuration", "SpellRange"];
+  if (!byDbc || tables.some((t) => !CONF.has(byDbc[t]))) {
+    throw new MechanicsBuildError(`projection ${rec.spell_id}: schema_match_confidence_by_dbc must map ${tables} to high|low`);
+  }
+  if (byDbc.Spell !== "high") throw new MechanicsBuildError(`projection ${rec.spell_id}: Spell table drift (name + all fields unreliable)`);
+
   if (isPresent(m.school_mask) && m.school_mask > 0) {
     const { unknownBits } = normalizeSchoolMask(m.school_mask);
     if (unknownBits.length) throw new MechanicsBuildError(`projection ${rec.spell_id}: unknown school-mask bits ${unknownBits}`);
@@ -1452,9 +1641,9 @@ function assertRecordSemantics(rec) {
   if (isPresent(m.power_type) && normalizePowerType(m.power_type).unknown) {
     throw new MechanicsBuildError(`projection ${rec.spell_id}: unknown power_type ${m.power_type}`);
   }
-  for (const [field, tables] of Object.entries(FIELD_TABLES)) {
+  for (const [field, needs] of Object.entries(FIELD_TABLES)) {
     if (!isPresent(m[field])) continue;
-    const bad = tables.find((t) => byDbc[t] !== "high");
+    const bad = needs.find((t) => byDbc[t] !== "high");
     if (bad) throw new MechanicsBuildError(`projection ${rec.spell_id}: table ${bad} drift on populated field ${field}`);
   }
 }
@@ -1468,31 +1657,31 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
   }
 
   const manifestBytes = fs.readFileSync(manifestPath);
-  const manifest = JSON.parse(manifestBytes.toString("utf8"));
+  const manifest = parseJson(manifestBytes.toString("utf8"), "projection manifest");
   if (manifest.schema_version !== "coa-client-spell-projection-v1") {
     throw new MechanicsBuildError(`projection manifest bad schema_version: ${manifest.schema_version}`);
   }
-  for (const key of ["projection", "counts"]) {
-    if (!manifest[key]) throw new MechanicsBuildError(`projection manifest missing '${key}'`);
+  const p = manifest.projection;
+  if (!p || typeof p.path !== "string" || typeof p.sha256 !== "string" || !p.sha256 || !Number.isInteger(p.byte_length)) {
+    throw new MechanicsBuildError("projection manifest.projection must have {path:string, sha256:string, byte_length:int}");
   }
-  if (typeof manifest.projection.sha256 !== "string" || !manifest.projection.sha256) {
-    throw new MechanicsBuildError("projection manifest missing required projection.sha256");
+  const c = manifest.counts;
+  if (!c || !Number.isInteger(c.projected_records) || !Number.isInteger(c.unique_spell_ids) || !Number.isInteger(c.source_records)) {
+    throw new MechanicsBuildError("projection manifest.counts must have integer {projected_records, unique_spell_ids, source_records}");
   }
 
   const bytes = fs.readFileSync(projectionPath);
   const sha = crypto.createHash("sha256").update(bytes).digest("hex");
-  if (manifest.projection.sha256 !== sha) {
-    throw new MechanicsBuildError(`projection sha256 mismatch: ${projectionPath}`);
-  }
-  if (isPresent(manifest.projection.byte_length) && manifest.projection.byte_length !== bytes.length) {
-    throw new MechanicsBuildError(`projection byte_length mismatch: manifest ${manifest.projection.byte_length} != actual ${bytes.length}`);
-  }
+  if (p.sha256 !== sha) throw new MechanicsBuildError(`projection sha256 mismatch: ${projectionPath}`);
+  if (p.byte_length !== bytes.length) throw new MechanicsBuildError(`projection byte_length mismatch: manifest ${p.byte_length} != actual ${bytes.length}`);
 
   const projection = [];
   const seen = new Set();
+  let lineNo = 0;
   for (const line of bytes.toString("utf8").split("\n")) {
+    lineNo += 1;
     if (!line.trim()) continue;
-    const rec = JSON.parse(line);
+    const rec = parseJson(line, `projection line ${lineNo}`);
     if (rec.schema_version !== "coa-client-spell-v1") throw new MechanicsBuildError(`projection row bad schema_version: ${rec.schema_version}`);
     if (rec.coa_attribution?.is_coa !== true) throw new MechanicsBuildError(`projection row not is_coa: ${rec.spell_id}`);
     if (!Number.isInteger(rec.spell_id) || rec.spell_id <= 0) throw new MechanicsBuildError(`projection non-positive-integer spell_id: ${rec.spell_id}`);
@@ -1501,9 +1690,8 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
     seen.add(rec.spell_id);
     projection.push(rec);
   }
-  if (isPresent(manifest.counts.projected_records) && manifest.counts.projected_records !== projection.length) {
-    throw new MechanicsBuildError(`projection count mismatch: manifest ${manifest.counts.projected_records} != actual ${projection.length}`);
-  }
+  if (c.projected_records !== projection.length) throw new MechanicsBuildError(`projection count mismatch: manifest ${c.projected_records} != actual ${projection.length}`);
+  if (c.unique_spell_ids !== seen.size) throw new MechanicsBuildError(`projection unique_spell_ids mismatch: manifest ${c.unique_spell_ids} != actual ${seen.size}`);
 
   const joined = [...builderSpellIds].filter((s) => seen.has(s));
   const missing = [...builderSpellIds].filter((s) => !seen.has(s));
@@ -1525,7 +1713,7 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
 - [ ] **Step 4: Run to verify it passes**
 
 Run (from `coa_scraper/`): `node --test tests/pipeline-scripts.test.mjs`
-Expected: PASS for the four projection tests (coverage gap, torn pair, per-table drift, both-absent).
+Expected: PASS for all projection tests — the four structural ones (coverage gap, torn pair, per-table drift, both-absent) plus the malformed-value guards (non-numeric field, negative/fractional/unknown mask, unknown power_type, bad confidence enum, low Spell confidence, missing counts member, byte_length mismatch).
 
 - [ ] **Step 5: Commit**
 
@@ -1544,7 +1732,7 @@ git commit -m "M1.14C Task 9: projection load/validation + coverage accounting (
 
 **Interfaces:**
 - Consumes: `loadAndValidateProjection`, `buildMechanicsRows`.
-- Produces: `buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback, overwriteCanonical })` → `{ canonical, manifest }`; writes JSONL + manifest atomically.
+- Produces: `buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback, inputs })` → `{ canonical, manifest }`; writes JSONL + manifest atomically (creates `outDir`). A fallback build writes only `coa_mechanics.fallback.*` and never the canonical filename.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1612,29 +1800,25 @@ function winnerCounts(rows) {
   return { bySource, byTier };
 }
 
-export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, overwriteCanonical = false, inputs = {} }) {
+export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {} }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
   const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds });
 
   if (loaded.absent) {
     if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
     const rows = buildMechanicsRows({ entries, spellRows, projection: [] });
-    const fallback = writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
-    if (overwriteCanonical) {
-      // Write the degraded content to the CANONICAL filenames with a SECOND, regenerated manifest
-      // whose outputs.mechanics_jsonl names coa_mechanics.jsonl — but it STILL reads canonical:false.
-      // Writing to the canonical path never launders a degraded build into a canonical status.
-      writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics" });
-    }
-    return fallback;
+    // A degraded build writes ONLY the coa_mechanics.fallback.* files. It NEVER writes the canonical
+    // filename — MechanicsRepository reads the JSONL directly and would ingest degraded bytes as
+    // canonical regardless of a canonical:false marker. There is no override.
+    return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
   }
 
   const rows = buildMechanicsRows({ entries, spellRows, projection: loaded.projection });
-  const written = writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
-  return written;
+  return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
 }
 
 function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthorized, loaded, inputs, base }) {
+  fs.mkdirSync(outDir, { recursive: true }); // outDir may not exist yet (e.g. a fresh temp dir)
   const jsonlName = `${base}.jsonl`;
   const manifestName = `${base}.manifest.json`;
   const jsonlPath = path.join(outDir, jsonlName);
@@ -1744,7 +1928,7 @@ if (isCliEntryPoint()) {
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
       entries, spellRows, projectionPath, manifestPath: projManifestPath, outDir,
-      allowFallback: has("--allow-fallback-mechanics"), overwriteCanonical: has("--overwrite-canonical"),
+      allowFallback: has("--allow-fallback-mechanics"),
       inputs: {
         builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
         db_spell_tooltips: fs.existsSync(dbPath) ? { path: dbPath, sha256: sha256File(dbPath) } : null,
@@ -1982,10 +2166,17 @@ test("acceptance: fallback does NOT modify a pre-existing canonical artifact", (
   assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
 });
 
-test("acceptance: identity-mismatched db supplies zero fields AND zero effects end-to-end", () => {
+test("acceptance: identity-mismatched db supplies zero fields AND zero db-derived effects end-to-end", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc3-"));
-  const { proj, man } = writeProjectionFixture(dir, [validProjRec(7)]);
-  const out = buildMechanicsArtifact({
+  // No client school and no builder tooltip → the ONLY thing that could produce an effect is the
+  // db's "summon a pet" tooltip. Since the db row fails identity, it must be excluded → zero effects.
+  const rec = validProjRec(7);
+  rec.mechanics.school_mask = 0;
+  rec.mechanics.duration_ms = null;
+  rec.mechanics.range_min_yd = null;
+  rec.mechanics.range_max_yd = null;
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  buildMechanicsArtifact({
     entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
     spellRows: [{ id: 7, name: "Totally Different", name_match: false, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
     projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
@@ -1995,6 +2186,7 @@ test("acceptance: identity-mismatched db supplies zero fields AND zero effects e
   assert.equal(row.gcd_ms ?? null, null);
   assert.equal(row.raw.db_excluded, true);
   assert(!row.provenance.some((p) => p.source === "ascension_db")); // no db provenance leaked
+  assert.equal(row.effects.length, 0); // the excluded db "summon a pet" tooltip yields NO effect
 });
 ```
 
@@ -2008,7 +2200,7 @@ Expected: PASS (three acceptance tests).
 Append to `tests/test_client_extract_acceptance.py`. The fixture builds into a temp dir; it **skips only** when `COA_CLIENT_ROOT` is unset (the standard client-tier gate) — never a permissive "manual" skip — and the assertions are non-vacuous against the *observed* db name:
 
 ```python
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 from pathlib import Path
 import pytest
 
@@ -2046,13 +2238,18 @@ def test_805775_client_wins_and_db_gate_matches_observed(client_mechanics_dir):
     fp = row["field_provenance"]
     assert any(fp.get(f, {}).get("selected_source") == "client_dbc"
                for f in ("power_type", "cast_time_ms", "duration_ms", "range_yards"))  # a client field wins
-    # non-vacuous gate check vs the OBSERVED db name for 805775
+    # non-vacuous gate check vs the OBSERVED db name for 805775 — the db row MUST exist so the gate
+    # is actually exercised (a missing row would make either branch vacuously true).
     db = next((json.loads(l) for l in DB.read_text().splitlines()
                if l.strip() and json.loads(l).get("id") == 805775), None)
-    def norm(s): return "".join((s or "").lower().split())
-    if db and norm(db.get("name")) != norm("Adrenal Venom"):
+    assert db is not None, "805775 must be present in coa_db_spell_tooltips.jsonl to exercise the identity gate"
+
+    # EXACT port of Node's normalizeName (lib/ascensiondb.mjs): lowercase, non-alphanumeric runs → single
+    # space, trim. Must match byte-for-byte or the test could assert the wrong gate branch.
+    def norm(s): return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+    if norm(db.get("name")) != norm("Adrenal Venom"):
         # stale db → excluded → zero db contribution
-        assert row["cooldown_ms"] in (None,) and row["gcd_ms"] in (None,)
+        assert row["cooldown_ms"] is None and row["gcd_ms"] is None
         assert not any(p["source"] == "ascension_db" for p in row["provenance"])
         assert row["raw"]["db_excluded"] is True
     else:
@@ -2116,8 +2313,8 @@ git commit -m "M1.14C Task 16: full-suite regression green; fallback pipeline ve
 
 ## Self-Review Notes (for the executor)
 
-- **Spec coverage:** projection+manifest (T3, atomic + dup-rejected), per-table confidence (T2), per-field reconciliation with **separated** source/tier/eligibility + both-sides conflict fall-through (T5,T7,T8), DB identity gate incl. `db_identity_unverifiable` and `kind`/`tags` exclusion (T6,T8), schools+field_provenance loader round-trip (T4,T14), **fail-closed canonical validation** — torn pair, required checksum, per-table drift / unknown mask-enum throw before reconciliation, positive-int spell_id (T9); fallback/overwrite-canonical + checksum-bound manifest + atomic manifest-marker writes (T10); Builder-domain output + coverage (T8,T9); carried-in fixes missing≠zero/deterministic dedup/`tick_interval_ms` (T7,T8,T12); **complete provenance** — every emitted field reconciled or given single-source `field_provenance`, record-level provenance unioned over all (T8); item split + npm (`../reports/...` paths) + artifact manifest (T11); ignore rules + regen docs + policy gate (T13); enum/sentinel recon + unknown-flagging (T1); acceptance — build guarantees + automated client-tier `805775` (T15).
+- **Spec coverage:** projection+manifest (T3, atomic + dup-rejected), per-table confidence (T2), per-field reconciliation with **separated** source/tier/eligibility + both-sides conflict fall-through (T5,T7,T8), DB identity gate incl. `db_identity_unverifiable` and `kind`/`tags` exclusion (T6,T8), schools+field_provenance loader round-trip (T4,T14), **fail-closed canonical validation** — torn pair, required checksum, per-table drift / unknown mask-enum throw before reconciliation, full row-schema + manifest validation, positive-int spell_id (T9); fallback build writes only `coa_mechanics.fallback.*` (never canonical) + checksum-bound manifest + atomic manifest-marker writes (T10); Builder-domain output + coverage (T8,T9); carried-in fixes missing≠zero/deterministic dedup/`tick_interval_ms` (T7,T8,T12); **complete provenance** — every emitted field reconciled or given single-source `field_provenance` (incl. `kind` + `effects`); record-level provenance = union of each field's selected source plus every `contributed` candidate, so a db tooltip informing kind/effects still leaves a db entry; set-like `tags` moved under `raw.tags` (round-tripped, not a phantom top-level v1 field) (T8); item split + npm (`../reports/...` paths) + artifact manifest (T11); ignore rules + regen docs + policy gate (T13); enum/sentinel recon + unknown-flagging (T1); acceptance — build guarantees + automated client-tier `805775` (T15).
 - **Fail-closed is enforced in T9, not T7:** candidate assembly (T7) only *marks* client candidates ineligible; the hard failure for a canonical build (per-table drift on a populated field, unknown mask/enum) is thrown by `loadAndValidateProjection`'s `assertRecordSemantics` **before** any reconciliation, so a canonical artifact is never emitted on those. The fallback flag only rescues a *fully-absent* (both files missing) projection.
-- **Determinism:** T8 sorts grouped nodes by `entry_id`, aggregates `tags` as a sorted set, and derives `kind`/`name` from all nodes — the T8 reversibility test asserts byte-identical output under reversed input.
+- **Determinism:** T8 sorts grouped nodes by `entry_id`, aggregates `tags` as a sorted set (into `raw.tags`), and derives `kind`/`name`/`effects` from a merged view of all nodes (never one arbitrary node) — the T8 reversibility test asserts byte-identical output under reversed input.
 - **Deferred/verify during execution:** confirm `normalizeName` is exported from `lib/ascensiondb.mjs` (T6); confirm the `write-artifact-manifest.mjs` script-list assertion at `pipeline-scripts.test.mjs:405` (T11); in T12 set the fixture db `name` equal to the entry `name` so the identity gate keeps the db row usable.
 - **Type consistency:** candidate shape (`source`/`precedence_tier`/`source_id`/`source_field`/`raw_value`/`normalized_value`/`confidence`/`eligible`/`eligibility_reasons`) is identical across T5/T6/T7/T8; `reconcileField` returns `{ field, selected, provenance, hadConflict }`; `applyDbIdentityGate` returns `{ excluded, reason }`; manifest schema `coa-mechanics-manifest-v1` (with `per_field_winner_counts_by_source`/`_by_tier`) matches T10 and the spec.
