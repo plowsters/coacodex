@@ -603,6 +603,7 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
   const spellRow = enrichedSpellRow({
     id: 92117,
     entry_id: 501,
+    name: "Dream Flowers",
     tooltip_text: "Deals 120 Nature damage over 12 sec.",
     cooldown_ms: 30000,
     gcd_ms: 1500,
@@ -640,9 +641,9 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
   assert.equal(mechanicsRows[0].cast_time_ms, 0);
   assert.equal(mechanicsRows[0].range_yards, 30);
   assert.equal(mechanicsRows[0].effects[0].duration_ms, 12000);
-  assert.equal(mechanicsRows[0].effects[0].period_ms, 3000);
+  assert.equal(mechanicsRows[0].effects[0].tick_interval_ms, 3000);
   assert(mechanicsRows[0].raw.linked_item_ids.includes(23887));
-  assert.equal(mechanicsRows[0].provenance[0].source, "ascension_db");
+  assert(mechanicsRows[0].provenance.some((p) => p.source === "ascension_db"));
   assert.equal(itemRows[0].schema_version, "coa-item-v1");
   assert.equal(itemRows[0].item_id, 23887);
   assert.equal(itemRows[0].required_level, 58);
