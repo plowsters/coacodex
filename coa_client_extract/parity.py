@@ -22,10 +22,10 @@ _REQUIRED_LEGALITY = ("required_level", "ae_cost", "te_cost", "required_tab_ae",
 
 EXPECTED_BUILDER_RECORDS = 3612   # pinned Builder artifact size (the CLI passes this to guard truncation)
 
-# Generalized Decision-22 ownership discrepancy classes for a client-only node (a node the current
-# client has that the Builder capture lacks). ACCEPTED classes do not block ownership; everything else
-# (extraction_defect, or an unadjudicated node -> unresolved) blocks, preserving the parity safety net.
-_ACCEPTED_CLIENT_ONLY = ("verified_client_current", "representation_difference")
+# Generalized Decision-22 ownership discrepancy classes for a client-only node (a node the current client
+# has that the Builder capture lacks): `verified_client_current` and `representation_difference` are ACCEPTED
+# (do not block ownership); `extraction_defect` and an unadjudicated node (`unresolved`) BLOCK, preserving
+# the parity safety net. See the classification/blocking logic in build_parity_report.
 
 
 def flip_gate_inputs(layout):
@@ -89,7 +89,7 @@ def build_parity_report(nodes, builder_entries, *, class_types=None,
 
     There is NO single flip boolean. Instead `readiness` earns each dimension independently:
     `attribution_ready` (anchored class_type FK + 21-class cardinality, no legality dependency),
-    `ownership_ready` (full recall + zero identity_mismatches + every client-only node adjudicated
+    `ownership_ready` (full recall + zero hard_identity_mismatches + every client-only node adjudicated
     accepted + count/cardinality guards),
     `adjacency_ready` (both edge domains decoded high AND zero adjacency_mismatches), per-field
     `legality[field]` (`ready` only when decoded high and not a Decision-22 (a)/(d) defect; else

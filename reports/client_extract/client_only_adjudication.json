@@ -9,8 +9,8 @@
     "18821": {
       "classification": "verified_client_current",
       "spell_id": 674,
-      "class": "Witch Doctor",
-      "reason": "current client CoA membership absent from older Builder capture (new CoA spell 674; on 0 Builder nodes, 1 client node)"
+      "class": "WitchDoctor",
+      "reason": "current client CoA membership absent from older Builder capture (new CoA spell 674; on 0 Builder nodes, 1 client node). Client-native class label is CamelCase WitchDoctor (Builder spaces it: Witch Doctor)"
     },
     "34451": {
       "classification": "verified_client_current",
