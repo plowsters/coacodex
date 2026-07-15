@@ -78,7 +78,7 @@ def regenerate(
     from .attribution import attribute, derive_coa_skill_lines, build_skill_line_index
     from .artifacts import (
         build_advancement_records, build_class_type_records, build_tab_type_records,
-        build_essence_raw_records, fill_spell_attribution,
+        build_essence_raw_records, fill_spell_attribution, _sha256_bytes,
     )
     from .decode_advancement import load_resolved_layout
     # parse_dbc/parse_positional are already imported at module scope (used by read_table above);
@@ -169,6 +169,20 @@ def regenerate(
     outputs["coa_client_class_types.jsonl"] = write_jsonl(class_type_records, out_dir / "coa_client_class_types.jsonl")
     outputs["coa_client_tab_types.jsonl"] = write_jsonl(tab_type_records, out_dir / "coa_client_tab_types.jsonl")
     outputs["coa_client_essence.jsonl"] = write_jsonl(essence_records, out_dir / "coa_client_essence.jsonl")
+
+    from .artifacts import write_client_spell_projection
+    spell_full_path = out_dir / "coa_client_spell.jsonl"
+    projection_manifest = write_client_spell_projection(
+        spell_records, out_dir,
+        source_path=spell_full_path.name,
+        source_sha=outputs["coa_client_spell.jsonl"],
+        source_bytes=spell_full_path.stat().st_size,
+        client_build=_client_build(plan),
+        extractor_commit=_extractor_commit(),
+    )
+    outputs["coa_client_spell_coa.jsonl"] = projection_manifest["projection"]["sha256"]
+    outputs["coa_client_spell_projection.manifest.json"] = _sha256_bytes(
+        (out_dir / "coa_client_spell_projection.manifest.json").read_bytes())
 
     if builder_entries_path:
         from .parity import build_parity_report, flip_gate_inputs, EXPECTED_BUILDER_RECORDS

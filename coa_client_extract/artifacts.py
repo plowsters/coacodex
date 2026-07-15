@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from collections import Counter
+from datetime import date
 from pathlib import Path
 
 from .archive_plan import family_of
@@ -82,6 +85,13 @@ def build_client_spell_records(
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _atomic_write_bytes(data: bytes, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
 
 
 def write_jsonl(records: list[dict], path: Path) -> str:
@@ -178,3 +188,64 @@ def fill_spell_attribution(spell_records, attribution) -> list[dict]:
         # to an array, never discarded). Absent attribution -> empty list.
         rec["memberships"] = list(attr.memberships) if attr is not None else []
     return spell_records
+
+
+def write_client_spell_projection(
+    records: list[dict],
+    out_dir: Path,
+    *,
+    source_path: str,
+    source_sha: str,
+    source_bytes: int,
+    client_build: str,
+    extractor_commit: str,
+) -> dict:
+    """Filter coa-client-spell-v1 records to the CoA set (coa_attribution.is_coa) and write the
+    projection + its manifest. Scoped by client-native attribution, never by Builder spell IDs.
+    Uses the manifest-as-validity-marker protocol: reject duplicate projected spell ids, remove the
+    old manifest first, write the JSONL atomically, then write the manifest atomically last — so an
+    interruption never leaves a new JSONL beside a stale manifest."""
+    projected = [r for r in records if r.get("coa_attribution", {}).get("is_coa") is True]
+    spell_ids = [r["spell_id"] for r in projected]
+    dupes = sorted(s for s, n in Counter(spell_ids).items() if n > 1)  # single pass, not O(n^2)
+    if dupes:
+        raise ValueError(f"projection has duplicate spell_ids: {dupes[:5]}")
+
+    proj_path = out_dir / "coa_client_spell_coa.jsonl"
+    manifest_path = out_dir / "coa_client_spell_projection.manifest.json"
+
+    body = "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in projected).encode("utf-8")
+    proj_sha = _sha256_bytes(body)
+
+    by_conf: dict[str, int] = {}
+    by_dbc_low = 0
+    for r in projected:
+        c = r.get("coa_attribution", {}).get("confidence", "low")
+        by_conf[c] = by_conf.get(c, 0) + 1
+        vals = r.get("provenance", {}).get("schema_match_confidence_by_dbc", {}).values()
+        if any(v != "high" for v in vals):
+            by_dbc_low += 1
+
+    manifest = {
+        "schema_version": "coa-client-spell-projection-v1",
+        "inclusion_rule": {"predicate": "coa_attribution.is_coa == true", "version": "m1.14c-1"},
+        "source_artifact": {"path": source_path, "sha256": source_sha, "byte_length": source_bytes},
+        "projection": {"path": proj_path.name, "sha256": proj_sha, "byte_length": len(body)},
+        "client_build": client_build,
+        "extractor_commit": extractor_commit,
+        "extraction_date": date.today().isoformat(),
+        "counts": {"source_records": len(records), "projected_records": len(projected),
+                   "unique_spell_ids": len(set(spell_ids)),
+                   "by_confidence": by_conf},
+        "schema_confidence_summary": {"records_with_any_low_table": by_dbc_low,
+                                      "records_all_high": len(projected) - by_dbc_low},
+    }
+    manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+    # manifest-as-validity-marker: remove old manifest first, then JSONL, then manifest — each atomic.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if manifest_path.exists():
+        manifest_path.unlink()
+    _atomic_write_bytes(body, proj_path)
+    _atomic_write_bytes(manifest_bytes, manifest_path)
+    return manifest
