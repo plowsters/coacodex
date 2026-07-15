@@ -118,6 +118,8 @@ class MechanicRecord:
     source_urls: tuple[str, ...]
     school: str = ""
     power_type: str = ""
+    schools: tuple[str, ...] = tuple()
+    field_provenance: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
     range_yards: float | None = None
     cast_time_ms: int | None = None
     gcd_ms: int | None = None
@@ -145,6 +147,7 @@ class MechanicRecord:
                 "source_node_ids": list(self.source_node_ids),
                 "source_urls": list(self.source_urls),
                 "school": self.school,
+                "schools": list(self.schools),
                 "power_type": self.power_type,
                 "range_yards": self.range_yards,
                 "cast_time_ms": self.cast_time_ms,
@@ -164,6 +167,8 @@ class MechanicRecord:
             },
             drop_empty=True,
         )
+        if self.field_provenance:
+            data["field_provenance"] = self.field_provenance
         if self.raw:
             data["raw"] = self.raw
         return data
@@ -190,6 +195,8 @@ def mechanic_from_raw(raw: dict[str, Any], source: str = "<memory>") -> Mechanic
         source_urls=tuple(str(item) for item in raw.get("source_urls") or []),
         school=str(raw.get("school") or ""),
         power_type=str(raw.get("power_type") or ""),
+        schools=tuple(str(item) for item in raw.get("schools") or []),
+        field_provenance=dict(raw.get("field_provenance") or {}),
         range_yards=_as_float_or_none(raw.get("range_yards")),
         cast_time_ms=_as_int_or_none(raw.get("cast_time_ms")),
         gcd_ms=_as_int_or_none(raw.get("gcd_ms")),
@@ -219,7 +226,9 @@ def _effect_from_raw(raw: dict[str, Any]) -> MechanicEffect:
         stat=str(raw.get("stat") or ""),
         trigger_spell_id=_as_int_or_none(raw.get("trigger_spell_id")),
         duration_ms=_as_int_or_none(raw.get("duration_ms")),
-        tick_interval_ms=_as_int_or_none(raw.get("tick_interval_ms")),
+        tick_interval_ms=_as_int_or_none(
+            raw.get("tick_interval_ms") if raw.get("tick_interval_ms") is not None else raw.get("period_ms")
+        ),
         scaling=_scaling_from_raw(raw.get("scaling")) if raw.get("scaling") else None,
         tags=tuple(str(item) for item in raw.get("tags") or []),
         raw=dict(raw.get("raw") or {}),
