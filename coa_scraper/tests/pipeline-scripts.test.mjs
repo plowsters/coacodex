@@ -34,6 +34,7 @@ import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs"
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
 import {
   buildItemRows,
+  buildMechanicsArtifact,
   buildMechanicsRows,
   summarizeMechanicsArtifacts
 } from "../scripts/build-mechanics-artifacts.mjs";
@@ -1062,4 +1063,26 @@ test("loadAndValidateProjection: manifest byte_length disagreeing with the file 
     () => loadAndValidateProjection({ projectionPath: proj, manifestPath: man, builderSpellIds: new Set([1]) }),
     /byte_length mismatch/,
   );
+});
+
+test("buildMechanicsArtifact: absent projection without flag fails closed (writes nothing)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mech-"));
+  assert.throws(() => buildMechanicsArtifact({
+    entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X" }],
+    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: false,
+  }), /projection/i);
+  assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.jsonl")), false);
+});
+
+test("buildMechanicsArtifact: absent projection + fallback writes degraded, canonical:false", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mech-"));
+  const out = buildMechanicsArtifact({
+    entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
+    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
+  });
+  assert.equal(out.canonical, false);
+  assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
+  const man = JSON.parse(fs.readFileSync(path.join(dir, "coa_mechanics.fallback.manifest.json"), "utf8"));
+  assert.equal(man.canonical, false);
+  assert.equal(man.client_source, "absent");
 });

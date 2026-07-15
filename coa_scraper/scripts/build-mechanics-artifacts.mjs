@@ -2,12 +2,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 
 import { readJsonl, writeJsonl } from "./lib/ascensiondb.mjs";
 import { writeJson } from "./lib/artifacts.mjs";
 import { reconcileField, dbIdentityReference, applyDbIdentityGate, REASON } from "./lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "./lib/mechanics-candidates.mjs";
 import { isPresent } from "./lib/mechanics-normalize.mjs";
+import { loadAndValidateProjection, MechanicsBuildError } from "./lib/mechanics-projection.mjs";
 
 const MECHANICS_SCHEMA_VERSION = "coa-mechanics-v1";
 const ITEM_SCHEMA_VERSION = "coa-item-v1";
@@ -450,6 +452,80 @@ function countBy(rows, keyFn) {
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
+}
+
+function atomicWrite(targetPath, data) {
+  const tmp = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, targetPath);
+}
+
+function jsonlBytes(rows) {
+  return rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
+}
+
+function winnerCounts(rows) {
+  const bySource = {}; const byTier = {};
+  for (const r of rows) {
+    for (const [f, fp] of Object.entries(r.field_provenance || {})) {
+      if (!fp.selected_source) continue;
+      bySource[f] = bySource[f] || {}; byTier[f] = byTier[f] || {};
+      bySource[f][fp.selected_source] = (bySource[f][fp.selected_source] || 0) + 1;
+      byTier[f][fp.selected_tier] = (byTier[f][fp.selected_tier] || 0) + 1;
+    }
+  }
+  return { bySource, byTier };
+}
+
+export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {} }) {
+  const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
+  const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds });
+
+  if (loaded.absent) {
+    if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
+    const rows = buildMechanicsRows({ entries, spellRows, projection: [] });
+    // A degraded build writes ONLY the coa_mechanics.fallback.* files. It NEVER writes the canonical
+    // filename — MechanicsRepository reads the JSONL directly and would ingest degraded bytes as
+    // canonical regardless of a canonical:false marker. There is no override.
+    return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
+  }
+
+  const rows = buildMechanicsRows({ entries, spellRows, projection: loaded.projection });
+  return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
+}
+
+function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthorized, loaded, inputs, base }) {
+  fs.mkdirSync(outDir, { recursive: true }); // outDir may not exist yet (e.g. a fresh temp dir)
+  const jsonlName = `${base}.jsonl`;
+  const manifestName = `${base}.manifest.json`;
+  const jsonlPath = path.join(outDir, jsonlName);
+  const manifestPath = path.join(outDir, manifestName);
+
+  const body = jsonlBytes(rows);
+  const sha = crypto.createHash("sha256").update(body).digest("hex");
+  const { bySource, byTier } = winnerCounts(rows);
+  const manifest = {
+    schema_version: "coa-mechanics-manifest-v1",
+    generated_at: new Date().toISOString(),
+    canonical, client_source: clientSource, fallback_authorized: fallbackAuthorized,
+    reconciliation_policy_version: "m1.14c-1",
+    inputs: {
+      builder_entries: inputs.builder_entries || null,
+      db_spell_tooltips: inputs.db_spell_tooltips || null,
+      projection: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_path || null, sha256: loaded.projection_sha256 },
+      projection_manifest: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_manifest_path || null, sha256: loaded.manifest_sha256 },
+    },
+    outputs: { mechanics_jsonl: jsonlName, sha256: sha, record_count: rows.length },
+    coverage: loaded.absent ? null : loaded.coverage,
+    per_field_winner_counts_by_source: bySource,
+    per_field_winner_counts_by_tier: byTier,
+  };
+
+  // manifest-as-validity-marker: remove previous manifest first, then JSONL, then manifest — each atomic.
+  if (fs.existsSync(manifestPath)) fs.rmSync(manifestPath);
+  atomicWrite(jsonlPath, body);
+  atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  return { canonical, manifest };
 }
 
 function isCliEntryPoint() {
