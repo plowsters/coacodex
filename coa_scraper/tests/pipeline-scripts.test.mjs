@@ -37,6 +37,7 @@ import {
   summarizeMechanicsArtifacts
 } from "../scripts/build-mechanics-artifacts.mjs";
 import { normalizeSchoolMask, normalizePowerType } from "../scripts/lib/mechanics-normalize.mjs";
+import { reconcileField, REASON } from "../scripts/lib/mechanics-reconcile.mjs";
 
 function tempProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "coa-pipeline-test-"));
@@ -731,4 +732,56 @@ test("M1.8 pipeline refreshes manifest after DB enrichment artifacts", () => {
   assert.match(packageJson.scripts["pipeline:m1.8"], /write-artifact-manifest/);
   assert.match(packageJson.scripts["build-mechanics"], /build-mechanics-artifacts/);
   assert.match(packageJson.scripts["pipeline:m1.9"], /build-mechanics/);
+});
+
+test("reconcileField picks first eligible by tier and records all candidates", () => {
+  const cand = (over) => ({
+    source: "x", precedence_tier: "inferred", source_id: "s", source_field: "f",
+    raw_value: null, normalized_value: null, confidence: "low", eligible: true, eligibility_reasons: [],
+    ...over,
+  });
+  // client wins over db even though both eligible
+  const out = reconcileField({
+    field: "cast_time_ms",
+    candidates: [
+      cand({ source: "client_dbc", precedence_tier: "client_dbc", normalized_value: 1500, confidence: "high" }),
+      cand({ source: "ascension_db", precedence_tier: "ascension_db", normalized_value: 2000, confidence: "medium" }),
+    ],
+  });
+  assert.equal(out.selected, 1500);
+  assert.equal(out.provenance.selected_source, "client_dbc");
+  assert.equal(out.provenance.selected_tier, "client_dbc");
+  assert.equal(out.provenance.selection_reason, REASON.HIGHEST_PRECEDENCE_ELIGIBLE);
+  assert.equal(out.provenance.candidates.length, 2);
+  assert.equal(out.hadConflict, false);
+});
+
+test("reconcileField marks ALL same-tier conflicters ineligible and falls through", () => {
+  const b = (id, v) => ({
+    source: "builder", precedence_tier: "inferred", source_id: `builder_node:${id}`, source_field: "damage_schools",
+    raw_value: v, normalized_value: v, confidence: "medium", eligible: true, eligibility_reasons: [],
+  });
+  const out = reconcileField({
+    field: "schools",
+    candidates: [
+      { source: "client_dbc", precedence_tier: "client_dbc", source_id: "client_spell:1", source_field: "school_mask",
+        raw_value: 8, normalized_value: ["nature"], confidence: "high", eligible: true, eligibility_reasons: [] },
+      b(7131, ["nature"]), b(12264, ["shadow"]),
+    ],
+  });
+  assert.deepEqual(out.selected, ["nature"]); // client wins
+  assert.equal(out.hadConflict, true);
+  const builders = out.provenance.candidates.filter((c) => c.source === "builder");
+  assert(builders.every((c) => c.eligible === false));
+  assert(builders.every((c) => c.eligibility_reasons.includes(REASON.SAME_TIER_CONFLICT)));
+});
+
+test("reconcileField omits field when only tier conflicts", () => {
+  const b = (id, v) => ({
+    source: "builder", precedence_tier: "inferred", source_id: `builder_node:${id}`, source_field: "damage_schools",
+    raw_value: v, normalized_value: v, confidence: "medium", eligible: true, eligibility_reasons: [],
+  });
+  const out = reconcileField({ field: "schools", candidates: [b(1, ["nature"]), b(2, ["shadow"])] });
+  assert.equal(out.selected, undefined);
+  assert.equal(out.provenance.selection_reason, REASON.OMITTED_UNRESOLVED_CONFLICT);
 });
