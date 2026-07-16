@@ -119,7 +119,7 @@ Each entry in `candidates[]` records one source's contribution attempt, whether 
 
 ```jsonc
 {
-  "source": "client_dbc" | "builder" | "ascension_db" | "inferred",
+  "source": "client_dbc" | "builder" | "ascension_db",
   "precedence_tier": "client_dbc" | "verified_builder" | "ascension_db" | "inferred",
   "source_id": "client_spell:805775" | "builder_node:1234" | "ascension_db:9001",
   "source_field": "cast_time_ms" | "school_mask" | "entry_type" | "tooltip_text" | ...,
@@ -133,22 +133,37 @@ Each entry in `candidates[]` records one source's contribution attempt, whether 
 }
 ```
 
+A candidate's `source` is always one of `client_dbc`, `builder`, or `ascension_db` — **never**
+`inferred`. `inferred` is a *tier* / *field-level source*, not a candidate source: it appears only as
+a candidate's `precedence_tier` (see below) and as a field-level `selected_source` / `selected_tier`
+(on the `effects` field, whose value is heuristically inferred rather than drawn from any single
+candidate).
+
 `precedence_tier` is one of four ranked tiers, highest first: `client_dbc` → `verified_builder` →
 `ascension_db` → `inferred`. Within a tier, if two or more present candidates disagree, **all**
 candidates in that tier are marked `eligible: false` with reason `same_tier_conflict` and the field
 falls through to the next tier (never a node-order winner). The first eligible candidate in
 precedence order wins.
 
+`source` and `precedence_tier` are **not** independent, and a `builder` candidate does not sit at a
+fixed tier: for the `name` and `kind` fields a builder candidate is `verified_builder`, but for the
+five reconciled *mechanical* fields (`schools`, `power_type`, `cast_time_ms`, `duration_ms`,
+`range_yards`) a builder candidate is `inferred` (builder-derived mechanics are inferred data, ranked
+below `ascension_db`). This is why `per_field_winner_counts_by_tier` (in the manifest) will show
+`verified_builder` wins for `name`/`kind` but **never** for `schools`/`power_type`/etc. — a builder
+win on a mechanical field is counted under `inferred`, not `verified_builder`.
+
 The `contributed` flag exists only on the `kind` and `effects` entries in `field_provenance`. Both
 `kind` (ability/passive/debuff/cooldown/pet_action classification) and `effects` (heuristically
 inferred from tag/tooltip text) are **not** reconciled through the tiered precedence engine above —
 they are derived from every builder node plus the record's tooltip text. `contributed: true` marks
-the candidate that actually shaped the emitted `kind`/effect count; for the tooltip candidate this is
-`true` only when the tooltip came from `ascension_db` (i.e. the DB's participation is surfaced even
-though it wasn't "selected" via the precedence engine). This is also how the record-level
-`provenance` array (below) can list `ascension_db` even when no top-level field's
-`selected_source` is `ascension_db` — a DB-sourced tooltip that only informed `kind`/`effects` still
-counts as DB participation.
+each candidate whose value was actually incorporated into the emitted result — so for `kind`, **every**
+builder-node candidate is `contributed` (the classification is derived from all nodes), and the
+tooltip candidate is `contributed` only when it is db-sourced; for `effects`, the db tooltip candidate
+is `contributed` only when db-sourced. Marking the db tooltip this way is how the record-level
+`provenance` array (below) can list `ascension_db` even when no top-level field's `selected_source`
+is `ascension_db` — a DB-sourced tooltip that only informed `kind`/`effects` still counts as DB
+participation.
 
 ## Record-Level `confidence`
 

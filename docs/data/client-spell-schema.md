@@ -168,6 +168,9 @@ on any of:
   `cast_time_ms` → `Spell`+`SpellCastTimes`; `duration_ms` → `Spell`+`SpellDuration`; `range_max_yd` →
   `Spell`+`SpellRange`; `school_mask`/`power_type` → `Spell` only. An **absent** field with a drifted
   side table does *not* fail the build (there's nothing populated to trust).
+- A **torn projection pair**: exactly one of the projection JSONL and its manifest exists (JSONL
+  present without its manifest, or manifest without its JSONL). Both must be present together, or
+  both absent (only the fully-absent case is eligible to degrade). A half-written pair throws.
 - Malformed types (non-string `name`, non-number/null numeric fields, non-integer/null int fields,
   a negative `school_mask`), a missing/malformed `schema_match_confidence_by_dbc` block, sha256 or
   byte-length mismatch against the projection manifest, a duplicate or non-`is_coa` row, or a
