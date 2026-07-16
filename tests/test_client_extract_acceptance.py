@@ -174,6 +174,11 @@ def test_805775_client_wins_and_db_gate_matches_observed(client_mechanics_dir):
     row = next((json.loads(l) for l in mech.read_text().splitlines()
                 if l.strip() and json.loads(l).get("spell_id") == 805775), None)
     assert row is not None, "805775 must be in the Builder-domain mechanics output"
+    man = json.loads((client_mechanics_dir / "coa_mechanics.manifest.json").read_text())
+    assert man["schema_version"] == "coa-mechanics-manifest-v1"
+    assert set(man["counts"]) == {"unresolved_conflicts", "ineligible_candidates", "omitted_fields", "kind_disagreements"}
+    assert all(isinstance(v, int) for v in man["counts"].values())
+    assert "reconciler_commit" in man and "client_build" in man
     assert row["name"] == "Adrenal Venom"                      # client name wins
     fp = row["field_provenance"]
     assert any(fp.get(f, {}).get("selected_source") == "client_dbc"

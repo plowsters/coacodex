@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import { execSync } from "node:child_process";
 
 import { readJsonl } from "./lib/ascensiondb.mjs";
 import { reconcileField, dbIdentityReference, applyDbIdentityGate, REASON } from "./lib/mechanics-reconcile.mjs";
@@ -394,6 +395,30 @@ function winnerCounts(rows) {
   return { bySource, byTier };
 }
 
+function aggregateCounts(rows) {
+  let unresolved_conflicts = 0, ineligible_candidates = 0, omitted_fields = 0, kind_disagreements = 0;
+  for (const r of rows) {
+    const fp = r.field_provenance || {};
+    for (const p of Object.values(fp)) {
+      if (Array.isArray(p.candidates)) {
+        for (const c of p.candidates) if (c.eligible === false) ineligible_candidates++;
+        if (!p.selected_source && p.candidates.length > 0) omitted_fields++;
+      }
+      if (p.selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT) unresolved_conflicts++;
+    }
+    if (fp.kind && fp.kind.selection_reason === REASON.KIND_NODE_DISAGREEMENT_RESOLVED) kind_disagreements++;
+  }
+  return { unresolved_conflicts, ineligible_candidates, omitted_fields, kind_disagreements };
+}
+
+function gitHeadCommit() {
+  try {
+    return execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {} }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
   const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds });
@@ -426,6 +451,8 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
     generated_at: new Date().toISOString(),
     canonical, client_source: clientSource, fallback_authorized: fallbackAuthorized,
     reconciliation_policy_version: "m1.14c-1",
+    reconciler_commit: canonical ? (inputs.reconciler_commit ?? null) : null,
+    client_build: loaded.absent ? null : (loaded.client_build ?? null),
     inputs: {
       builder_entries: inputs.builder_entries || null,
       db_spell_tooltips: inputs.db_spell_tooltips || null,
@@ -436,6 +463,7 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
     coverage: loaded.absent ? null : loaded.coverage,
     per_field_winner_counts_by_source: bySource,
     per_field_winner_counts_by_tier: byTier,
+    counts: aggregateCounts(rows),
   };
 
   // manifest-as-validity-marker: remove previous manifest first, then JSONL, then manifest — each atomic.
@@ -474,6 +502,7 @@ if (isCliEntryPoint()) {
         builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
         db_spell_tooltips: fs.existsSync(dbPath) ? { path: dbPath, sha256: sha256File(dbPath) } : null,
         projection_path: projectionPath, projection_manifest_path: projManifestPath,
+        reconciler_commit: gitHeadCommit(),
       },
     });
     console.log(JSON.stringify({ canonical, record_count: manifest.outputs.record_count, coverage: manifest.coverage }, null, 2));

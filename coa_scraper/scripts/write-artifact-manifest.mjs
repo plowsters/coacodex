@@ -49,7 +49,6 @@ const artifactPaths = [
   "reports/coa_item_enrichment_summary.json",
   "reports/coa_ascensiondb_cache_manifest.json",
   "reports/coa_ascensiondb_cache_summary.json",
-  "reports/coa_mechanics_enrichment_summary.json",
   "dist/coa_entries.jsonl",
   "dist/coa_entries.pretty.json",
   "dist/coa_classes.json",

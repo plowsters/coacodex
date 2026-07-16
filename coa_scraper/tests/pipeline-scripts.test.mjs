@@ -918,6 +918,7 @@ function writeProjectionFixture(dir, records) {
     schema_version: "coa-client-spell-projection-v1",
     projection: { path: "p.jsonl", sha256: sha, byte_length: Buffer.byteLength(body) },
     counts: { projected_records: records.length, unique_spell_ids: uniq, source_records: records.length },
+    client_build: "test-client-build",
   }));
   return { proj, man };
 }
@@ -1086,6 +1087,9 @@ test("buildMechanicsArtifact: absent projection + fallback writes degraded, cano
   const man = JSON.parse(fs.readFileSync(path.join(dir, "coa_mechanics.fallback.manifest.json"), "utf8"));
   assert.equal(man.canonical, false);
   assert.equal(man.client_source, "absent");
+  assert.equal(man.reconciler_commit, null);
+  assert.equal(man.client_build, null);
+  assert.equal(typeof man.counts.omitted_fields, "number");
 });
 
 test("acceptance: manifest binds the EXACT generated projection sha; canonical true", () => {
@@ -1095,11 +1099,17 @@ test("acceptance: manifest binds the EXACT generated projection sha; canonical t
   const out = buildMechanicsArtifact({
     entries: [{ spell_id: 42, entry_id: 1, entry_type: "Ability", name: "S42", damage_schools: [], resources: [] }],
     spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
-    inputs: { projection_path: proj, projection_manifest_path: man },
+    inputs: { projection_path: proj, projection_manifest_path: man, reconciler_commit: "deadbeef" },
   });
   assert.equal(out.canonical, true);
   assert.equal(out.manifest.inputs.projection.sha256, projSha);
   assert.equal(out.manifest.coverage.builder_missing_from_projection, 0);
+  assert.equal(out.manifest.reconciler_commit, "deadbeef");
+  assert.equal(out.manifest.client_build, "test-client-build");
+  const c = out.manifest.counts;
+  for (const k of ["unresolved_conflicts", "ineligible_candidates", "omitted_fields", "kind_disagreements"]) {
+    assert.equal(typeof c[k], "number", `counts.${k} must be an integer`);
+  }
 });
 
 test("acceptance: fallback does NOT modify a pre-existing canonical artifact", () => {
@@ -1124,7 +1134,7 @@ test("acceptance: identity-mismatched db supplies zero fields AND zero db-derive
   rec.mechanics.range_min_yd = null;
   rec.mechanics.range_max_yd = null;
   const { proj, man } = writeProjectionFixture(dir, [rec]);
-  buildMechanicsArtifact({
+  const out = buildMechanicsArtifact({
     entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
     spellRows: [{ id: 7, name: "Totally Different", name_match: false, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
     projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
@@ -1135,4 +1145,33 @@ test("acceptance: identity-mismatched db supplies zero fields AND zero db-derive
   assert.equal(row.raw.db_excluded, true);
   assert(!row.provenance.some((p) => p.source === "ascension_db")); // no db provenance leaked
   assert.equal(row.effects.length, 0); // the excluded db "summon a pet" tooltip yields NO effect
+  // Non-vacuous counts check: isolate the db-identity-gate's contribution with a CONTROL build that is
+  // byte-for-byte identical except the db name MATCHES identity (gate does NOT trigger), so cooldown_ms
+  // and gcd_ms resolve to ascension_db instead of being barred+omitted. The fixture's null client fields
+  // (school_mask:0, null duration/range) are identical in both runs and cancel in the delta — so a
+  // regression that silently disabled applyDbIdentityGate would break this exact-2 delta.
+  const ctrlDir = fs.mkdtempSync(path.join(os.tmpdir(), "acc3ctrl-"));
+  const ctrl = buildMechanicsArtifact({
+    entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
+    spellRows: [{ id: 7, name: "S7", name_match: true, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
+    projectionPath: proj, manifestPath: man, outDir: ctrlDir, allowFallback: false,
+  });
+  assert.equal(out.manifest.counts.ineligible_candidates - ctrl.manifest.counts.ineligible_candidates, 2); // exactly the 2 barred db candidates
+  assert.equal(out.manifest.counts.omitted_fields - ctrl.manifest.counts.omitted_fields, 2);               // exactly cooldown_ms + gcd_ms
+});
+
+test("acceptance: kind_disagreements counts a real Builder kind disagreement (Ability vs Talent, no tooltip)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc4-"));
+  const { proj, man } = writeProjectionFixture(dir, [validProjRec(100)]);
+  // No db row and no builder description_text → tooltipText is "". "Ability" classifies as "ability";
+  // "Talent" with no cast/deals/heals tooltip match classifies as "passive" (classifyMechanicKind's
+  // first branch) → the two nodes disagree on kind and resolveKind records
+  // REASON.KIND_NODE_DISAGREEMENT_RESOLVED for the row's kind field.
+  const entryA = { spell_id: 100, entry_id: 1, entry_type: "Ability", name: "S100", damage_schools: [], resources: [] };
+  const entryB = { spell_id: 100, entry_id: 2, entry_type: "Talent", name: "S100", damage_schools: [], resources: [] };
+  const out = buildMechanicsArtifact({
+    entries: [entryA, entryB],
+    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+  });
+  assert.equal(out.manifest.counts.kind_disagreements, 1);
 });

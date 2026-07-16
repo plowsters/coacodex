@@ -116,5 +116,6 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
   return {
     absent: false, projection, coverage, projection_sha256: sha,
     manifest_sha256: crypto.createHash("sha256").update(manifestBytes).digest("hex"),
+    client_build: manifest.client_build ?? null,
   };
 }

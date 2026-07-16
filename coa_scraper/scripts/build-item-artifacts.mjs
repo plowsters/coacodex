@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { readJsonl, writeJsonl } from "./lib/ascensiondb.mjs";
-import { sourceUrls, numberOrNull } from "./build-mechanics-artifacts.mjs";
+import { sourceUrls } from "./build-mechanics-artifacts.mjs";
 
 const ITEM_SCHEMA_VERSION = "coa-item-v1";
 

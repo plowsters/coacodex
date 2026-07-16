@@ -193,6 +193,8 @@ so a crash never leaves a stale manifest next to a new JSONL.
   "client_source": "present" | "absent",
   "fallback_authorized": true | false, // true only on a degraded (--allow-fallback-mechanics) build
   "reconciliation_policy_version": "m1.14c-1",
+  "reconciler_commit": "<git HEAD of the reconciler build; null on a fallback build>",
+  "client_build": "<from the projection manifest; null on a fallback build>",
   "inputs": {
     "builder_entries": { "path": "...", "sha256": "..." } | null,
     "db_spell_tooltips": { "path": "...", "sha256": "..." } | null,
@@ -206,7 +208,8 @@ so a crash never leaves a stale manifest next to a new JSONL.
     "projection_only": 34
   },
   "per_field_winner_counts_by_source": { "cast_time_ms": { "client_dbc": 900, "ascension_db": 50 }, ... },
-  "per_field_winner_counts_by_tier": { "cast_time_ms": { "client_dbc": 900, "ascension_db": 50 }, ... }
+  "per_field_winner_counts_by_tier": { "cast_time_ms": { "client_dbc": 900, "ascension_db": 50 }, ... },
+  "counts": { "unresolved_conflicts": 0, "ineligible_candidates": 0, "omitted_fields": 0, "kind_disagreements": 0 }
 }
 ```
 
@@ -228,6 +231,32 @@ build to succeed at all (`loadAndValidateProjection` fails the build closed othe
 client spells with no Builder node. `per_field_winner_counts_by_source` / `_by_tier` are per-field
 histograms of which `selected_source` / `selected_tier` won across all rows — a quick audit of how
 much of the artifact is client-backed vs DB-fallback vs inferred.
+
+`reconciler_commit` is the git HEAD of the reconciler build (the CLI populates it best-effort from
+`git rev-parse HEAD`, `null` if that fails) and `client_build` is sourced from the validated
+projection manifest's `client_build`. Both are `null` on a fallback (degraded) build — a fallback has
+no real projection to bind to, and `canonical: false` disables `reconciler_commit` regardless of
+whether a commit could be resolved.
+
+`counts` is an aggregate audit block computed in a single pass over the emitted rows'
+`field_provenance` (on BOTH canonical and fallback builds — fallback rows carry real
+`field_provenance`, so the counts are honest there too). Zero-valued keys are always present (never
+omitted). The four counts:
+- **`ineligible_candidates`** — total number of candidate objects, across every row and every
+  `field_provenance` entry, with `eligible === false`. Captures every candidate the reconciler barred:
+  same-tier conflicts, db identity mismatch, client-table drift, etc.
+- **`omitted_fields`** — number of (row, field) provenance entries where `selected_source` is falsy
+  **AND** `candidates.length > 0`: a field for which candidate data existed but none survived
+  eligibility (e.g. an identity-barred db-only field, or a same-tier-conflict omission). The
+  `candidates.length > 0` guard deliberately excludes fields that simply never had a candidate (e.g.
+  `effects` on a spell with nothing to infer) — those are not "omissions" in the audit sense.
+- **`unresolved_conflicts`** — number of (row, field) provenance entries whose
+  `selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT`. This is the subset of `omitted_fields`
+  caused specifically by an unresolved same-tier conflict (`unresolved_conflicts` ⊆ `omitted_fields`);
+  it may legitimately be `0` in the common case.
+- **`kind_disagreements`** — number of rows whose `field_provenance.kind.selection_reason ===
+  REASON.KIND_NODE_DISAGREEMENT_RESOLVED` (the `kind` field's Builder nodes disagreed and were
+  resolved by behavior-order).
 
 ## Consumer Rules
 
