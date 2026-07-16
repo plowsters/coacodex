@@ -1087,3 +1087,52 @@ test("buildMechanicsArtifact: absent projection + fallback writes degraded, cano
   assert.equal(man.canonical, false);
   assert.equal(man.client_source, "absent");
 });
+
+test("acceptance: manifest binds the EXACT generated projection sha; canonical true", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc-"));
+  const { proj, man } = writeProjectionFixture(dir, [validProjRec(42)]);
+  const projSha = crypto.createHash("sha256").update(fs.readFileSync(proj)).digest("hex");
+  const out = buildMechanicsArtifact({
+    entries: [{ spell_id: 42, entry_id: 1, entry_type: "Ability", name: "S42", damage_schools: [], resources: [] }],
+    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+    inputs: { projection_path: proj, projection_manifest_path: man },
+  });
+  assert.equal(out.canonical, true);
+  assert.equal(out.manifest.inputs.projection.sha256, projSha);
+  assert.equal(out.manifest.coverage.builder_missing_from_projection, 0);
+});
+
+test("acceptance: fallback does NOT modify a pre-existing canonical artifact", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc2-"));
+  const canonical = path.join(dir, "coa_mechanics.jsonl");
+  fs.writeFileSync(canonical, "SENTINEL-CANONICAL\n");
+  buildMechanicsArtifact({
+    entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
+    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
+  });
+  assert.equal(fs.readFileSync(canonical, "utf8"), "SENTINEL-CANONICAL\n"); // untouched
+  assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
+});
+
+test("acceptance: identity-mismatched db supplies zero fields AND zero db-derived effects end-to-end", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc3-"));
+  // No client school and no builder tooltip → the ONLY thing that could produce an effect is the
+  // db's "summon a pet" tooltip. Since the db row fails identity, it must be excluded → zero effects.
+  const rec = validProjRec(7);
+  rec.mechanics.school_mask = 0;
+  rec.mechanics.duration_ms = null;
+  rec.mechanics.range_min_yd = null;
+  rec.mechanics.range_max_yd = null;
+  const { proj, man } = writeProjectionFixture(dir, [rec]);
+  buildMechanicsArtifact({
+    entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
+    spellRows: [{ id: 7, name: "Totally Different", name_match: false, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
+    projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+  });
+  const row = JSON.parse(fs.readFileSync(path.join(dir, "coa_mechanics.jsonl"), "utf8").trim());
+  assert.equal(row.cooldown_ms ?? null, null);
+  assert.equal(row.gcd_ms ?? null, null);
+  assert.equal(row.raw.db_excluded, true);
+  assert(!row.provenance.some((p) => p.source === "ascension_db")); // no db provenance leaked
+  assert.equal(row.effects.length, 0); // the excluded db "summon a pet" tooltip yields NO effect
+});

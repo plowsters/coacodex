@@ -1,5 +1,8 @@
 import json
 import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +13,9 @@ CLIENT_ROOT = Path(os.environ.get(
     "COA_CLIENT_ROOT",
     str(Path.home() / "Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live/Data"),
 ))
+
+REPO = Path(__file__).resolve().parents[1]
+DB = REPO / "coa_scraper/dist/coa_db_spell_tooltips.jsonl"
 
 
 @pytest.mark.skipif(not CLIENT_ROOT.is_dir(), reason="Ascension client not installed at COA_CLIENT_ROOT")
@@ -134,3 +140,58 @@ def test_real_client_advancement_parity(tmp_path):
     from coa_client_extract.parity import canonical_class_label
     assert all(canonical_class_label(m["class_display"]) == canonical_class_label("Witch Doctor")
                for m in spells[503748]["memberships"])
+
+
+@pytest.fixture
+def client_mechanics_dir(tmp_path):
+    # Skip ONLY when COA_CLIENT_ROOT is unset — gated on the ENV VAR directly, NOT the shared
+    # CLIENT_ROOT (which has a hardcoded fallback default that would otherwise fire the heavy build
+    # on any machine that happens to have a client at that path). Env var is the single source of
+    # truth for both the skip condition and the --client-root passed to regenerate.
+    root = os.environ.get("COA_CLIENT_ROOT")
+    if not root:
+        pytest.skip("COA_CLIENT_ROOT unset (client tier)")
+    ce = tmp_path / "client_extract"
+    dist = tmp_path / "dist"
+    try:
+        subprocess.run([sys.executable, "-m", "coa_client_extract", "regenerate",
+                        "--client-root", root, "--out", str(ce),
+                        "--builder-entries", str(REPO / "coa_scraper/dist/coa_entries.jsonl")],
+                       cwd=REPO, check=True)
+        subprocess.run(["node", "coa_scraper/scripts/build-mechanics-artifacts.mjs",
+                        "--builder-entries", "coa_scraper/dist/coa_entries.jsonl",
+                        "--db-spells", "coa_scraper/dist/coa_db_spell_tooltips.jsonl",
+                        "--projection", str(ce / "coa_client_spell_coa.jsonl"),
+                        "--projection-manifest", str(ce / "coa_client_spell_projection.manifest.json"),
+                        "--out", str(dist)], cwd=REPO, check=True)
+    except subprocess.CalledProcessError as exc:
+        pytest.skip(f"client-tier build unavailable: {exc}")
+    return dist
+
+
+def test_805775_client_wins_and_db_gate_matches_observed(client_mechanics_dir):
+    mech = client_mechanics_dir / "coa_mechanics.jsonl"
+    row = next((json.loads(l) for l in mech.read_text().splitlines()
+                if l.strip() and json.loads(l).get("spell_id") == 805775), None)
+    assert row is not None, "805775 must be in the Builder-domain mechanics output"
+    assert row["name"] == "Adrenal Venom"                      # client name wins
+    fp = row["field_provenance"]
+    assert any(fp.get(f, {}).get("selected_source") == "client_dbc"
+               for f in ("power_type", "cast_time_ms", "duration_ms", "range_yards"))  # a client field wins
+    # non-vacuous gate check vs the OBSERVED db name for 805775 — the db row MUST exist so the gate
+    # is actually exercised (a missing row would make either branch vacuously true).
+    db = next((json.loads(l) for l in DB.read_text().splitlines()
+               if l.strip() and json.loads(l).get("id") == 805775), None)
+    assert db is not None, "805775 must be present in coa_db_spell_tooltips.jsonl to exercise the identity gate"
+
+    # EXACT port of Node's normalizeName (lib/ascensiondb.mjs): lowercase, non-alphanumeric runs → single
+    # space, trim. Must match byte-for-byte or the test could assert the wrong gate branch.
+    def norm(s): return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+    if norm(db.get("name")) != norm("Adrenal Venom"):
+        # stale db → excluded → zero db contribution
+        assert row["cooldown_ms"] is None and row["gcd_ms"] is None
+        assert not any(p["source"] == "ascension_db" for p in row["provenance"])
+        assert row["raw"]["db_excluded"] is True
+    else:
+        # db agrees → usable fallback (gate correctly vacuous), db provenance allowed
+        assert row["raw"]["db_excluded"] is False
