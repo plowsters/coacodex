@@ -334,7 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     wc.add_argument("--out", required=True, type=Path)
     wc.add_argument("--stormlib", default=None)
     wc.add_argument("--recon-only", action="store_true")
-    wc.add_argument("--adjudication", default=None)
+    wc.add_argument("--adjudication",
+                    default="reports/client_extract/wow_class_axis_adjudication.json")
     args = parser.parse_args(argv)
 
     if args.command == "regenerate":
@@ -368,7 +369,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def wow_constants_command(client_root: Path, out_dir: Path, *, backend: ArchiveBackend | None = None,
                           stormlib_path: str | None = None, recon_only: bool = False,
-                          adjudication_path: str | None = None) -> dict:
+                          adjudication_path: str | None =
+                          "reports/client_extract/wow_class_axis_adjudication.json") -> dict:
     if backend is None:
         from .stormlib_backend import StormLibBackend
         backend = StormLibBackend(stormlib_path=stormlib_path)  # may raise BackendUnavailable
