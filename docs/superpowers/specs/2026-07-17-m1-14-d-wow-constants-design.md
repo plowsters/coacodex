@@ -9,10 +9,10 @@
 >
 > Revised 2026-07-17 after two independent design-review passes. The revisions that shaped this spec:
 > the GameTable **class axis is the stock `ChrClasses` namespace, not the CoA class-type namespace**, so
-> class-indexed use by CoA classes is an explicit, bridge-gated M1.16 viability gate; **record count does
+> class-indexed use by CoA classes is an explicit, class-context-gated M1.16 viability gate; **record count does
 > not prove axis meaning** (a pinned reference indexing contract validated against explicit keys,
 > coverage, holes, and anchors does); **GCD is per-spell, not caster/physical** (D publishes only the
-> floor/ceiling reference constants, the base value is an M1.14E operand); `gtOCTRegenMP` and the base
+> floor + standard-base reference constants, the per-spell base value is an M1.14E operand); `gtOCTRegenMP` and the base
 > HP/MP tables are **recon-gated candidates**, not required halves; real-client extraction **must not
 > fail merely because Ascension differs from stock** (that is a recorded deviation, not corruption); and
 > every authored input (rules, enum maps, axis policy) is **manifest-bound**.
@@ -38,7 +38,7 @@ number it produces.
 - **No per-spell mechanical operands (M1.14E).** Base GCD (`StartRecoveryTime`/`StartRecoveryCategory`),
   `damage_class`, the GCD-relevant attribute bits, cooldowns, costs, coefficients, and charges are
   per-spell fields that belong to M1.14E's `SpellEffect`/`SpellCooldowns`/`SpellRuneCost` extraction, not
-  to the GameTable/constants layer. D publishes only the GCD **floor/ceiling reference constants**.
+  to the GameTable/constants layer. D publishes only the GCD **floor + standard-base reference constants**.
 - **No CoA→stock class bridge resolution.** D extracts every class-indexed table in its native stock
   `ChrClasses` namespace and *flags* whether a client-native CoA→stock bridge exists; it does not build
   one. Resolving the bridge is an explicit M1.16 entry condition (see [Class-axis viability gate](#the-class-axis-viability-gate-load-bearing)).
@@ -53,37 +53,53 @@ number it produces.
 ## The class-axis viability gate (load-bearing)
 
 The single most consequential fact about the GameTables: their **class axis is the stock WoW
-`ChrClasses` namespace** — class IDs `1–9` and `11`, with an **unused hole at 10** — because the stock
-3.3.5a formulas index `gtOCTClassCombatRatingScalar`, the crit tables, and the base-pool tables by
-`ChrClasses.ClassID`. That is a **different domain** from every CoA identifier in this repo:
+`ChrClasses` namespace**, which the stock 3.3.5a formulas index by `ChrClasses.ClassID` for
+`gtOCTClassCombatRatingScalar`, the crit tables, and the base-pool tables. The **reference-expected**
+stock roster is IDs `1–9` and `11`, with an **unused hole at `10`** — but that is the *expectation to
+verify*, not an assumption a client-authoritative extractor may bake in: recon records the **observed
+client** roster, and a valid Ascension extension is recorded and adjudicated, never treated as
+corruption. Either way, the class axis is a **different domain** from every CoA identifier in this repo:
 
 | Namespace | Domain | Source |
 |---|---|---|
-| Stock `ChrClasses.ClassID` (`wow_class_id`) | `1–9`, `11` (hole at `10`) | GameTable class axis |
+| Stock `ChrClasses.ClassID` (`wow_class_id`) | reference-expected `1–9`, `11` (hole `10`); observed set from recon | GameTable class axis |
 | CoA `CharacterAdvancementClassTypes.class_type_id` | `14–34` (21 playable) + `35` sentinel | `class_types.py` (M1.14B) |
 | Builder `class_id` | CoA class-type namespace (not stock) | `coa_classes.json` |
 
-Consequences, which this milestone treats as first-class rather than a lookup detail:
+D takes a deliberately narrow, implementable stance: **it never translates a CoA identifier into a
+`wow_class_id`, and it never guesses an integer's namespace.**
 
-- **Coordinates in class-indexed tables are named `wow_class_id` (a.k.a. `chr_class_id`), never a
-  generic `class_id`.** The artifact records a `class_axis` block: `namespace: "chr_classes"`, the
-  observed IDs, the holes/padding (the `10` gap and any storage padding to `GT_MAX_CLASS`), and a
-  `bridge_to_coa` status.
-- **The CoA→stock bridge is not inferred from power type.** Two CoA classes can share a power type yet
-  scale like different stock classes; a shared `power_type` is not a bridge. If a client-native bridge
-  is discoverable, recon reports *where* (candidate source) and its confidence; it is not resolved here.
-- **Canonical extraction still succeeds without a proven bridge.** The class-indexed tables are emitted
-  in their true `wow_class_id` namespace. But the manifest carries **`m1_16_class_indexed_ready`**
-  (false unless a bridge is proven), and the reader **fails closed** on any class-indexed lookup issued
-  for a CoA class while that flag is false.
-- **Level-only lookups are bridge-free.** `gtCombatRatings` (the per-level rating divisor) is indexed by
-  `(rating_id, level)` alone, so it is usable immediately. Rating→% for a *specific class* additionally
-  needs `gtOCTClassCombatRatingScalar[wow_class_id, rating_id]` and is therefore **bridge-gated** for CoA
-  classes, exactly like crit/regen/base-pool.
+- **The reader exposes only native, explicitly-named methods** — e.g.
+  `class_combat_rating_scalar(*, wow_class_id, rating_id)` — whose class argument is a `wow_class_id` in
+  the GameTable's own namespace. It accepts no CoA class-type id and performs no mapping. A caller that
+  holds only a CoA class-type must resolve a `wow_class_id` first (below).
+- **Class context is M1.16's to resolve, and D publishes *evidence*, not a Boolean.** A Boolean cannot
+  translate class-type `14–34` into a `wow_class_id`, and a global 1:1 CoA-class bridge may be the wrong
+  abstraction. The manifest instead carries
+  `class_context_resolution ∈ {unproven, actor_wow_class_id, versioned_bridge}`:
+  - `unproven` — the M1.14D default; no client-native CoA→`wow_class_id` mapping was proven.
+  - `actor_wow_class_id` — the likely-correct abstraction: the modeled character/profile carries its own
+    `wow_class_id`, so class context comes from the **actor**, not from the CoA class definition. (Two
+    CoA classes can share a power type yet scale like different stock classes, so `power_type` is
+    **never** a bridge.)
+  - `versioned_bridge` — a complete published mapping. If D or a later milestone ever publishes one, it
+    must publish the **entire** payload — every CoA class-type → `wow_class_id` entry, provenance,
+    per-entry confidence, a cardinality policy (1:1 / many:1 / partial), and a hash — not a Boolean.
+  M1.16 performs the **composite readiness check** for a class-indexed calculation using either an
+  explicit actor `wow_class_id` or a separately versioned resolver. Recon reports whether any
+  client-native bridge candidate is even discoverable (and where), but resolves none.
+- **Canonical extraction succeeds regardless.** The class-indexed tables are emitted in their true
+  `wow_class_id` namespace with `class_context_resolution: unproven`; nothing downstream may apply them
+  to a CoA class without an actor `wow_class_id` or a versioned bridge. This prevents both false-positive
+  readiness and silently applying one class's coefficients to another.
+- **Level-only lookups are context-free.** `gtCombatRatings` (the per-level rating divisor) is indexed
+  by `(rating_id, level)` alone, so it is usable immediately. Rating→% for a *specific* class
+  additionally needs `gtOCTClassCombatRatingScalar[wow_class_id, rating_id]` and so requires a resolved
+  class context, exactly like crit/regen/base-pool.
 
-So M1.14D's dependency on M1.14B restated precisely: **extraction-independent of B; application of
-class-indexed tables to CoA classes is bridge-gated.** Proving the bridge is an M1.16 entry condition,
-recorded here so it cannot be lost in decomposition.
+Restated precisely: **extraction-independent of B; application of class-indexed tables to a CoA class
+requires class-context resolution, which is M1.16's composite check.** Recording the class-context
+*evidence* (not a Boolean) is the M1.16 entry condition, kept here so it cannot be lost in decomposition.
 
 ## Reconnaissance before canonical (proof, not assumption)
 
@@ -109,6 +125,11 @@ agreement, complete coordinate coverage, holes/padding policy, and independent s
 Canonical emission parses **strict** and fails closed on structural mismatch or unmapped IDs; recon is
 diagnostic and warns.
 
+The implementation plan's **first task is a real-client `--recon-only` adjudication checkpoint**: freeze
+the physical form, the observed class-ID roster, per-table availability, and the `class_context_resolution`
+evidence *before* any canonical-extraction task is written, so the frozen layouts, enum maps, anchors,
+and their hashes rest on observed client facts, not stock assumptions.
+
 ## Reference indexing contract
 
 The pinned stock-3.3.5a indexing the recon validates against (from the reference server
@@ -121,12 +142,15 @@ implementations; treated as the *contract to verify*, not a runtime assumption):
   `(wow_class_id - 1) * GT_MAX_RATING + rating_id + 1` — note the **`+1` offset** and the `wow_class_id-1`
   base. `GT_MAX_RATING = 32` is the **storage stride**; only rating IDs `0–24` (the `CombatRating` enum)
   are **supported**. The artifact records `rating_storage_stride: 32` and the supported-ID set
-  separately, and preserves unused storage slots rather than compacting them.
+  separately, and preserves the **existence and coordinates** of unused storage slots (via the recorded
+  strides and counts) rather than compacting the domain — it does not emit their values.
 - The rating→% **reference formula is identified, not computed**: `multiplier =
   class_scalar->ratio / combat_rating->ratio`. The reader returns both operands; M1.16 divides.
 
-Storage stride, supported domain, and physical record count are three distinct facts and are recorded as
-such. Class axis width is **never** derived from `len(ChrClasses)` (sparse: `1–9`, `11`).
+Storage stride, supported domain, and record count are distinct facts, recorded as such: each table's
+`counts` block distinguishes `source_records` (from the header), `emitted_entries` (the supported
+coordinates actually emitted), and `padding_records` (unused storage slots not emitted). Class axis
+width is **never** derived from `len(ChrClasses)` (sparse: `1–9`, `11`).
 
 ## GameTable layout and the reader
 
@@ -151,7 +175,7 @@ Two structural additions to the M1.14A extraction core, kept narrow:
 
 - `gtCombatRatings` — per-level rating divisor. Bridge-free.
 - `gtOCTClassCombatRatingScalar` — the class half of rating→% (`GetRatingMultiplier`). Class-indexed →
-  bridge-gated for CoA classes.
+  class-context-gated for CoA classes.
 - `gtChanceToMeleeCrit` + `gtChanceToMeleeCritBase` — agility→melee-crit per class/level and base.
 - `gtChanceToSpellCrit` + `gtChanceToSpellCritBase` — intellect→spell-crit per class/level and base.
 - `gtRegenMPPerSpt` — the stock mana-regen operand (combined with Spirit and √Intellect **by M1.16**).
@@ -165,7 +189,7 @@ exit criteria until recon proves the table exists under that name and establishe
   and does not gate exit. Its Ascension role is a recon/M1.16 finding.
 - `gtOCTBaseHPByClass` / `gtOCTBaseMPByClass` — base pools. Real base HP/MP in 3.3.5a is largely
   server-side (`PlayerClassLevelStats`); recon must confirm the client tables exist under those names and
-  carry usable values before exit criteria require them. Class-indexed → bridge-gated.
+  carry usable values before exit criteria require them. Class-indexed → class-context-gated.
 
 **Deferred** (documented M1.16 entry condition, reader stays generic): the HP-regen pair
 `gtRegenHPPerSpt` + `gtOCTRegenHP`, gated on passive/base health regen or between-pull recovery becoming
@@ -203,24 +227,34 @@ One JSON snapshot, `coa_wow_constants.json`, coherent to a single client capture
                           "drift": false}
     }
   },
-  "class_axis": {"namespace": "chr_classes", "observed_ids": [1,2,3,4,5,6,7,8,9,11],
-                 "holes": [10], "max_class_id": 11, "bridge_to_coa": "unproven"},
-  "enum_maps": {"rating_enum": {"version": "cr-3.3.5a-v1", "supported": {"0": "weapon_skill", "...": "..."},
+  "class_axis": {"namespace": "chr_classes",
+                 "reference_expected_ids": [1,2,3,4,5,6,7,8,9,11], "reference_holes": [10],
+                 "observed_client_ids": [1,2,3,4,5,6,7,8,9,11],
+                 "comparison": "exact"},
+  "enum_maps": {"rating_enum": {"version": "cr-3.3.5a-v1",
+                                "supported": {"0": "weapon_skill", "6": "spell_crit", "24": "armor_penetration"},
                                 "storage_stride": 32},
-                "power_type": {"version": "m1.14c-power-v1", "map": {"0": "mana", "...": "..."}}},
+                "power_type": {"version": "m1.14c-power-v1", "map": {"0": "mana", "1": "rage", "...": "..."}}},
   "game_tables": {
     "combat_ratings": {
       "source_dbc": "gtCombatRatings", "physical_form": "implicit_row",
       "axes": ["rating_id", "level"], "index_base": 0,
-      "domains": {"rating_id": {"supported": [0, 24], "storage_stride": 32},
-                  "level": {"supported": [1, 100], "storage_stride": 100}},
-      "class_indexed": false, "drift": false, "reference_match": "matches_reference",
+      "domains": {"rating_id": {"supported": {"min": 0, "max": 24}, "storage_stride": 32},
+                  "level": {"supported": {"min": 1, "max": 100}, "storage_stride": 100}},
+      "counts": {"source_records": 3200, "emitted_entries": 2500, "padding_records": 700},
+      "class_indexed": false, "drift": false,
+      "reference_comparison": {"scope": "anchors", "anchor_set_version": "wotlk-335a-anchors-v1",
+                               "anchor_set_sha256": "...", "checked": 12, "equal": 12, "different": 0,
+                               "status": "matches_on_checked_anchors"},
       "entries": [{"rating_id": 6, "level": 60, "value": 14.0}]
     },
     "class_combat_rating_scalar": {
       "source_dbc": "gtOCTClassCombatRatingScalar", "axes": ["wow_class_id", "rating_id"],
       "class_indexed": true, "index_base": 1, "index_offset": 1, "drift": false,
-      "reference_match": "differs_from_reference", "entries": [{"wow_class_id": 1, "rating_id": 6, "value": 1.0}]
+      "reference_comparison": {"scope": "anchors", "anchor_set_version": "wotlk-335a-anchors-v1",
+                               "anchor_set_sha256": "...", "checked": 8, "equal": 7, "different": 1,
+                               "status": "differs_on_checked_anchors"},
+      "entries": [{"wow_class_id": 1, "rating_id": 6, "value": 1.0}]
     }
   },
   "rules": { "...": "see below" }
@@ -232,10 +266,12 @@ Notes:
 - `entries` use **explicit coordinates**, never opaque flattened arrays, so a consumer never re-derives
   an index. Unused storage slots are omitted from `entries` but their existence is recorded via the
   domain `storage_stride`.
-- Each table carries `class_indexed` (drives the reader's bridge gate) and a `reference_match`
-  (`matches_reference` | `differs_from_reference` | `ambiguous`) — a differing valid value is a recorded
-  Ascension deviation, not an error; `ambiguous` (a divergence that leaves axis identity unresolved)
-  requires adjudication.
+- Each table carries `class_indexed` (whether lookups need a resolved `wow_class_id`) and a scoped
+  `reference_comparison` (`scope: anchors`, the hashed anchor-set version, and `checked`/`equal`/
+  `different` counts with a `status`) — a differing valid value is a recorded Ascension deviation, not an
+  error; only a divergence that leaves axis identity unresolved is `ambiguous` and requires adjudication.
+  Whole-table equality is a distinct, stronger claim reserved for a full comparison against a named,
+  hashed reference dataset (`exact_match`), never asserted from sampled anchors.
 
 ### Manifest (validity marker, binds every input)
 
@@ -247,18 +283,26 @@ protocol (remove old manifest → atomic artifact → atomic manifest), binds:
   "schema_version": "coa-wow-constants-manifest-v1",
   "artifact": {"path": "coa_wow_constants.json", "sha256": "...", "byte_length": 12345},
   "source_dbc_sha256": {"gtCombatRatings": "...", "gtOCTClassCombatRatingScalar": "...", "ChrClasses": "..."},
-  "authored_inputs": {"rules_version": "wow-rules-v1", "rules_sha256": "...",
-                      "enum_maps_version": {"rating_enum": "cr-3.3.5a-v1", "power_type": "m1.14c-power-v1"},
-                      "axis_layout_policy_version": "gt-layout-v1"},
-  "m1_16_class_indexed_ready": false,
-  "table_summary": {"combat_ratings": {"rows": 3200, "drift": false, "reference_match": "matches_reference"}},
+  "authored_inputs": {
+    "rules": {"version": "wow-rules-v1", "sha256": "..."},
+    "rating_enum": {"version": "cr-3.3.5a-v1", "sha256": "..."},
+    "power_type_enum": {"version": "m1.14c-power-v1", "sha256": "..."},
+    "axis_layout_policy": {"version": "gt-layout-v1", "sha256": "..."},
+    "reference_anchors": {"version": "wotlk-335a-anchors-v1", "sha256": "..."}
+  },
+  "class_context_resolution": "unproven",
+  "table_summary": {"combat_ratings": {"source_records": 3200, "emitted_entries": 2500,
+                                        "padding_records": 700, "drift": false,
+                                        "reference_comparison_status": "matches_on_checked_anchors"}},
   "extractor_commit": "…", "client_build": "3.3.5a+patch-...", "extraction_date": "2026-07-17"
 }
 ```
 
-`extractor_commit` alone does not bind authored rules or a dirty tree, so the manifest hashes the rules
-payload and versions the enum maps and axis policy: two builds cannot claim identical provenance while
-using different authored inputs.
+`extractor_commit` alone binds neither the authored inputs nor a dirty tree, so the manifest carries a
+**version and a SHA-256 for every authored input** — the rules payload, both enum maps, the axis/layout
+policy, and the reference-anchor dataset — alongside the artifact hash and byte length and each source
+DBC's hash. Edited authored data therefore cannot retain the same advertised provenance, and two builds
+cannot claim identical provenance while differing in any input.
 
 ## Documented rules (`wow_rules_v1.json`, verification-labelled)
 
@@ -280,11 +324,13 @@ Initial rules, with the wording refinements the reviews required:
   decay** path (not "no passive regen"): both are generated from events and *decay* out of combat.
 - **Focus** — actor-scoped (pet), numeric behavior **deferred/unverified for CoA players** unless
   independently sourced; explicitly a **separate path** from energy.
-- **GCD** — only the **`1000 ms` floor and `1500 ms` ceiling** as reference constants. There is **no**
-  "1.5s caster / 1.0s physical" rule: base GCD is a per-spell operand (`StartRecoveryTime` /
-  `StartRecoveryCategory`), extracted in M1.14E; haste applies conditionally per spell and M1.16 clamps.
-  The rule records that haste affects cast time and *spell* GCD but **not** energy/focus regen in the
-  stock path.
+- **GCD** — only two reference constants: `gcd_floor_ms: 1000` (the haste floor) and
+  `standard_spell_gcd_base_ms: 1500` (the *standard default* base most spells carry, **not** a universal
+  schema-level ceiling). There is **no** "1.5s caster / 1.0s physical" rule: base GCD is a per-spell
+  operand (`StartRecoveryTime` / `StartRecoveryCategory`), extracted in M1.14E; haste applies
+  conditionally per spell and M1.16 clamps to the floor. The rule records that haste affects cast time
+  and *spell* GCD but **not** energy regen in the stock path (focus behavior is deferred/unverified, so
+  the rule makes no haste claim about it).
 
 `ChrClasses.power_type` is recorded as the class's **default** power type — not a CoA-class mapping and
 not a complete description of every resource a build uses (forms, talents, and scripts can change it).
@@ -297,12 +343,14 @@ A thin loader in `coa_meta/wow_constants.py`, responsibilities **only**:
 - **Structural + semantic validation**: axes present; `entries` coordinates within declared domains; no
   duplicate coordinates; finite values (reject NaN/±Inf); every `rating_id`/`power_type` mapped; rules
   carry the required label fields; `class_axis`/enum/rules versions present.
-- **Lookups returning raw values + provenance**: `combat_rating_ratio(rating_id, level)` (bridge-free),
-  `class_combat_rating_scalar(wow_class_id, rating_id)`, `melee_crit_per_agi(wow_class_id, level)`,
-  `base_mana(wow_class_id, level)`, `rule(key)`, `rating_name(rating_id)`, …. It preserves raw DBC IDs.
-- **Bridge gate**: any **class-indexed** lookup issued for a CoA class fails closed while
-  `m1_16_class_indexed_ready` is false, with a clear error naming the missing bridge. Lookups in the
-  native `wow_class_id` namespace are always allowed.
+- **Lookups returning raw values + provenance**: `combat_rating_ratio(rating_id, level)` (context-free),
+  `class_combat_rating_scalar(*, wow_class_id, rating_id)`, `melee_crit_per_agi(*, wow_class_id, level)`,
+  `base_mana(*, wow_class_id, level)`, `rule(key)`, `rating_name(rating_id)`, …. It preserves raw DBC IDs.
+- **Native namespace only**: class-indexed methods take a **keyword-only `wow_class_id`** in the
+  GameTable's own namespace. The reader **never** accepts a CoA class-type id and **never** guesses an
+  integer's namespace or maps between namespaces. Composite class-indexed readiness — is there a valid
+  actor `wow_class_id` or a versioned bridge? — is **M1.16's** check, informed by the manifest's
+  `class_context_resolution`; D's reader simply refuses to guess.
 - **Clear errors** for a missing table or an out-of-domain coordinate.
 
 It performs **no calculation** — no rating→%, GCD, crit, or regen math, no derived multiplier. It may
@@ -343,9 +391,11 @@ fails closed with a clear message when StormLib is unavailable (extraction-time 
   error); the **class-indexed bridge gate** failing closed for a CoA class while allowing the native
   namespace.
 - **Modeling-standard reference tests (synthetic only):** fixtures constructed so that
-  `class_scalar / combat_rating` at levels **60 and 80** reproduces documented multipliers; a
-  **nonincreasing** (not strictly decreasing) derived per-point multiplier as level rises — asserted as a
-  **test-only oracle**, never as repository behavior; enum/rule labels present.
+  `class_scalar / combat_rating` at levels **60 and 80** reproduces documented multipliers; the **raw
+  divisor is nondecreasing within each supported `rating_id` as level increases** (plateaus allowed,
+  never compared across flattened rating boundaries), with the derived per-point multiplier
+  correspondingly **nonincreasing** — both asserted as **test-only oracles**, never as repository
+  behavior; enum/rule labels present.
 
 **`stormlib` tier** — the backend read path over a synthetic MPQ.
 
@@ -354,10 +404,12 @@ fails closed with a clear message when StormLib is unavailable (extraction-time 
 
 - structural/layout mismatch, impossible coordinates, duplicates, non-finite values, or unmapped IDs →
   **fail**;
-- a valid client value that differs from stock WotLK → recorded `differs_from_reference` (an Ascension
-  deviation), **not** a failure — otherwise "client-authoritative" would collapse into
-  "stock-WotLK-authoritative";
-- a divergence that leaves axis identity ambiguous → `ambiguous`, requiring adjudication.
+- a valid client value that differs from stock WotLK → recorded in `reference_comparison` as
+  `differs_on_checked_anchors` (an Ascension deviation), **not** a failure — otherwise
+  "client-authoritative" would collapse into "stock-WotLK-authoritative";
+- a divergence that leaves axis identity ambiguous → `ambiguous`, requiring adjudication;
+- an observed client class roster that extends or changes the reference expectation → recorded in
+  `class_axis.comparison` (`extended`/`changed`) and adjudicated, never auto-treated as corruption.
 
 ## Redistribution boundary
 
@@ -382,10 +434,11 @@ its artifact under the existing mandatory gate; this must not disappear during d
 
 ## Risks and boundaries
 
-- **Class-axis bridge unproven.** The dominant risk: without a CoA→`wow_class_id` bridge, class-indexed
-  conversions are unusable for CoA classes. Mitigated by extracting in the true namespace, the
-  `m1_16_class_indexed_ready` manifest flag, the reader's fail-closed gate, and surfacing the bridge as
-  an explicit M1.16 entry condition rather than silently mapping.
+- **Class context unresolved.** The dominant risk: without a resolved `wow_class_id` for a CoA actor,
+  class-indexed conversions cannot be applied to CoA classes. Mitigated by extracting in the true
+  namespace, the `class_context_resolution` evidence in the manifest, a reader that exposes only native
+  `wow_class_id` methods (never guessing), and surfacing the composite check as an explicit M1.16 entry
+  condition rather than silently mapping one class's coefficients onto another.
 - **Axis misread.** A plausible header does not prove column meaning (the M1.14B lesson). Mitigated by
   the reference indexing contract + recon validation (explicit keys, coverage, holes, anchors) and
   strict canonical parsing.
@@ -393,7 +446,8 @@ its artifact under the existing mandatory gate; this must not disappear during d
   Ascension-repurposed; mitigated by labelling them `unproven` and keeping them off the exit gate until
   recon establishes their role.
 - **Stock ≠ Ascension.** Treating a stock mismatch as corruption would make the tool stock-authoritative;
-  mitigated by the `reference_match` deviation model and the structure-only real-client gate.
+  mitigated by the scoped `reference_comparison` deviation model (anchor-scoped, not a whole-table
+  equality claim) and the structure-only real-client gate.
 - **StormLib install friction / fail-closed.** Same posture as M1.14A/C: extraction-time only, synthetic
   fixtures for the default suite, no canonical artifact without StormLib.
 
@@ -407,21 +461,28 @@ its artifact under the existing mandatory gate; this must not disappear during d
   `ChrClasses`. Recon-gated candidates (`gtOCTRegenMP`, base HP/MP) are included **only** where recon
   proves the table and its role; the HP-regen pair is deferred with a documented M1.16 entry condition;
   NPC tables are excluded.
-- The **class axis is recorded in the stock `ChrClasses` namespace** with holes/padding, the manifest
-  carries `m1_16_class_indexed_ready`, and the reader fails closed on class-indexed CoA lookups until a
-  bridge is proven.
+- The **class axis is recorded in the stock `ChrClasses` namespace** (reference-expected vs observed,
+  with holes and a `comparison`); the manifest carries `class_context_resolution` (default `unproven`);
+  the reader exposes only native keyword-only `wow_class_id` methods and never maps namespaces; composite
+  class-indexed readiness is M1.16's check.
 - The reconnaissance report resolves and records the real Ascension layout (headers, physical form,
   explicit/implicit keys, record counts, value domains, holes) and the enum coverage; axis meaning is
   validated against the reference indexing contract and anchors, never inferred from record count.
-- Documented rules are verification-labelled (`authority` + `ascension_verification` + applicability),
-  live in tracked `wow_rules_v1.json`, and are manifest-bound; GCD ships only floor/ceiling reference
-  constants (base GCD deferred to M1.14E); no stock assumption is presented as verified Ascension truth.
+- Documented rules are verification-labelled (`authority` + `ascension_verification` + applicability)
+  and live in tracked `wow_rules_v1.json`; every authored input (rules, both enum maps, axis policy,
+  reference anchors) carries a manifest **version + SHA-256**; GCD ships only the floor + standard-base
+  reference constants (per-spell base GCD deferred to M1.14E); no stock assumption is presented as
+  verified Ascension truth.
 - `WowConstantsRepository` loads the artifact, hard-rejects other schema versions, validates structure
-  (including NaN/±Inf and missing-vs-zero), exposes raw lookups + provenance with the bridge gate, and
-  computes **no** formulas.
+  (including NaN/±Inf and missing-vs-zero), exposes raw lookups + provenance via native keyword-only
+  `wow_class_id` methods (no namespace guessing), and computes **no** formulas.
 - Default-tier synthetic tests pass (including the level-60/80 anchor oracle, sparse class `10`, the `+1`
   scalar offset, and the derived-multiplier monotonicity oracle); the client-tier acceptance test gates
-  on structure/sanity and records deviations rather than asserting stock equality.
+  on structure/sanity and records deviations via `reference_comparison` rather than asserting stock
+  equality.
+- Implementation begins with a real-client `--recon-only` adjudication checkpoint that freezes physical
+  form, observed class IDs, per-table availability, and `class_context_resolution` evidence before any
+  canonical-extraction task.
 - `coa_wow_constants.json` is registered under the M1.14C mandatory forward policy gate.
 
 ## Decision impacts
@@ -429,11 +490,12 @@ its artifact under the existing mandatory gate; this must not disappear during d
 - **Decision 19** advances: its *modeling-inputs* half is now split concretely — D delivers the
   conversion primitives and documented rules, M1.14E delivers the per-spell operands, M1.16 remains the
   only engine. No new decision is required.
-- **New M1.16 entry conditions recorded here:** (1) prove the CoA→`wow_class_id` bridge before any
-  class-indexed conversion is applied to a CoA class; (2) add the HP-regen pair only if base/passive
-  health regen becomes an explicit modeled term.
+- **New M1.16 entry conditions recorded here:** (1) resolve class context — an actor `wow_class_id` or a
+  versioned, hashed CoA→`wow_class_id` bridge — before applying any class-indexed conversion to a CoA
+  class (D records `class_context_resolution` evidence and never guesses); (2) add the HP-regen pair only
+  if base/passive health regen becomes an explicit modeled term.
 - **M1.14E scope addition:** the GCD base operands (`StartRecoveryTime`/`StartRecoveryCategory`,
   `damage_class`, GCD-relevant attribute bits) are per-spell fields M1.14E must extract, since D
-  deliberately publishes only the floor/ceiling reference constants.
+  deliberately publishes only the floor + standard-base reference constants.
 - **Redistribution:** `coa_wow_constants.json` is added to the M1.14C mandatory forward policy gate; the
   boundary itself is unchanged (synthetic fixtures, untracked client-derived outputs).
