@@ -222,3 +222,41 @@ def run_recon(client_root, out_dir, *, backend, plan) -> dict:
     (out_dir / "coa_wow_constants_recon.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
+
+
+WOW_CONSTANTS_SCHEMA = "coa-wow-constants-v1"
+
+
+def reference_comparison(entries: list[dict], anchors: list[dict], *, axes: tuple[str, ...],
+                         anchor_set_version: str, anchor_set_sha256: str) -> dict:
+    index = {tuple(e[a] for a in axes): e["value"] for e in entries}
+    checked = equal = different = 0
+    for anchor in anchors:
+        try:
+            key = tuple(anchor[a] for a in axes)
+        except KeyError:
+            continue
+        if key not in index:
+            continue
+        checked += 1
+        if abs(index[key] - anchor["expected"]) <= anchor.get("tolerance", 0.0):
+            equal += 1
+        else:
+            different += 1
+    status = ("matches_on_checked_anchors" if checked and different == 0
+              else "differs_on_checked_anchors" if checked else "no_anchors_checked")
+    return {"scope": "anchors", "anchor_set_version": anchor_set_version,
+            "anchor_set_sha256": anchor_set_sha256, "checked": checked, "equal": equal,
+            "different": different, "status": status}
+
+
+def build_snapshot(*, client_build: str, provenance: dict, class_axis: dict, game_tables: dict,
+                   rules: dict, rating_enum: dict, power_type_enum: dict) -> dict:
+    for key, table in game_tables.items():
+        for entry in table.get("entries", []):
+            if not math.isfinite(entry["value"]):
+                raise ValueError(f"{key}: non-finite value in entries")
+    return {"schema_version": WOW_CONSTANTS_SCHEMA, "client_build": client_build,
+            "provenance": provenance, "class_axis": class_axis,
+            "enum_maps": {"rating_enum": rating_enum, "power_type": power_type_enum},
+            "game_tables": game_tables, "rules": rules}
