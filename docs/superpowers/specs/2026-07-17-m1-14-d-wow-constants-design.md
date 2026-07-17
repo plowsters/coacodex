@@ -361,9 +361,13 @@ name the reference formula a value participates in; it never evaluates one.
 ```
 coa_client_extract/
   wow_constants.py            # NEW: recon + strict extraction + axis validation + snapshot assembly
-  dbc_layouts.py              # + GAME_TABLES group (GameTableLayout) + ChrClasses named layout
+  dbc_layouts.py              # + GameTableLayout type + loader/validator for data/gt_axis_policy_v1.json;
+                              #   ChrClasses named layout (Python, like the existing SPELL_FAMILY)
   wdbc.py                     # + parse_gametable() float ordinal-preserving path
-  data/wow_rules_v1.json      # NEW: authored, verification-labelled rules (tracked)
+  data/wow_rules_v1.json      # NEW: authored, verification-labelled rules (tracked, hash-bound)
+  data/rating_enum_v1.json    # NEW: pinned CombatRating id->name map (tracked, hash-bound)
+  data/gt_axis_policy_v1.json # NEW: GameTableLayout axis/index/stride/domain policy (tracked, hash-bound)
+  data/wotlk_reference_anchors_v1.json  # NEW: named/hashed level-60/80 anchor set (tracked, hash-bound)
   cli.py                      # + `wow-constants` subcommand (+ --recon-only); fails closed w/o StormLib
   artifacts.py                # + write_wow_constants() reusing atomic-write + manifest-last
 coa_meta/
@@ -385,11 +389,15 @@ fails closed with a clear message when StormLib is unavailable (extraction-time 
 - Axis-mapping and reference-contract validation: the **`+1` scalar offset**, `wow_class_id-1` base,
   storage-stride-vs-supported-domain separation, complete-coverage and holes/padding checks.
 - Snapshot assembly + **manifest-as-validity-marker** (an interrupt never leaves a new artifact beside a
-  stale manifest) + authored-input binding (changing `wow_rules_v1.json` changes the manifest hash).
+  stale manifest) + **authored-input binding**: a per-file **hash-change test** for each tracked authored
+  input (`wow_rules_v1.json`, `rating_enum_v1.json`, `gt_axis_policy_v1.json`,
+  `wotlk_reference_anchors_v1.json`) — editing any one changes its `authored_inputs[...].sha256` and the
+  artifact hash.
 - `WowConstantsRepository`: schema-version rejection; duplicate-coordinate, out-of-domain, and
   **NaN/±Inf rejection**; **missing-vs-zero** (a real `0.0` is a value, an absent coordinate is an
-  error); the **class-indexed bridge gate** failing closed for a CoA class while allowing the native
-  namespace.
+  error); **native-namespace enforcement** — the class-indexed methods are keyword-only `wow_class_id`,
+  perform no namespace inference, and **reject** a CoA class-type id or any out-of-domain id with a clear
+  error (composite class-context readiness stays M1.16's, never the reader's).
 - **Modeling-standard reference tests (synthetic only):** fixtures constructed so that
   `class_scalar / combat_rating` at levels **60 and 80** reproduces documented multipliers; the **raw
   divisor is nondecreasing within each supported `rating_id` as level increases** (plateaus allowed,
