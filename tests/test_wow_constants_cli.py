@@ -1,3 +1,4 @@
+import hashlib
 import json
 import struct
 from pathlib import Path
@@ -74,3 +75,58 @@ def test_cli_recon_only_fails_closed_without_stormlib(tmp_path, monkeypatch):
     rc = main(["wow-constants", "--client-root", str(_client(tmp_path)),
                "--out", str(tmp_path / "o"), "--recon-only"])
     assert rc == 2
+
+
+def test_canonical_extract_writes_snapshot_and_manifest(tmp_path):
+    from coa_client_extract.wow_constants import run_extract
+    client = _client(tmp_path)
+    out = tmp_path / "out"
+    manifest = run_extract(client, out, backend=make_backend(), plan=_plan(client),
+                           extractor_commit="c0ffee", client_build="3.3.5a+patch-M")
+    snap = json.loads((out / "coa_wow_constants.json").read_text())
+    assert snap["schema_version"] == "coa-wow-constants-v1"
+    assert snap["class_axis"]["comparison"] == "exact"
+    ct = snap["game_tables"]["combat_ratings"]
+    assert next(e for e in ct["entries"] if e["rating_id"] == 6 and e["level"] == 60)["value"] == 659.0
+    assert ct["reference_comparison"]["checked"] >= 1
+    assert manifest["class_context_resolution"] == "unproven"
+
+
+def test_missing_required_table_fails_closed(tmp_path):
+    from coa_client_extract.wow_constants import run_extract, MissingRequiredTable
+    client = _client(tmp_path)
+    b = make_backend(gtChanceToMeleeCrit=None)
+    with pytest.raises(MissingRequiredTable):
+        run_extract(client, tmp_path / "o", backend=b, plan=_plan(client),
+                    extractor_commit="x", client_build="y")
+    assert not (tmp_path / "o" / "coa_wow_constants.json").exists()
+
+
+def test_strict_drift_produces_no_output(tmp_path):
+    from coa_client_extract.wow_constants import run_extract
+    from coa_client_extract.errors import DbcDriftError
+    client = _client(tmp_path)
+    bad = struct.pack("<4sIIII", b"WDBC", 1, 2, 8, 0) + struct.pack("<ff", 1.0, 2.0)
+    b = make_backend(gtCombatRatings=bad)
+    with pytest.raises(DbcDriftError):
+        run_extract(client, tmp_path / "o", backend=b, plan=_plan(client),
+                    extractor_commit="x", client_build="y")
+    assert not (tmp_path / "o" / "coa_wow_constants.json").exists()
+
+
+def test_non_exact_axis_requires_adjudication(tmp_path):
+    from coa_client_extract.wow_constants import run_extract, ClassAxisAdjudicationRequired
+    client = _client(tmp_path)
+    ids = [(i, 0) for i in [1, 2, 3, 4, 5, 6, 7, 8, 11]]           # drop class 9 -> "changed"
+    b = make_backend(ChrClasses=_chr_classes(ids))
+    with pytest.raises(ClassAxisAdjudicationRequired):
+        run_extract(client, tmp_path / "o", backend=b, plan=_plan(client),
+                    extractor_commit="x", client_build="y")
+    adj = tmp_path / "adj.json"
+    adj.write_text(json.dumps({"schema": "wow-class-axis-adjudication-v1", "accepted_comparison": "changed",
+                               "observed_client_ids": [1, 2, 3, 4, 5, 6, 7, 8, 11],
+                               "rationale": "test", "version": "v1"}))
+    manifest = run_extract(client, tmp_path / "o2", backend=b, plan=_plan(client),
+                           extractor_commit="x", client_build="y", adjudication_path=str(adj))
+    assert manifest["authored_inputs"]["class_axis_adjudication"]["sha256"] == \
+        hashlib.sha256(adj.read_bytes()).hexdigest()

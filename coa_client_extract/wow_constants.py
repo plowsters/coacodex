@@ -260,3 +260,88 @@ def build_snapshot(*, client_build: str, provenance: dict, class_axis: dict, gam
             "provenance": provenance, "class_axis": class_axis,
             "enum_maps": {"rating_enum": rating_enum, "power_type": power_type_enum},
             "game_tables": game_tables, "rules": rules}
+
+
+class MissingRequiredTable(RuntimeError):
+    pass
+
+
+class ClassAxisAdjudicationRequired(RuntimeError):
+    pass
+
+
+def run_extract(client_root, out_dir, *, backend, plan, extractor_commit, client_build,
+                adjudication_path: str | None = None) -> dict:
+    root, attach = plan.open_chain
+    axis_in = load_authored_input("gt_axis_policy")
+    rating_in = load_authored_input("rating_enum")
+    power_in = load_authored_input("power_type_enum")
+    rules_in = load_authored_input("wow_rules")
+    anchors_in = load_authored_input("wotlk_reference_anchors")
+    layouts, ls, rs = load_axis_policy(axis_in.payload)
+
+    report = recon(backend, root, attach, axis_policy=(layouts, ls, rs),
+                   rating_enum=rating_in.payload, power_type_enum=power_in.payload,
+                   reference_class_axis=axis_in.payload["class_axis"])
+    class_axis = report["class_axis"]
+
+    adjudication = None
+    if class_axis["comparison"] != "exact":
+        if not adjudication_path or not Path(adjudication_path).is_file():
+            raise ClassAxisAdjudicationRequired(
+                f"class axis comparison={class_axis['comparison']} requires a tracked adjudication file")
+        raw = Path(adjudication_path).read_bytes()
+        payload = json.loads(raw)
+        from types import SimpleNamespace
+        adjudication = SimpleNamespace(name="class_axis_adjudication",
+                                       version=payload.get("version", "wow-class-axis-adjudication-v1"),
+                                       sha256=hashlib.sha256(raw).hexdigest())
+
+    roster = class_roster(class_axis)
+    anchors = anchors_in.payload["anchors"]
+    game_tables: dict = {}
+    source_dbc_sha: dict = {}
+    table_summary: dict = {}
+    for key, layout in layouts.items():
+        info = report["tables"][key]
+        proven_required = layout.semantics == "proven" and key in axis_in.payload["tables"]
+        if not info["available"]:
+            if proven_required:
+                raise MissingRequiredTable(f"proven-required table {layout.source_dbc} is absent")
+            continue
+        if layout.semantics == "unproven":
+            continue
+        member = backend.read_effective_file(root, attach, f"DBFilesClient\\{layout.source_dbc}.dbc")
+        table = parse_gametable(member.data, physical_form=layout.physical_form,
+                                expected_field_count=layout.expected_field_count,
+                                expected_record_size=layout.expected_record_size,
+                                value_cell=layout.value_cell, id_cell=layout.id_cell, strict=True)
+        entries, counts = map_table_entries(layout, table, class_roster=roster,
+                                            level_stride=ls, rating_stride=rs)
+        rc = reference_comparison(entries, [a for a in anchors if a.get("table") == key],
+                                  axes=layout.axes, anchor_set_version=anchors_in.version,
+                                  anchor_set_sha256=anchors_in.sha256)
+        game_tables[key] = {"source_dbc": layout.source_dbc, "physical_form": layout.physical_form,
+                            "axes": list(layout.axes), "class_indexed": layout.class_indexed,
+                            "domains": layout.supported, "drift": table.drift, "counts": counts,
+                            "reference_comparison": rc, "entries": entries}
+        source_dbc_sha[layout.source_dbc] = hashlib.sha256(member.data).hexdigest()
+        table_summary[key] = {**counts, "drift": table.drift,
+                              "reference_comparison_status": rc["status"]}
+
+    chr_member = backend.read_effective_file(root, attach, "DBFilesClient\\ChrClasses.dbc")
+    source_dbc_sha["ChrClasses"] = hashlib.sha256(chr_member.data).hexdigest()
+    provenance = {"backend": getattr(backend, "name", "unknown"),
+                  "backend_version": getattr(backend, "version", "unknown"),
+                  "source_dbcs": {k: {"sha256": v} for k, v in source_dbc_sha.items()}}
+    snapshot = build_snapshot(client_build=client_build, provenance=provenance, class_axis=class_axis,
+                              game_tables=game_tables, rules=rules_in.payload["rules"],
+                              rating_enum=rating_in.payload, power_type_enum=power_in.payload)
+
+    from .artifacts import write_wow_constants
+    return write_wow_constants(
+        snapshot, Path(out_dir),
+        authored_inputs=[rules_in, rating_in, power_in, axis_in, anchors_in],
+        source_dbc_sha256=source_dbc_sha, class_context_resolution=report["class_context_resolution"],
+        extractor_commit=extractor_commit, client_build=client_build, table_summary=table_summary,
+        class_axis_adjudication=adjudication)
