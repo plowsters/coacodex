@@ -116,6 +116,59 @@ class PositionalDbc:
         return self.strings[offset:end].decode("utf-8", "replace")
 
 
+@dataclass(frozen=True)
+class GameTable:
+    physical_form: str          # "implicit_row" | "explicit_id"
+    field_count: int
+    record_size: int
+    record_count: int
+    rows: list[dict]            # {"ordinal": int, "value": float, "id": int | None}
+    drift: bool
+
+
+def classify_physical_form(field_count: int, record_size: int) -> str:
+    return "implicit_row" if field_count == 1 and record_size == _CELL else "explicit_id"
+
+
+def parse_gametable(data: bytes, *, physical_form: str, expected_field_count: int,
+                    expected_record_size: int, value_cell: int = 0,
+                    id_cell: int | None = None, strict: bool = False) -> GameTable:
+    """Decode a GameTable DBC preserving row ordinal and reading the value cell as a 32-bit float.
+
+    GameTables are single-float, implicit-row tables in stock 3.3.5a; Ascension may ship an explicit
+    id column. This never decodes the value as an integer (contrast parse_positional)."""
+    if physical_form not in ("implicit_row", "explicit_id"):
+        raise ValueError(f"unknown physical_form {physical_form!r}")
+    if len(data) < _HEADER.size:
+        raise DbcDriftError("file smaller than DBC header")
+    magic, record_count, field_count, record_size, _string_size = _HEADER.unpack_from(data, 0)
+    if magic != _MAGIC:
+        raise DbcDriftError(f"bad magic {magic!r}, expected WDBC")
+    if record_size % _CELL != 0:
+        raise DbcDriftError(f"record_size {record_size} not a multiple of {_CELL}")
+    drift = field_count != expected_field_count or record_size != expected_record_size
+    if drift and strict:
+        raise DbcDriftError(
+            f"field_count {field_count} / record_size {record_size} != expected "
+            f"{expected_field_count} / {expected_record_size}")
+    records_start = _HEADER.size
+    end = records_start + record_count * record_size
+    if len(data) < end:
+        raise DbcDriftError(f"truncated ({len(data)} bytes, expected >= {end})")
+    cells = record_size // _CELL
+    if value_cell >= cells or (id_cell is not None and id_cell >= cells):
+        raise DbcDriftError(f"value/id cell index out of record bounds ({cells} cells)")
+    rows: list[dict] = []
+    for i in range(record_count):
+        base = records_start + i * record_size
+        (value,) = struct.unpack_from("<f", data, base + value_cell * _CELL)
+        ident = None
+        if id_cell is not None:
+            (ident,) = struct.unpack_from("<I", data, base + id_cell * _CELL)
+        rows.append({"ordinal": i, "value": value, "id": ident})
+    return GameTable(physical_form, field_count, record_size, record_count, rows, drift)
+
+
 def parse_positional(data: bytes, expected_field_count: int, expected_record_size: int,
                      *, strict: bool = False) -> PositionalDbc:
     """Decode every record as raw {cell_index: uint32} cells plus the string block, without a named
