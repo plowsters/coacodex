@@ -249,3 +249,45 @@ def write_client_spell_projection(
     _atomic_write_bytes(body, proj_path)
     _atomic_write_bytes(manifest_bytes, manifest_path)
     return manifest
+
+
+_AUTHORED_MANIFEST_KEYS = {"wow_rules": "rules", "rating_enum": "rating_enum",
+                           "power_type_enum": "power_type_enum",
+                           "gt_axis_policy": "axis_layout_policy",
+                           "wotlk_reference_anchors": "reference_anchors",
+                           "class_axis_adjudication": "class_axis_adjudication"}
+
+
+def write_wow_constants(snapshot: dict, out_dir: Path, *, authored_inputs, source_dbc_sha256: dict,
+                        class_context_resolution: str, extractor_commit: str, client_build: str,
+                        table_summary: dict, class_axis_adjudication=None) -> dict:
+    art_path = out_dir / "coa_wow_constants.json"
+    manifest_path = out_dir / "coa_wow_constants.manifest.json"
+    body = (json.dumps(snapshot, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+    inputs = list(authored_inputs)
+    if class_axis_adjudication is not None:
+        adj = class_axis_adjudication
+        if isinstance(adj, dict):
+            from types import SimpleNamespace
+            adj = SimpleNamespace(**adj)
+        inputs.append(adj)
+    authored = {_AUTHORED_MANIFEST_KEYS[ai.name]: {"version": ai.version, "sha256": ai.sha256}
+                for ai in inputs}
+
+    manifest = {
+        "schema_version": "coa-wow-constants-manifest-v1",
+        "artifact": {"path": art_path.name, "sha256": _sha256_bytes(body), "byte_length": len(body)},
+        "source_dbc_sha256": dict(source_dbc_sha256), "authored_inputs": authored,
+        "class_context_resolution": class_context_resolution, "table_summary": dict(table_summary),
+        "extractor_commit": extractor_commit, "client_build": client_build,
+        "extraction_date": date.today().isoformat(),
+    }
+    manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if manifest_path.exists():
+        manifest_path.unlink()                 # remove stale marker first
+    _atomic_write_bytes(body, art_path)         # write artifact
+    _atomic_write_bytes(manifest_bytes, manifest_path)  # write marker LAST
+    return manifest
