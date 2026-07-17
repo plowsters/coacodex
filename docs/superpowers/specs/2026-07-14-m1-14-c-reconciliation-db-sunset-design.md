@@ -468,7 +468,7 @@ These ship **in** M1.14C because client data cannot be reconciled correctly on t
    `coa_scraper/tests/pipeline-scripts.test.mjs` (asserting `effects[0].period_ms`) is corrected to the
    canonical name. For transition, the Python loader **temporarily accepts** a legacy `period_ms` key on
    input but **always reserializes** `tick_interval_ms`. Same "test locked in wrong behavior" pattern
-   M1.14E audits, resolved here because it is in the file M1.14C rewrites.
+   M1.14F audits, resolved here because it is in the file M1.14C rewrites.
 
 ## Inputs, CLI flags, and atomic output
 

@@ -111,7 +111,7 @@ spells. The three aliases are therefore recorded as curated aliases with explici
 - **Full pixel-position layout parity** — cosmetic; M1.15 owns tree layout. M1.14B extracts whatever
   position/column fields decode and validate cleanly, and flags the rest.
 - **Server-side computed numbers** (coefficients, scripted procs, scaling) — not in client DBC;
-  scoped to the M1.14F spike and Phase 2.
+  scoped to the M1.14G spike and Phase 2.
 
 ## Architecture
 
@@ -585,7 +585,7 @@ Same three tiers as M1.14A; all committed fixtures synthetic/self-authored (redi
    matches what the committed decode report actually proved (the test asserts the *structure and
    consistency* of the readiness object against the decode evidence, not a hard-coded all-green).
 
-Testing standards follow M1.14E: assertions check intended behavior (ownership, semantic validity,
+Testing standards follow M1.14F: assertions check intended behavior (ownership, semantic validity,
 parity math), never incidental output.
 
 ## Exit Criteria

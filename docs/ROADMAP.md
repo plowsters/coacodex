@@ -283,18 +283,35 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     [client-class-types-schema.md](data/client-class-types-schema.md). Design:
     [M1.14B Client Attribution and CoA Advancement Graph](superpowers/specs/2026-07-13-m1-14-b-client-attribution-and-graph-design.md).
     Plan: [M1.14B Implementation Plan](superpowers/plans/2026-07-13-m1-14-b-client-attribution-and-graph.md).
-  - **M1.14C Reconciliation and DB Sunset.** Status: planned; specced. Attribution-scoped
-    (`is_coa`) client-spell projection plus per-field source-precedence reconciliation
-    (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred) in the Node mechanics builder,
-    retaining every competing value + a stable selection reason in an additive `field_provenance`;
-    demotes db.ascension.gg mechanical enrichment to fallback-only; keeps `coa-mechanics-v1`
-    (loader round-trips the new field). Fails closed without a valid projection
+  - **M1.14C Reconciliation and DB Sunset.** Status: implemented and merged to `main` (merge
+    `9788714`, 2026-07-16; all 16 TDD tasks plus a final whole-branch review, zero Critical findings).
+    Attribution-scoped (`is_coa`) client-spell projection plus per-field source-precedence
+    reconciliation (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred) in the Node mechanics
+    builder, retaining every competing value + a stable selection reason in an additive
+    `field_provenance`; demotes db.ascension.gg mechanical enrichment to fallback-only; keeps
+    `coa-mechanics-v1` (loader round-trips the new field). Fails closed without a valid projection
     (`--allow-fallback-mechanics` writes a separate degraded artifact); real projection/manifest stay
-    untracked. Design:
+    untracked. The mechanics manifest (`coa-mechanics-manifest-v1`) carries an aggregate audit
+    `counts` block (`unresolved_conflicts`, `ineligible_candidates`, `omitted_fields`,
+    `kind_disagreements`) plus `reconciler_commit`/`client_build` (Exit-Criteria contract repair from
+    final review; additive, zero-valued keys kept present, null on fallback builds). **Producer only:**
+    `reporting.py` was deliberately left untouched, so the reconciled per-field mechanics are not yet
+    surfaced to users — the consumer rewire is deferred to **M1.16** by design (not a regression).
+    Design:
     [M1.14C Reconciliation and DB Sunset](superpowers/specs/2026-07-14-m1-14-c-reconciliation-db-sunset-design.md).
-  - **M1.14D** WoW constants · **M1.14E** test-suite audit · **M1.14F** memory-bridge/API spike.
-    Delineated in the umbrella; each gets its own spec when next in line.
-  - **M1.14E carried-forward audit item (from M1.14B, M1 follow-up).** The `coa-builder-parity-v3`
+    Plan: [M1.14C Implementation Plan](superpowers/plans/2026-07-14-m1-14-c-reconciliation-db-sunset.md).
+  - **M1.14D** WoW constants · **M1.14E** mechanics extraction completion (deferred spell schema) ·
+    **M1.14F** test-suite audit · **M1.14G** memory-bridge/API spike. Delineated in the umbrella; each
+    gets its own spec when next in line.
+  - **M1.14E Mechanics Extraction Completion (deferred spell schema).** Extend client extraction to the
+    per-spell mechanical tables M1.14A/C deliberately deferred — `SpellCooldowns`/category cooldowns,
+    `SpellRuneCost`, and the `SpellEffect` `effects[]` join (coefficients, costs, charges) — which today
+    still resolve from the stale db/inferred tiers, and reconcile them into `coa-mechanics-v1` through
+    the M1.14C per-field precedence engine. This closes the ownership gap where M1.16 would otherwise
+    have D's conversion constants but no dependable client-sourced per-spell operands. Depends on A
+    (extraction machinery) and C (reconciliation engine); independent of D. Delineated in the umbrella;
+    gets its own spec when next in line.
+  - **M1.14F carried-forward audit item (from M1.14B, M1 follow-up).** The `coa-builder-parity-v3`
     `per_class`/`per_tab` breakdown tables group on raw, un-canonicalized class labels, so the four
     CamelCase CoA classes (`WitchDoctor`, `WitchHunter`, `KnightOfXoroth`, `SunCleric`) surface
     phantom split rows next to their spaced Builder form. It is diagnostic-only — it feeds no
@@ -302,8 +319,8 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     through the same versioned `canonical_class_label` (`nfkc-casefold-remove-whitespace-v1`) already
     used for identity comparison, preserve the raw labels in the diagnostic samples, add a regression
     asserting the 21 CoA classes do not split into CamelCase/spaced duplicates, and change no
-    readiness or adjudication value. It does **not** block M1.14C/D/F. Detailed in the umbrella
-    M1.14E section.
+    readiness or adjudication value. It does **not** block M1.14D/E/G. Detailed in the umbrella
+    M1.14F section.
 - **M1.15 Talent-Tree Correctness.** Status: planned. Full AE/TE essence spend to the target level;
   granular 10–60 level slider; consistent level-gating across all sections; mutually exclusive
   shared-node choices; leveling path never skips a level. **Per-field Builder supersession (Decision
@@ -338,7 +355,9 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
 - **M1.16 Analytical Player-Power Model.** Status: planned. Deterministic engine: rating→% at level,
   coefficient-based per-cast damage/heal, haste→GCD and resource regen, crit/hit/expertise/armor,
   DoT/HoT. Rewire scoring and rotation simulation to consume real numbers. Full event-driven
-  simulation remains Phase 3.
+  simulation remains Phase 3. **Also owns the deferred M1.14C consumer rewire:** `reporting.py` and
+  downstream scoring must be updated to consume the reconciled per-field mechanics and
+  `field_provenance` that M1.14C produces into `coa-mechanics-v1` but does not yet surface to users.
 - **M1.17 Rotation Quality.** Status: planned. Derive true core loops from the model; build-archetype
   taxonomy beyond "DoT loop"; concise opener/priority/cooldown/role sections.
 - **M1.18 Gear/Stat Interaction and Breakpoints.** Status: planned. Model-derived stat weights per
