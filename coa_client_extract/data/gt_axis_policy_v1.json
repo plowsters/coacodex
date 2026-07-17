@@ -1,0 +1,42 @@
+{
+  "version": "gt-layout-v1",
+  "level_stride": 100,
+  "rating_stride": 32,
+  "class_axis": {"namespace": "chr_classes", "reference_expected_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 11],
+                 "reference_holes": [10]},
+  "defaults": {"physical_form": "implicit_row", "key_source": "ordinal",
+               "expected_field_count": 1, "expected_record_size": 4, "value_cell": 0, "id_cell": null},
+  "tables": {
+    "combat_ratings": {"source_dbc": "gtCombatRatings", "index_kind": "rating_by_level",
+      "axes": ["rating_id", "level"], "class_indexed": false,
+      "supported": {"rating_id": {"min": 0, "max": 24}, "level": {"min": 1, "max": 100}}},
+    "class_combat_rating_scalar": {"source_dbc": "gtOCTClassCombatRatingScalar",
+      "index_kind": "class_rating_scalar", "index_offset": 1,
+      "axes": ["wow_class_id", "rating_id"], "class_indexed": true,
+      "supported": {"rating_id": {"min": 0, "max": 24}}},
+    "melee_crit_per_agi": {"source_dbc": "gtChanceToMeleeCrit", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}},
+    "melee_crit_base": {"source_dbc": "gtChanceToMeleeCritBase", "index_kind": "class_only",
+      "axes": ["wow_class_id"], "class_indexed": true, "supported": {}},
+    "spell_crit_per_int": {"source_dbc": "gtChanceToSpellCrit", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}},
+    "spell_crit_base": {"source_dbc": "gtChanceToSpellCritBase", "index_kind": "class_only",
+      "axes": ["wow_class_id"], "class_indexed": true, "supported": {}},
+    "mana_regen_per_spirit": {"source_dbc": "gtRegenMPPerSpt", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}}
+  },
+  "recon_gated": {
+    "base_mana_by_class": {"source_dbc": "gtOCTBaseMPByClass", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}, "semantics": "unproven"},
+    "base_hp_by_class": {"source_dbc": "gtOCTBaseHPByClass", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}, "semantics": "unproven"},
+    "oct_regen_mp": {"source_dbc": "gtOCTRegenMP", "index_kind": "class_by_level",
+      "axes": ["wow_class_id", "level"], "class_indexed": true,
+      "supported": {"level": {"min": 1, "max": 100}}, "semantics": "unproven"}
+  }
+}

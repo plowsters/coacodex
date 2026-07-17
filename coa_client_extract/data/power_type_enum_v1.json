@@ -1,0 +1,5 @@
+{
+  "version": "m1.14c-power-v1",
+  "map": {"-2": "health", "0": "mana", "1": "rage", "2": "focus", "3": "energy",
+          "4": "happiness", "5": "runes", "6": "runic_power"}
+}

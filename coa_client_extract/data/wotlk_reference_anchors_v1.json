@@ -1,0 +1,9 @@
+{
+  "version": "wotlk-335a-anchors-v1",
+  "anchors": [
+    {"table": "combat_ratings", "rating_id": 10, "level": 60, "expected": 14.0, "tolerance": 1.0,
+     "source_ref": "WotLK 3.3.5a: ~14 crit rating = 1% at level 60 (base divisor)"},
+    {"table": "combat_ratings", "rating_id": 10, "level": 80, "expected": 45.90574, "tolerance": 1.0,
+     "source_ref": "WotLK 3.3.5a: 45.90574 crit rating = 1% at level 80 (base divisor)"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "version": "cr-3.3.5a-v1",
+  "storage_stride": 32,
+  "supported": {
+    "0": "weapon_skill", "1": "defense_skill", "2": "dodge", "3": "parry", "4": "block",
+    "5": "hit_melee", "6": "hit_ranged", "7": "hit_spell", "8": "crit_melee", "9": "crit_ranged",
+    "10": "crit_spell", "11": "hit_taken_melee", "12": "hit_taken_ranged", "13": "hit_taken_spell",
+    "14": "crit_taken_melee", "15": "crit_taken_ranged", "16": "crit_taken_spell",
+    "17": "haste_melee", "18": "haste_ranged", "19": "haste_spell", "20": "weapon_skill_mainhand",
+    "21": "weapon_skill_offhand", "22": "weapon_skill_ranged", "23": "expertise",
+    "24": "armor_penetration"
+  }
+}

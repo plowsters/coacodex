@@ -1,0 +1,26 @@
+{
+  "version": "wow-rules-v1",
+  "rules": {
+    "base_energy": {"value": 100, "unit": "energy", "authority": "wotlk_reference",
+      "ascension_verification": "unverified", "applies_to": ["energy_users"],
+      "source_ref": "WotLK 3.3.5a base energy pool", "notes": "before aura/talent modifiers"},
+    "energy_regen_per_sec": {"value": 10, "unit": "energy_per_sec", "authority": "wotlk_reference",
+      "ascension_verification": "unverified", "applies_to": ["energy_users"],
+      "source_ref": "WotLK 3.3.5a energy regen", "notes": "flat; not affected by haste in the stock path"},
+    "rage_bounds": {"value": {"min": 0, "max": 100}, "unit": "rage_display",
+      "authority": "wotlk_reference", "ascension_verification": "unverified",
+      "applies_to": ["rage_users"], "source_ref": "WotLK 3.3.5a rage",
+      "notes": "display units (internal x10); event-generated, decays out of combat"},
+    "runic_power_bounds": {"value": {"min": 0, "max": 100}, "unit": "runic_power_display",
+      "authority": "wotlk_reference", "ascension_verification": "unverified",
+      "applies_to": ["runic_power_users"], "source_ref": "WotLK 3.3.5a runic power",
+      "notes": "display units; event-generated, decays out of combat"},
+    "gcd_floor_ms": {"value": 1000, "unit": "ms", "authority": "wotlk_reference",
+      "ascension_verification": "unverified", "applies_to": ["all_spells"],
+      "source_ref": "WotLK 3.3.5a GCD haste floor", "notes": "haste reduces spell GCD to this floor"},
+    "standard_spell_gcd_base_ms": {"value": 1500, "unit": "ms", "authority": "wotlk_reference",
+      "ascension_verification": "unverified", "applies_to": ["most_spells"],
+      "source_ref": "WotLK 3.3.5a standard GCD",
+      "notes": "standard default only; real base is per-spell StartRecoveryTime (M1.14E), not a ceiling"}
+  }
+}

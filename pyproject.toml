@@ -26,6 +26,7 @@ coa_meta = [
   "data/role_overrides.json",
   "data/spec_roles.json"
 ]
+coa_client_extract = ["data/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not stormlib and not client'"
