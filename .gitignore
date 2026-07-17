@@ -37,3 +37,9 @@ coa_scraper/dist/coa_mechanics.jsonl
 coa_scraper/dist/coa_mechanics.manifest.json
 coa_scraper/dist/coa_mechanics.fallback.jsonl
 coa_scraper/dist/coa_mechanics.fallback.manifest.json
+
+# M1.14D client-derived WoW constants — regenerate from your own client (never committed).
+# The tracked reports/client_extract/wow_class_axis_adjudication.json is NOT ignored.
+reports/client_extract/coa_wow_constants_recon.json
+coa_scraper/dist/coa_wow_constants.json
+coa_scraper/dist/coa_wow_constants.manifest.json

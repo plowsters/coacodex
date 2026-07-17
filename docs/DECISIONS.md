@@ -225,6 +225,13 @@ Reasoning:
 - Custom server-side scaling/proc numbers and 3.3.5 item stats are not fully present in client DBC;
   those gaps are scoped to a memory-bridge/API investigation spike and to later gear milestones.
 
+**Redistribution (M1.14D, 2026-07-17).** `coa_wow_constants.json` and its manifest are client-derived
+GameTable outputs and fall under the **same mandatory forward policy gate M1.14C records**: before
+M1.16 consumes any client-derived output, or before any canonical public release, one explicit policy
+decision must cover them consistently with `coa_client_spell_coa.jsonl` and `coa_mechanics.jsonl`. The
+authored inputs D layers on top (rules, enum maps, axis policy, reference anchors, the class-axis
+adjudication) are self-authored and tracked; only the merged client-derived snapshot is git-ignored.
+
 ## Decision 19: Phase 1 Uses a Deterministic Analytical Player-Power Model
 
 Status: accepted (planned for M1.16).
