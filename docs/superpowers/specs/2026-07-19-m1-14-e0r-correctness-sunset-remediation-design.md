@@ -67,8 +67,9 @@ must re-derive states 2–3 independently rather than trust the producer's summa
   finishes and hardens what E0 already emits (identity, corrected scalars, the four side-table joins),
   plus the client spell-icon catalog those joins enable (B4) — the one new client-native artifact,
   added only to remove AscensionDB's icon role.
-- **No client-native item/asset extraction.** The AscensionDB *item* pipeline is quarantined and
-  tracked separately (B6); only *spell* icons become client-native here.
+- **No client-native item extraction.** E0R removes the AscensionDB item pipeline (B6) but does not
+  replace it; items are honestly un-enriched until client-native item extraction is built later. Only
+  *spell* icons become client-native here.
 
 ## Design-lock invariants (frozen before implementation)
 
@@ -211,9 +212,11 @@ makes three coupled changes:
   free-form `FieldPolicy.evidence` **text** into every observation's `evidence_ref` (and repeats the
   ~55-entry patch provenance per row) — the actual cause of the ~1.04 GiB estimate. E0R replaces the
   per-row evidence text with a compact **`policy_ref`** JSON pointer, e.g. `"/tables/Spell/fields/
-  power_type"` (join components carry their own `policy_ref`s); the policy path supplies `kind`, proof,
-  `promotion`, and evidence. Generation provenance is written **once** to the manifest. Node resolves
-  everything through `policy_ref` and ignores any producer evidence text.
+  power_type"`. A join's `index`/`side_id`/`side_value` components each carry a `policy_ref` to their
+  **underlying table-field node** (e.g. `/tables/SpellCastTimes/fields/base_ms`), resolved through the
+  join mapping — there is **no** synthetic `/joins/...` policy node to resolve against. The policy path
+  supplies `kind`, proof, `promotion`, and evidence. Generation provenance is written **once** to the
+  manifest. Node resolves everything through `policy_ref` and ignores any producer evidence text.
 - **Domain-scoped emission that never sheds raw.** The **full-table child** (`coa-client-spell-v3`)
   streams **compact** rows, but a compact row still retains **enough raw to reconstruct eligibility**: a
   normalized value in the full artifact must never exist without its raw substrate. Each compact row
@@ -310,23 +313,29 @@ does not untrack) and ignored; committed fixtures are kept intentionally and doc
 generated-data churn merged into E0 is separated in a dedicated, intentional commit — not mixed with
 correctness fixes.
 
-## Workstream B — AscensionDB hard-cut + fail-closed interlock
+## Workstream B — AscensionDB removal + fail-closed interlock
 
-### B1. De-AscensionDB the canonical pipeline
+### B1. Remove AscensionDB integration entirely (not quarantine)
 
-Canonical `build-mechanics` runs `--client-extract-pointer`, no `--db-spells`, **network-free**.
-`enrich-db`, `apply-db-enrichment`, and `--db-spells` leave the canonical path. `pipeline:m1.9` is
-retired as a canonical command in **both** the root and `coa_scraper` `package.json`; the AscensionDB
-enrichment/fetch commands and their output are **quarantined under a `legacy:ascensiondb` diagnostic
-namespace** that writes to a diagnostic directory, never into canonical `dist`.
+E0R **deletes** the AscensionDB scraping/integration code — `enrich-ascensiondb.mjs`,
+`enrich-ascensiondb-assets.mjs`, `enrich-db`, `apply-db-enrichment`, `--db-spells`, `pipeline:m1.9` (root
++ `coa_scraper`), the item enrichment that depends on AscensionDB (`enrich-items`/`build-items` lose
+their AscensionDB source), and the `guide_tooltips.py` `db.ascension.gg` host usage. Canonical
+`build-mechanics` runs `--client-extract-pointer`, network-free. **The one permitted `db.ascension.gg`
+touch is a single new opt-in utility** — `download-spell-icons.mjs` — that downloads *only image files*
+to local disk to fill any client-icon gap (see B4); it emits no runtime URLs and no data enrichment. No
+"quarantine namespace" remains: the integration is removed, not hidden. Items losing AscensionDB
+enrichment is an accepted consequence; client-native item extraction is later work.
 
-### B2. Remove `ascension_db` as a selectable canonical tier + a negative dependency gate
+### B2. Remove `ascension_db` as a reconciliation tier + a network-trap negative gate
 
-`TIERS` drops `ascension_db` from **canonical** reconciliation selection. Frozen AscensionDB payloads
-survive **only** as test fixtures / diagnostic comparison inputs — never winners, never provenance
-selections. A **negative dependency gate** (a canonical test) asserts the canonical mechanics build
-takes **no** AscensionDB input, produces no `ascension_db` provenance winner, embeds no `db.ascension.gg`
-URL or AscensionDB hash, and issues **no network request**.
+`TIERS` drops `ascension_db`; the canonical build function's signature cannot accept DB rows. Frozen
+AscensionDB payloads survive **only** as committed test fixtures / diagnostic comparison inputs — never
+winners. The **negative dependency gate** is behavioral, not textual: a canonical build runs under an
+**injected network trap** (any outbound request fails the test) against a fixture that includes a
+would-be DB payload, and the test asserts the produced mechanics/manifest carry **no** `ascension_db`
+provenance winner, tier, hash, or `db.ascension.gg` URL, and that the build made **no** network request.
+Both `package.json` files are inspected for a lingering canonical AscensionDB command.
 
 ### B3. `coa-mechanics-v2` — represent "unknown"
 
@@ -335,52 +344,60 @@ missing/null to `{}` (indistinguishable from free). E0R defines **`coa-mechanics
 
 - `costs: null | object`, with the `numberOrNull` missing-vs-zero repair applied throughout (missing ≠
   zero, unknown ≠ free).
-- **Machine-readable field readiness** with a per-field status enum: `available`, `unavailable`
-  (not yet extractable — e.g. cooldown/GCD/costs pending E1), `not_applicable` (the field does not apply
-  to this spell), `ambiguous` (discovered but not uniquely resolvable), and `verified_empty`
-  (**set-valued fields only**, e.g. a spell proven to have no cost — it is not a general timer-field
-  status; a verified `0`/`1500` is `available`, not `verified_empty`). The *why* is a **closed
-  `reason_code` enum** (e.g. `pending_e1_operand`, `join_ambiguous`, `unknown_symbol`,
-  `side_row_missing`), never an unrestricted explanatory string.
+- **Machine-readable field readiness** — a small state machine with **status/value/reason invariants**
+  (enforced, not merely documented):
+  - `available` → the field's value is **non-null** (a verified `0`/`1500`/empty-cost is `available`,
+    not withheld); **non-blocking**.
+  - `verified_empty` → **set-valued fields only** (e.g. costs proven empty): value is an empty
+    collection; **non-blocking**. It is never a timer-field status.
+  - `not_applicable` → value is `null`; **non-blocking** (the field does not apply to this spell).
+  - `unavailable` / `ambiguous` → value is `null`; **blocking** (not yet extractable / not uniquely
+    resolvable).
+  The *why* is a **closed `reason_code` enum** (`pending_e1_operand`, `join_ambiguous`, `unknown_symbol`,
+  `side_row_missing`, `index_zero`, `no_static_anchor`, `not_extracted`), never a free string. A
+  contradictory pair (e.g. `verified_empty` + `not_extracted`) is rejected at load.
 - A v1 **rejection / explicit migration boundary**: a v1 consumer artifact is rejected with a
   regenerate message; pre-E0R client generations are rejected for lacking the trusted policy child.
 
 ### B4. Client-native spell icons
 
-Adjudicating `spell_icon_id` alone does not remove AscensionDB's icon role: the guide prefers DB icon
-rows and cached paths and, absent a local image, constructs a **live `db.ascension.gg` icon URL**
-(`guide_assets.py:8,47`; `icon-assets.mjs:6-8`). This is a genuinely new client-native artifact lane.
+The guide today prefers DB icon rows + cached paths and, absent a local image, constructs a **live
+`db.ascension.gg` icon URL** (`guide_assets.py:8,47`; `icon-assets.mjs:6-8`; `guide_builder.py` and its
+callers pass DB icon names/cached paths). E0R makes spell icons fully client-native and removes those
+URLs entirely.
 
-- **New proof type — string-valued join.** `SpellIcon.path` is a **string-block offset**, but the
-  shipped `Envelope`/`make_join` support numeric values only. E0R adds a string-valued join observation
-  (a generalized join whose side value component is a `StringObservation`), so the icon path is
-  extracted under the same two-gate/promotion model as numeric joins.
-- **Catalog child — `coa-client-spell-icons-v1`.** An **always-required** generation child over the
-  **full-table domain** (every spell whose icon join resolves — not just the CoA projection, so future
-  closure-only spells still carry presentation metadata), keyed by `spell_id`, each row carrying
-  `spell_icon_id`, `client_path` (normalized `SpellIcon.path`), `source_asset_sha256` + `source_archive`
-  (the client BLP's bytes/archive), `asset_status ∈ {converted, source_only, missing, placeholder}`, an
-  optional `converted_ref` + `converted_sha256`, and `readiness`. Asset entries are **deduplicated** —
-  many spells share one icon.
-- **Asset packaging (machine-enforceable).** Rendered images are **not** thousands of flat generation
-  children (the publisher accepts flat filenames only); converted assets are **one hash-bound bundle
-  child** (an archive) with its own internal manifest. The contract the candidate validator enforces:
-  the catalog is always required; **if any row is `asset_status: converted` the bundle is required**,
-  and every `converted_ref` must resolve safely inside the bundle (deterministic ordering + path
-  normalization, no traversal) and match its recorded hash; if **no** rows are converted, bundle absence
-  is recorded **intentionally**; `source_only`/`missing`/`placeholder` rows must **not** carry a
-  `converted_ref`. The validator checks the bundle's **internal manifest**, not just the outer archive
-  hash, and **both** compressed bundle bytes and uncompressed entry bytes count toward the budget. E0R
-  may ship **catalog-only** (no `converted` rows) with BLP→web conversion deferred — the catalog + client
-  path + source hash are the client-native contract; the rendered pixels are optional.
-- **Guide wiring + fallback.** The guide reads the client icon catalog; **both** the remote
-  `db.ascension.gg` URL construction **and** the cached-DB spell-icon fallback are removed. When the
-  catalog entry or converted asset is unavailable, the guide renders an **honest placeholder** — it
-  **never** falls back to AscensionDB.
-- **Legacy tool — quarantine, don't amputate.** `enrich-ascensiondb-assets` also seeds Builder spells;
-  it is **quarantined** under the `legacy:ascensiondb` namespace (no canonical consumer) rather than
-  edited to stop seeding spells, so its linked-item discovery is not inadvertently broken. Item/asset
-  retirement is tracked separately (B6).
+- **New proof type — string-valued join.** `SpellIcon.path` is a **string-block offset**; the shipped
+  `Envelope`/`make_join` are numeric-only. E0R adds `make_string_join` (side component is a
+  `StringObservation`) so the icon path is extracted under the two-gate/promotion model.
+- **Asset resolver (real bytes).** An asset resolver reads the **effective client member** for each
+  `SpellIcon.path` (`Interface\\Icons\\<name>.blp` in the MPQ chain) and returns its **bytes, member,
+  archive, patch chain**. `source_asset_sha256` is the hash of the **actual BLP bytes**, never the path
+  string; `source_archive` is the exact logical archive. `missing` means the resolver found no client
+  member.
+- **Catalog child — `coa-client-spell-icons-v1`.** Always-required, **full-table domain** (every spell
+  whose icon join resolves), keyed by `spell_id`: `spell_icon_id`, `client_path` (normalized
+  `SpellIcon.path`), `source_asset_sha256` (BLP bytes) + `source_archive`, `asset_status ∈ {converted,
+  source_only, missing, placeholder}`, optional `converted_ref` + `converted_sha256`, `readiness`. Asset
+  entries are **deduplicated** by `client_path` (many spells share one icon).
+- **Coverage decision (drives whether any URL survives).** The client `SpellIcon` table maps essentially
+  every spell to a BLP, so client coverage is expected to be complete. If a **BLP→web conversion**
+  pipeline runs, converted rows carry `converted_ref` into a **single hash-bound bundle child**; the
+  catalog + bundle then fully replace AscensionDB icons and **all live URLs are removed**. If conversion
+  leaves a **gap**, a single new opt-in utility `download-spell-icons.mjs` downloads **only the missing
+  image files** from `db.ascension.gg` to **local disk** (feeding the bundle) — it is not a runtime URL
+  and not data enrichment; **no live `db.ascension.gg` URL remains in the guide either way**.
+- **Bundle contract (machine-enforceable).** Converted assets are one hash-bound archive child with its
+  own internal manifest. The candidate validator enforces: catalog always required; **if any row is
+  `converted` the bundle is required**; every `converted_ref` resolves safely in-bundle (deterministic
+  ordering + path normalization, no traversal), matches its recorded hash, and is referenced by exactly
+  one catalog entry (dedup honored); no-conversion → bundle absence recorded intentionally;
+  `source_only`/`missing`/`placeholder` rows carry **no** `converted_ref`. It validates the bundle's
+  **internal manifest**, and **both** compressed and uncompressed bytes count toward budget.
+- **Guide wiring.** `guide_assets.py`, `guide_builder.py`, and their callers read the client icon
+  catalog; `ASCENSIONDB_ICON_URL_TEMPLATE` + the `icon-assets.mjs` URL templates are **deleted**.
+  `source_only` (a verified BLP that is not itself browser-renderable) renders a **placeholder** unless a
+  converted bundle entry exists; the guide **must not** fall through to the generic `asset_root` search
+  in a way that resurrects a cached AscensionDB image. It never emits a `db.ascension.gg` URL.
 
 ### B5. Bounded consumer fail-closed interlock
 
@@ -406,23 +423,29 @@ only — no derivation, no rewire — behind an explicit validation boundary:
   tests** (a missing input propagates to null/blocked; a verified `0`/`1500`/empty-cost is preserved)
   plus a **narrow allowlist** of intentional constants — not a repository-wide search for the literals.
 
-### B6. Item/asset retirement — tracked separately
+### B6. Item/asset AscensionDB code is removed too
 
-The AscensionDB **item/asset** pipeline (`enrich-items`, `build-items`, the item-specific portion of
-`enrich-ascensiondb-assets`) is marked legacy/noncanonical with a tracked follow-up (accept
-temporarily-unavailable item enrichment, or plan client-native item/icon extraction later). It is out
-of E0R scope beyond the quarantine + tracking note, and must not keep AscensionDB inside the
-spell-mechanics authority chain.
+The AscensionDB **item/asset** pipeline (`enrich-items`, `build-items`, `enrich-ascensiondb-assets`) is
+**removed** with the rest of the integration (B1) — not quarantined. Item enrichment loses its
+AscensionDB source; **client-native item extraction is later work** and items are honestly un-enriched
+until then. The only surviving `db.ascension.gg` touch anywhere is the opt-in
+`download-spell-icons.mjs` image-only utility (B4).
 
-## The one human check-in
+## Check-ins — one agent gate, one human gate
 
-E0R has exactly **one** human check-in, placed at the evidence-adjudication boundary: **after recon
-produces its `proposed_policy_delta` — the discovered cells + evidence for all four joins (including
-`SpellIcon.path`'s layout/interpretation evidence and the resulting icon-catalog coverage),
-`power_type`'s static negative anchor, and the full topology — and before** any cell is marked
-`reviewed`, the policy is rebound, or the canonical pointer is published. Recon proposes; a human authors the reviewed,
-client-bound `coa-spell-layout-v2` policy from the proposal; only then does canonical regeneration run.
-Recon never self-approves or writes the policy.
+**Recon adjudication is agent-executable, not a human gate.** An agent (main or sub) runs
+`mechanics-recon` against the real client and authors the reviewed, client-bound `coa-spell-layout-v2`
+policy + `spell_layout.lock.json` from the frozen `proposed_policy_delta` — the four join cells +
+evidence (including `SpellIcon.path`'s layout/interpretation and the resulting icon-catalog coverage),
+`power_type`'s static negative anchor, and the full topology. Recon still **proposes** and never
+self-approves: authoring the policy is a distinct, reviewable commit driven by the delta, and canonical
+regeneration runs only against the resulting `verified`, bound policy. A field is marked
+`promotion: normalized` only when the delta uniquely proves it (ambiguous → `cell: null`, `unresolved`).
+
+**The single human check-in is the end-of-E0R acceptance review, performed on the WIP branch.** E0R is
+pushed to `m1-14-e0r` and reviewed against the [exit criteria](#exit-criteria-m114e0r) before ff-merge.
+This is the **only** push in the milestone — intermediate work is committed locally and pushed once, at
+the end, for that review.
 
 ## Fork resolutions (adopted)
 

@@ -1,6 +1,6 @@
 # M1.14E0R Correctness & Sunset Remediation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: execute **inline** (superpowers:executing-plans) with task-sized commits. Reviews are **human check-ins**, not subagent/inline reviews: a mandatory recon-adjudication gate after Task 8 (a human authors the reviewed, client-bound policy + lock — an agent cannot), and an end-of-E0R check-in after Task 16. Steps use `- [ ]`. **Do not begin code execution (Task 2+) until the design-lock (Task 1) is committed and its four invariants appear in both the design and this plan.**
+> **For agentic workers:** REQUIRED SUB-SKILL: execute **inline** (superpowers:executing-plans) with task-sized commits. The recon adjudication (Task 8) is **agent-executable** — an agent runs recon against the real client and authors the reviewed, client-bound policy + lock from the frozen delta. The **single human check-in** is the **end-of-E0R acceptance review, performed on the pushed WIP branch** (after Task 16). **Commit locally throughout; push `m1-14-e0r` exactly once, at the end, for that review** — there are no intermediate pushes. Steps use `- [ ]`. **Do not begin code execution (Task 2+) until the design-lock (Task 1) is committed.**
 
 **Goal:** Make the merged M1.14E0 evidence model enforced and non-bypassable at every boundary, and hard-cut db.ascension.gg (AscensionDB) from the canonical spell-mechanics pipeline, before M1.14E1.
 
@@ -63,7 +63,7 @@ Copied from `docs/superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-reme
 - Test: `tests/test_contracts.py`
 
 **Interfaces:**
-- Produces: `policy_ref(table, field) -> str` (JSON Pointer `/tables/<t>/fields/<f>`); `policy_ref_component(join, part) -> str` (`/joins/<j>/<part>`, `part ∈ {index, side_id, side_value}`); `resolve_policy_ref(policy_doc, ref) -> dict`; `READINESS_STATUSES`, `READINESS_REASON_CODES`, `ICON_ASSET_STATUSES` (closed `frozenset`s); `TRUST_CRITICAL_MANIFEST_KEYS` (the set `candidate_trust_sha256` covers); `CROSS_CHILD_CHECKS` (the named merge-join predicates); `BOUND_HEADER_FIELDS`, `BOUND_SOURCE_FIELDS`.
+- Produces: `policy_ref(table, field) -> str` (JSON Pointer `/tables/<t>/fields/<f>`); `policy_ref_component(join_spec, part) -> str` which resolves a join's `index`/`side_id`/`side_value` to its **underlying table-field** pointer (there is **no** synthetic `/joins/...` node); `resolve_policy_ref(policy_doc, ref) -> dict`; `READINESS_STATUSES`, `READINESS_REASON_CODES`, `ICON_ASSET_STATUSES` (closed `frozenset`s); `READINESS_INVARIANTS` (status → {value_null, blocking, set_valued_only} rules); `TRUST_CRITICAL_MANIFEST_KEYS`; `CANDIDATE_MUTABLE_KEYS` (the only keys that may change candidate→final); `CROSS_CHILD_CHECKS`; `BOUND_HEADER_FIELDS`, `BOUND_SOURCE_FIELDS`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -77,11 +77,14 @@ from coa_client_extract.contracts import (
 )
 
 
-def test_policy_ref_is_json_pointer():
+def test_policy_ref_and_component_resolve_to_table_fields():
     assert policy_ref("Spell", "power_type") == "/tables/Spell/fields/power_type"
-    assert policy_ref_component("cast_time_ms", "side_value") == "/joins/cast_time_ms/side_value"
+    jspec = {"index_field": "casting_time_index", "side_table": "SpellCastTimes", "side_value_field": "base_ms"}
+    assert policy_ref_component(jspec, "side_value") == "/tables/SpellCastTimes/fields/base_ms"
+    assert policy_ref_component(jspec, "index") == "/tables/Spell/fields/casting_time_index"
+    assert policy_ref_component(jspec, "side_id") == "/tables/SpellCastTimes/fields/id"
     with pytest.raises(ValueError):
-        policy_ref_component("cast_time_ms", "bogus")
+        policy_ref_component(jspec, "bogus")
 
 
 def test_resolve_policy_ref_walks_the_document():
@@ -122,7 +125,7 @@ from __future__ import annotations
 READINESS_STATUSES = frozenset({"available", "unavailable", "not_applicable", "ambiguous", "verified_empty"})
 READINESS_REASON_CODES = frozenset({
     "pending_e1_operand", "join_ambiguous", "unknown_symbol", "side_row_missing",
-    "index_zero", "no_static_anchor", "not_extracted",
+    "index_zero", "no_static_anchor", "not_extracted", "proven_empty",
 })
 ICON_ASSET_STATUSES = frozenset({"converted", "source_only", "missing", "placeholder"})
 
@@ -152,13 +155,27 @@ def policy_ref(table: str, field: str) -> str:
     return f"/tables/{table}/fields/{field}"
 
 
-def policy_ref_component(join: str, part: str) -> str:
-    """A JSON Pointer to a join component's policy, e.g. '/joins/cast_time_ms/index'."""
-    if part not in ("index", "side_id", "side_value"):
-        raise ValueError(f"join component {part!r} not in (index, side_id, side_value)")
-    if not join:
-        raise ValueError("policy_ref_component requires a join name")
-    return f"/joins/{join}/{part}"
+def policy_ref_component(join_spec: dict, part: str) -> str:
+    """Resolve a join component to its UNDERLYING table-field policy pointer via the join mapping — there
+    is no synthetic /joins/... policy node. index -> Spell.<index_field>; side_id -> <side_table>.id;
+    side_value -> <side_table>.<side_value_field>."""
+    if part == "index":
+        return policy_ref("Spell", join_spec["index_field"])
+    if part == "side_id":
+        return policy_ref(join_spec["side_table"], "id")
+    if part == "side_value":
+        return policy_ref(join_spec["side_table"], join_spec["side_value_field"])
+    raise ValueError(f"join component {part!r} not in (index, side_id, side_value)")
+
+
+# status -> (value must be null?, blocking?, set-valued-only?) — the readiness state machine (design B3).
+READINESS_INVARIANTS = {
+    "available": (False, False, False), "verified_empty": (False, False, True),
+    "not_applicable": (True, False, False), "unavailable": (True, True, False),
+    "ambiguous": (True, True, False),
+}
+# The ONLY manifest keys that may differ between the candidate and the final manifest.
+CANDIDATE_MUTABLE_KEYS = frozenset({"publication_state", "validation", "budget"})
 
 
 def resolve_policy_ref(policy_doc: dict, ref: str) -> dict:
@@ -310,7 +327,7 @@ def _validate_bound(bound: dict) -> dict:
     return bound
 ```
 
-Then, inside `load_spell_policy`: require `schema_version == SCHEMA` (message names `coa-spell-layout-v2`); for each table read `key_cell:int` (`0 <= key_cell < expected_field_count`) and `unique:bool` into `tables[tname]`; parse joins with the extra `promotion` field validated against `_PROMOTIONS`, and enforce that a `normalized` join's index/`id`/`side_value` fields are all `promotion == "normalized"` (else `SpellPolicyError(f"join {jname}: normalized join has a raw_only component {fname}")`); call `_validate_bound(bound)` when `bound is not None`.
+Then, inside `load_spell_policy`: require `schema_version == SCHEMA` (message names `coa-spell-layout-v2`); for each table read `key_cell:int` (`0 <= key_cell < expected_field_count`) and `unique:bool` into `tables[tname]`; parse joins with the extra `promotion` field validated against `_PROMOTIONS`, and enforce that a `normalized` join's index/`id`/`side_value` fields are all `promotion == "normalized"` (else `SpellPolicyError(f"join {jname}: normalized join has a raw_only component {fname}")`); call `_validate_bound(bound)` when `bound is not None` and additionally require `set(bound["tables"]) == set(required_tables)` and `set(bound["expected_absent"]) == set(top-level expected_absent)` (bound and policy topology must agree); validate the header field **types** (ints) and that `sha256` is 64 hex chars. Finally, **update `load_default_policy` to load `spell_layout_v2.json`** (not the hard-coded `spell_layout_v1.json` at line 205) and add a loader test that the shipped default file loads. Also fix the baseline `_v2()` fixture so its **success** case keeps every `normalized`-join component `normalized` (only the negative fixtures flip a component to `raw_only`).
 
 ```python
     # inside load_spell_policy, per-table:
@@ -762,7 +779,9 @@ def three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> 
             "ceilings": dict(ceilings), "within_budget": not breach, "breach": breach}
 ```
 
-Then integrate into `recon_spell_mechanics`: replace the ambiguous single-cell `_discover_index_cell` call with `discover_join_pair` for each of cast/duration/range/icon (using the frozen anchor set's `{spell_id, expected_value}` triples), add the `power_type` negative-anchor scan, call `verify_source_topology` for the topology section (replacing the `has_file`-only loop), and compute `budget` via `three_part_budget` from the **serialized** projection estimate + subprocess `ru_maxrss` + elapsed. The `proposed_policy_delta` now names the four discovered join index cells, the `SpellIcon.path` string cell, and the `power_type` signedness verdict. Recon still writes no policy.
+**True joined-pair discovery (both cells, not just the index).** `discover_join_pair` above takes a known `side_value_cell` for clarity, but recon must **discover the pair**: it iterates candidate `side_value_cell`s in the side table (and, for `SpellRange`, both value cells under one shared `range_index`) and, for each, runs the index scan; a `(index_cell, side_value_cell)` pair wins only when it is **jointly unique** and satisfies every anchor. `SpellIcon.path` is discovered as a **string** cell by safe string-block resolution (`try_string`) matching the anchors' expected icon names. Anchors are **state-bearing** — `{spell_id, expected_state, expected_value}` — so a legitimately **resolved-zero** side row (`state: resolved`, value `0`) is distinguished from `index_zero` (`state: not_applicable`); floats compare by expected raw bits or a stated tolerance. The `power_type` verdict emits and binds the **static tooltip evidence** for the negative anchor (the health-cost `description`), not merely an input flag.
+
+Then integrate into `recon_spell_mechanics`: replace the ambiguous single-cell `_discover_index_cell` call with this joined-pair discovery for each of cast/duration/range/icon (using the frozen state-bearing anchor set), add the `power_type` negative-anchor scan, call `verify_source_topology` for the topology section (replacing the `has_file`-only loop), and compute `budget` via `three_part_budget` from the **serialized** projection estimate + subprocess `ru_maxrss` + elapsed. The `proposed_policy_delta` names the four discovered `(index, side_value)` pairs, the `SpellIcon.path` string cell, and the `power_type` signedness verdict + its bound evidence. Recon still writes no policy.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -849,11 +868,23 @@ Expected: FAIL with `ModuleNotFoundError` (module renamed / not yet created).
 SCHEMA = "coa-client-spell-v3"
 
 
-def _compact(env_dict: dict, *, policy_ref_str: str) -> dict:
-    """A compact raw cell: retain raw + state + a policy_ref, DROP the per-row proof/evidence text
-    (Node re-derives proof/promotion from the policy via policy_ref)."""
-    return {"state": env_dict["state"], "raw_u32": env_dict.get("raw_u32"),
-            "decoded_reason": env_dict["decoded_reason"], "policy_ref": policy_ref_str}
+def _compact(obs_dict: dict, *, policy_ref_str: str) -> dict:
+    """A compact raw cell: retain enough raw to reconstruct eligibility + a policy_ref, DROP the per-row
+    proof/evidence text (Node re-derives proof/promotion from the policy via policy_ref). A string
+    observation keeps `raw_offset` + `resolved` (a string cannot be re-decoded from an offset, so Node
+    verifies equality against `resolved`); a numeric cell keeps `raw_u32`."""
+    out = {"state": obs_dict["state"], "decoded_reason": obs_dict["decoded_reason"],
+           "policy_ref": policy_ref_str}
+    if "raw_offset" in obs_dict:                       # StringObservation
+        out["raw_offset"] = obs_dict["raw_offset"]; out["resolved"] = obs_dict.get("resolved")
+    else:                                             # numeric Envelope
+        out["raw_u32"] = obs_dict.get("raw_u32")
+    return out
+
+
+def _join_spec(join) -> dict:
+    return {"index_field": join.index_field, "side_table": join.side_table,
+            "side_value_field": join.side_value_field}
 
 
 def _join_normalized(join, idx_fp, id_fp, val_fp, jo) -> bool:
@@ -881,7 +912,7 @@ def iter_spell_records(spell_view, side_views, *, policy, provenance):
             idx_fp, id_fp, val_fp = _join_fps(join, policy)
             mech[jname] = value if _join_normalized(join, idx_fp, id_fp, val_fp, jo) else None
             raw[jname] = {"state": jo_dict["state"], "decoded_reason": jo_dict["decoded_reason"],
-                          "components": {k: _compact(v, policy_ref_str=policy_ref_component(jname, k))
+                          "components": {k: _compact(v, policy_ref_str=policy_ref_component(_join_spec(join), k))
                                          for k, v in jo_dict["components"].items()}}
         yield {"schema_version": SCHEMA, "spell_id": rec.u32(sf["id"].cell), "name": _name(rec, sf, spell_view),
                "mechanics": mech, "raw": raw, "coa_attribution": _attr(rec, sf, provenance)}
@@ -998,24 +1029,60 @@ function redecode(rawU32, kind) {
   return buf.readUInt32LE(0);
 }
 
+// Recompute the policy hash with the SAME canonical algorithm as Python compute_policy_sha256
+// (json.dumps(sort_keys=True, separators=(",",":")) over the doc MINUS its own "sha256"), so Node does
+// not trust the policy's self-declared field, and compare to the committed lock.
+function canonicalSha256(doc) {
+  const { sha256: _omit, ...rest } = doc;
+  const canon = JSON.stringify(sortDeep(rest));            // sortDeep: recursively key-sorted, no spaces
+  return crypto.createHash("sha256").update(canon).digest("hex");
+}
+
 export function assertPolicyLock(policyDoc, lock) {
-  if (!lock || policyDoc.sha256 !== lock.sha256) {
-    throw new MechanicsBuildError(`policy lock mismatch: policy ${policyDoc.sha256} != lock ${lock?.sha256}`);
+  const actual = canonicalSha256(policyDoc);
+  if (!lock || actual !== lock.sha256) {
+    throw new MechanicsBuildError(`policy lock mismatch: recomputed ${actual} != lock ${lock?.sha256}`);
+  }
+  if (policyDoc.sha256 && policyDoc.sha256 !== actual) {
+    throw new MechanicsBuildError(`policy self-declared sha256 ${policyDoc.sha256} != recomputed ${actual}`);
   }
 }
 
+// Biconditional: for EVERY field observation, recompute eligibility from (policy, obs). Eligible =>
+// the normalized value MUST be present and agree; ineligible => it MUST be null. (The shipped/earlier
+// code only checked "populated => eligible", skipping nulls — half the biconditional.)
+function eligibleFromPolicy(pol, obs, row, policyDoc) {
+  if (pol.promotion !== "normalized") return false;
+  if (obs.components) {                                    // a join observation — recompute the A1 predicate
+    if (obs.state !== "resolved") return false;
+    return Object.entries(obs.components).every(([, c]) => {
+      const cp = resolvePolicyRef(policyDoc, c.policy_ref);
+      return cp.promotion === "normalized" && cp.layout === "verified" && cp.interpretation === "verified";
+    });
+  }
+  return obs.state === "present" && obs.decoded_reason === "decoded"
+         && pol.layout === "verified" && pol.interpretation === "verified";
+}
+
 export function verifyRowAgainstPolicy(row, policyDoc) {
-  for (const [field, value] of Object.entries(row.mechanics || {})) {
-    if (value === null || value === undefined) continue;      // withheld: nothing to verify
-    const obs = (row.raw || {})[field];
-    if (!obs || !obs.policy_ref) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} populated without a policy_ref`);
-    const pol = resolvePolicyRef(policyDoc, obs.policy_ref);
-    if (pol.promotion !== "normalized") throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} promoted under raw_only policy`);
+  const mech = row.mechanics || {};
+  for (const [field, obs] of Object.entries(row.raw || {})) {
+    const value = mech[field];
+    const pol = obs.components
+      ? resolvePolicyRef(policyDoc, obs.components.side_value.policy_ref)
+      : resolvePolicyRef(policyDoc, obs.policy_ref);
+    const eligible = eligibleFromPolicy(pol, obs, row, policyDoc);
+    const populated = value !== null && value !== undefined;
+    if (eligible !== populated) {
+      throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} eligible=${eligible} but populated=${populated} (biconditional violation)`);
+    }
+    if (!populated) continue;
     if (pol.kind === "string") {
-      if (value !== obs.resolved) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} != StringObservation.resolved`);
+      const resolved = obs.components ? obs.components.side_value.resolved : obs.resolved;
+      if (value !== resolved) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} != resolved`);
     } else {
-      if (obs.decoded_reason !== "decoded") throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} decoded_reason ${obs.decoded_reason}`);
-      if (redecode(obs.raw_u32, pol.kind) !== value) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} re-decode disagrees`);
+      const raw = obs.components ? obs.components.side_value.raw_u32 : obs.raw_u32;
+      if (redecode(raw, pol.kind) !== value) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} re-decode disagrees`);
     }
   }
 }
@@ -1074,31 +1141,33 @@ git add coa_client_extract/cli.py tests/test_e0r_recon_cli.py tests/test_e0r_cli
 git commit -m "M1.14E0R Task 8: mechanics-recon CLI (proposes delta for 4 joins + icon string + power_type anchor; never writes policy)"
 ```
 
-> ### ⛔ HUMAN CHECK-IN 1 — recon adjudication (mandatory, load-bearing; blocks Tasks 9+)
-> **This gate produces no code — a human authors frozen, client-bound data an agent cannot.** It needs
-> the local Ascension client + a built StormLib. If you cannot run the real client here, STOP and hand
-> this to the maintainer before Task 9.
->
-> - [ ] **Run recon against the real client:**
->   ```bash
->   COA_CLIENT_ROOT=/path/to/ascension-live/Data \
->   python -m coa_client_extract mechanics-recon --client-root "$COA_CLIENT_ROOT" --out reports/client_extract
->   ```
-> - [ ] **Review `proposed_policy_delta`** — the four join `(index, side_value)` cells + evidence, the
->   `SpellIcon.path` layout/interpretation + icon-catalog coverage, the `power_type` static negative
->   anchor verdict, and the full topology. All findings must be clean on required tables.
-> - [ ] **Author `coa_client_extract/data/spell_layout_v2.json`** — fill the four join index cells + the
->   icon path cell, set each join's `promotion` (`normalized` only when uniquely value-anchor-proven;
->   ambiguous → `cell: null`, `raw_only`), author the structured `bound` for every required table, set
->   `power_type` `promotion: normalized` **only** if the static negative anchor held (else `raw_only`),
->   and set `reviewed: true`.
-> - [ ] **Author `coa_scraper/config/spell_layout.lock.json`** — `{schema_version, client_build, sha256}`
->   pinning the reviewed policy's hash.
-> - [ ] **Re-run recon → `verified` (exit 0)**, then commit the frozen data:
->   ```bash
->   git add coa_client_extract/data/spell_layout_v2.json coa_scraper/config/spell_layout.lock.json
->   git commit -m "M1.14E0R: freeze reviewed client-bound spell-layout-v2 + policy lock from real-client recon"
->   ```
+### Task 8b: Recon adjudication (agent-executable; authors the reviewed policy from the delta)
+
+**Not a human gate.** An agent runs recon against the real client and authors the frozen, client-bound
+data from `proposed_policy_delta`. It needs the local Ascension client + a built StormLib; if neither is
+available in this environment, hand this one task to a maintainer, but it is an ordinary task otherwise.
+Recon still only *proposes* — authoring the policy is a separate reviewable commit.
+
+- [ ] **Step 1: Run recon against the real client**
+  ```bash
+  export COA_CLIENT_ROOT=/path/to/ascension-live/Data      # export first — a VAR=x prefix is not visible to "$VAR" on the same line
+  python -m coa_client_extract mechanics-recon --client-root "$COA_CLIENT_ROOT" --out reports/client_extract
+  ```
+- [ ] **Step 2: Author `coa_client_extract/data/spell_layout_v2.json` from the delta** — fill the four
+  join index cells + the icon path cell; set each join's `promotion` (`normalized` only when uniquely
+  value-anchor-proven; ambiguous → `cell: null`, `unresolved`); author the structured `bound` for every
+  required table (each table's sha256 + full 5-field header + logical member/archive + patch chain, with
+  `bound.tables` exactly equal to `required_tables`); set `power_type` `promotion: normalized` **only**
+  if the static negative anchor held (else `raw_only`); set `reviewed: true`; recompute `sha256`.
+- [ ] **Step 3: Author `coa_scraper/config/spell_layout.lock.json`** — `{schema_version, client_build,
+  sha256}` pinning the reviewed policy's recomputed hash (this replaces the Task 7 test fixture; the
+  canonical lock exists only from here on).
+- [ ] **Step 4: Re-run recon → `verified` (exit 0)** to confirm the authored policy matches its delta.
+- [ ] **Step 5: Commit (no push)**
+  ```bash
+  git add coa_client_extract/data/spell_layout_v2.json coa_scraper/config/spell_layout.lock.json
+  git commit -m "M1.14E0R Task 8b: author reviewed client-bound spell-layout-v2 + policy lock from recon delta"
+  ```
 
 ---
 
@@ -1109,8 +1178,8 @@ git commit -m "M1.14E0R Task 8: mechanics-recon CLI (proposes delta for 4 joins 
 - Test: `tests/test_publish_e0r.py`
 
 **Interfaces:**
-- Consumes: `contracts.TRUST_CRITICAL_MANIFEST_KEYS`, `contracts.CROSS_CHILD_CHECKS`, `contracts.ICON_ASSET_STATUSES`.
-- Produces: `candidate_trust_sha256(manifest) -> str`; `validate_candidate_generation(gen_dir) -> dict` (per-child + cross-child merge-join + icon-bundle enforcement; raises `ResolveError` on any failure); `finalize_and_publish(writer, *, base_manifest, binding, validation, budget) -> dict` (final manifest changes only `/validation`+`/budget`, must reproduce the candidate digest; holds a process file lock over predecessor-read → pointer replace; pointer written last); `build_manifest_v3(...)` (adds `publication_state`, `candidate_trust_sha256`).
+- Consumes: `contracts.CANDIDATE_MUTABLE_KEYS`, `contracts.CROSS_CHILD_CHECKS`, `contracts.ICON_ASSET_STATUSES`.
+- Produces: `candidate_trust_sha256(manifest) -> str` (complete manifest minus `CANDIDATE_MUTABLE_KEYS`); `validate_candidate_generation(gen_dir) -> dict` (per-child + **streaming** cross-child merge-join incl. `identity_agrees` + `compact_raw_expands_to_envelope` + bidirectional icon coverage + `sorted_unique_ids` across all three children + icon-bundle internal-manifest enforcement; raises `ResolveError` on any failure); `finalize_and_publish(writer, *, base_manifest, binding, validation, budget) -> dict` (final manifest differs from the candidate ONLY in `CANDIDATE_MUTABLE_KEYS` and must reproduce the candidate digest; process file lock over predecessor-read → pointer replace; pointer last; a `publication_state == "candidate"` manifest is never pointer-resolvable); `build_manifest_v3(...)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1124,47 +1193,54 @@ from coa_client_extract.publish import (
 )
 
 
-def _stage(root: Path):
+def _row(schema, sid, **extra):
+    return {"schema_version": schema, "spell_id": sid, "coa_attribution": {"is_coa": True},
+            "mechanics": {}, "raw": {}, **extra}
+
+
+def _stage(root: Path, *, full=None, proj=None, icons=None):
+    """Stage ALL 11 required children so per-child hashes match; inconsistencies are injected at
+    stage-time via `full`/`proj`/`icons` (NEVER by mutating a file after its hash is registered)."""
+    full = full if full is not None else [_row("coa-client-spell-v3", 1)]
+    proj = proj if proj is not None else [_row("coa-client-spell-projection-v3", 1)]
+    icons = icons if icons is not None else [{"schema_version": "coa-client-spell-icons-v1",
+                                              "spell_id": 1, "asset_status": "source_only"}]
     gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell.jsonl", [{"schema_version": "coa-client-spell-v3", "spell_id": 1,
-                 "coa_attribution": {"is_coa": True}, "mechanics": {}, "raw": {}}], schema_version="coa-client-spell-v3")
-    gw.add_jsonl("coa_client_spell_coa.jsonl", [{"schema_version": "coa-client-spell-projection-v3",
-                 "spell_id": 1, "coa_attribution": {"is_coa": True}, "mechanics": {}, "raw": {}}],
-                 schema_version="coa-client-spell-projection-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", [{"schema_version": "coa-client-spell-icons-v1",
-                 "spell_id": 1, "asset_status": "source_only"}], schema_version="coa-client-spell-icons-v1")
+    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
+    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
+    gw.add_json("coa_client_spell_projection.manifest.json", {"schema_version": "coa-client-spell-projection-manifest-v3"},
+                schema_version="coa-client-spell-projection-manifest-v3")
+    for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
+                 "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
+        gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+    gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
+                schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"}, schema_version="coa-spell-layout-v2")
+    gw.publish_candidate(base_manifest={}, binding={})
     return gw
 
 
-def test_trust_digest_excludes_validation_and_budget(tmp_path):
+def test_trust_digest_ignores_only_validation_and_budget(tmp_path):
     base = {"schema_version": "coa-client-extract-manifest-v3", "generation_id": "g", "children": {},
             "binding": {}, "outputs": {}, "unknown_symbol_inventory": {}, "predecessor_generation_id": None}
-    d1 = candidate_trust_sha256({**base, "validation": {"ok": True}, "budget": {"within_budget": True}})
-    d2 = candidate_trust_sha256({**base, "validation": {"ok": False}, "budget": {"within_budget": False}})
-    assert d1 == d2                                            # /validation + /budget don't move the digest
-    d3 = candidate_trust_sha256({**base, "binding": {"x": 1}})
-    assert d3 != d1                                            # a trust-critical field does
+    d1 = candidate_trust_sha256({**base, "publication_state": "candidate", "validation": {"ok": True}, "budget": {"a": 1}})
+    d2 = candidate_trust_sha256({**base, "publication_state": "published", "validation": {"ok": False}, "budget": {"a": 2}})
+    assert d1 == d2                                            # only publication_state/validation/budget move
+    assert candidate_trust_sha256({**base, "binding": {"x": 1}}) != d1
+    assert candidate_trust_sha256({**base, "a_new_field": 1}) != d1   # a NEW top-level field is not ignored
 
 
 def test_cross_child_rejects_is_coa_row_absent_from_projection(tmp_path):
-    gw = _stage(tmp_path)
-    # add a second is_coa full row with no projection row
-    (gw.gen_dir / "coa_client_spell.jsonl").write_text(
-        (gw.gen_dir / "coa_client_spell.jsonl").read_text() +
-        json.dumps({"schema_version": "coa-client-spell-v3", "spell_id": 2,
-                    "coa_attribution": {"is_coa": True}, "mechanics": {}, "raw": {}}) + "\n")
-    gw.publish_candidate(base_manifest={}, binding={})
+    gw = _stage(tmp_path, full=[_row("coa-client-spell-v3", 1), _row("coa-client-spell-v3", 2)],
+                proj=[_row("coa-client-spell-projection-v3", 1)])   # spell 2 is_coa but not projected
     with pytest.raises(ResolveError, match="projection_is_coa_subset"):
         validate_candidate_generation(gw.gen_dir)
 
 
 def test_icon_bundle_required_when_any_converted(tmp_path):
-    gw = _stage(tmp_path)
-    (gw.gen_dir / "coa_client_spell_icons.jsonl").write_text(
-        json.dumps({"schema_version": "coa-client-spell-icons-v1", "spell_id": 1,
-                    "asset_status": "converted", "converted_ref": "icons.tar#a.png"}) + "\n")
-    gw.publish_candidate(base_manifest={}, binding={})
+    gw = _stage(tmp_path, icons=[{"schema_version": "coa-client-spell-icons-v1", "spell_id": 1,
+                                  "asset_status": "converted", "converted_ref": "icons.tar#a.png"}])
     with pytest.raises(ResolveError, match="icon bundle required"):
         validate_candidate_generation(gw.gen_dir)
 ```
@@ -1179,7 +1255,7 @@ Expected: FAIL with `ImportError: cannot import name 'candidate_trust_sha256'`.
 ```python
 # coa_client_extract/publish.py  (append / integrate)
 import fcntl
-from .contracts import TRUST_CRITICAL_MANIFEST_KEYS, ICON_ASSET_STATUSES
+from .contracts import CANDIDATE_MUTABLE_KEYS, ICON_ASSET_STATUSES
 
 REQUIRED_CHILDREN = ("coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
                      "coa_client_spell_projection.manifest.json", "coa_client_spell_icons.jsonl",
@@ -1189,7 +1265,11 @@ REQUIRED_CHILDREN = ("coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
 
 
 def candidate_trust_sha256(manifest: dict) -> str:
-    trust = {k: manifest[k] for k in sorted(TRUST_CRITICAL_MANIFEST_KEYS) if k in manifest}
+    """Digest the COMPLETE manifest minus ONLY the explicitly-mutable keys (publication_state,
+    validation, budget) and the digest field itself — a strict complete view, so an unknown/new
+    top-level field is never silently ignored, and only /validation + /budget may move candidate->final."""
+    trust = {k: v for k, v in manifest.items()
+             if k not in CANDIDATE_MUTABLE_KEYS and k != "candidate_trust_sha256"}
     return _sha256(json.dumps(trust, sort_keys=True, ensure_ascii=False).encode("utf-8"))
 
 
@@ -1296,52 +1376,86 @@ git commit -m "M1.14E0R Task 10: streaming regenerate + shared hard hold + Node 
 
 ---
 
-## Task 11: AscensionDB hard-cut from canonical mechanics + negative-dependency gate
+## Task 11: Remove AscensionDB integration entirely + network-trap negative gate
 
 **Files:**
-- Modify: `coa_scraper/scripts/lib/mechanics-reconcile.mjs`, `build-mechanics-artifacts.mjs`, `coa_scraper/package.json`, root `package.json`
-- Create: `coa_scraper/scripts/lib/jsonl.mjs`
+- Delete: `coa_scraper/scripts/enrich-ascensiondb.mjs`, `enrich-ascensiondb-assets.mjs`, `enrich-linked-items.mjs`, `apply-db-enrichment.mjs`, and the AscensionDB portions of `enrich-ascensiondb.mjs`'s helpers.
+- Modify: `coa_scraper/scripts/lib/mechanics-reconcile.mjs`, `build-mechanics-artifacts.mjs`, `coa_meta/guide_tooltips.py` (drop `DB_HOST`/`db.ascension.gg`), `coa_scraper/package.json`, root `package.json`
+- Create: `coa_scraper/scripts/lib/jsonl.mjs` (generic `readJsonl`, off `ascensiondb.mjs`); `coa_scraper/scripts/download-spell-icons.mjs` (opt-in, image-download-only utility — the *only* surviving `db.ascension.gg` touch, writing local files, no runtime URLs)
 - Test: `coa_scraper/tests/no-ascensiondb.test.mjs`
 
 **Interfaces:**
-- Produces: canonical `TIERS = ["client_dbc", "verified_builder", "inferred"]` (no `ascension_db`); `buildCanonicalMechanics({ entries, spellRows, projection })` — a signature with **no** `dbRows` parameter; `readJsonl` re-exported from `jsonl.mjs`; `pipeline:m1.9` renamed `legacy:ascensiondb`.
+- Produces: `TIERS = ["client_dbc", "verified_builder", "inferred"]` (no `ascension_db`); `buildCanonicalMechanics({ entries, spellRows, projection })` — **no** `dbRows` parameter; `readJsonl` in `jsonl.mjs`. The `enrich-db`/`apply-db-enrichment`/`enrich-items`/`build-items`/`pipeline:m1.9` scripts are **removed** from both `package.json`s (not renamed); a `download-spell-icons` script is added.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test (network trap + provenance inspection)**
 
 ```javascript
 // coa_scraper/tests/no-ascensiondb.test.mjs
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
 import { TIERS } from "../scripts/lib/mechanics-reconcile.mjs";
+import { buildCanonicalMechanics } from "../scripts/build-mechanics-artifacts.mjs";
 
 test("ascension_db is not a canonical reconciliation tier", () => {
   assert.ok(!TIERS.includes("ascension_db"));
 });
 
-test("canonical build script passes no --db-spells and no db.ascension.gg", () => {
-  const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url)));
-  assert.ok(!pkg.scripts["build-mechanics"].includes("--db-spells"));
-  assert.ok(pkg.scripts["build-mechanics"].includes("--client-extract-pointer"));
-  assert.ok(!("pipeline:m1.9" in pkg.scripts) || pkg.scripts["pipeline:m1.9"] === undefined);
-  assert.ok("legacy:ascensiondb" in pkg.scripts);
+test("no canonical AscensionDB command survives in either package.json", () => {
+  for (const url of ["../package.json", "../../package.json"]) {
+    const pkg = JSON.parse(fs.readFileSync(new URL(url, import.meta.url)));
+    const joined = JSON.stringify(pkg.scripts);
+    assert.ok(!/--db-spells|enrich-db|apply-db-enrichment|pipeline:m1\.9/.test(joined));
+  }
+  const scraper = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url)));
+  assert.ok(scraper.scripts["build-mechanics"].includes("--client-extract-pointer"));
 });
 
-test("canonical build fn signature cannot accept db rows", async () => {
-  const mod = await import("../scripts/build-mechanics-artifacts.mjs");
-  assert.ok(!/dbRows|db-spells/.test(mod.buildCanonicalMechanics.toString()));
+test("canonical build makes NO network request and emits no ascension_db provenance", () => {
+  const trap = () => { throw new Error("network access is forbidden in a canonical build"); };
+  const origHttp = http.request, origHttps = https.request;
+  http.request = trap; https.request = trap;                       // network trap
+  try {
+    const rows = buildCanonicalMechanics({ entries: [{ spell_id: 1, name: "X" }],
+      spellRows: [], projection: [{ spell_id: 1, name: "X", mechanics: {}, raw: {} }] });
+    const blob = JSON.stringify(rows);
+    assert.ok(!/ascension_db|db\.ascension\.gg/.test(blob));
+    assert.ok(!rows.some((r) => Object.values(r.field_provenance || {}).some(
+      (p) => p.selected_tier === "ascension_db")));
+  } finally { http.request = origHttp; https.request = origHttps; }
 });
 ```
 
-- [ ] **Step 2–4:** red → implement (drop `ascension_db` from `TIERS`; move `readJsonl` to `jsonl.mjs` and re-point imports; add `buildCanonicalMechanics` with no db parameter + keep a `buildLegacyMechanics` wrapper for the fallback; edit `build-mechanics` to `--client-extract-pointer` + no `--db-spells` in both `package.json`s; rename `pipeline:m1.9` → `legacy:ascensiondb`) → green (`node --test coa_scraper/tests/no-ascensiondb.test.mjs`; `npm run build-mechanics` runs pointer-only).
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `node --test coa_scraper/tests/no-ascensiondb.test.mjs`
+Expected: FAIL — `ascension_db` is still in `TIERS`, the scripts still exist, and `buildCanonicalMechanics` is not exported.
+
+- [ ] **Step 3: Remove the integration**
+
+- Drop `ascension_db` from `TIERS` in `mechanics-reconcile.mjs`; delete the `dbIdentityReference`/`applyDbIdentityGate`/DB-only-field code paths.
+- Add `buildCanonicalMechanics({ entries, spellRows, projection })` (no `dbRows`); delete the `--db-spells` flag and the `--projection` legacy path from `build-mechanics-artifacts.mjs` (pointer-only).
+- Create `jsonl.mjs` with `readJsonl` and re-point `build-mechanics-artifacts.mjs`'s import off `ascensiondb.mjs`.
+- `git rm` `enrich-ascensiondb.mjs`, `enrich-ascensiondb-assets.mjs`, `enrich-linked-items.mjs`, `apply-db-enrichment.mjs`; remove `enrich-db`/`apply-db-enrichment`/`enrich-items`/`build-items`/`pipeline:m1.9`/`pipeline:m1.8`'s DB steps from both `package.json`s.
+- Remove `DB_HOST`/`db.ascension.gg` from `guide_tooltips.py`.
+- Add `download-spell-icons.mjs` — an opt-in CLI that, given a list of missing icon slugs, downloads **only** the image files to a local directory (writes files, prints a summary; never invoked by a canonical build).
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `node --test coa_scraper/tests/no-ascensiondb.test.mjs`; `npm run build-mechanics` (pointer-only, green)
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add coa_scraper/scripts/lib/mechanics-reconcile.mjs coa_scraper/scripts/lib/jsonl.mjs \
-        coa_scraper/scripts/build-mechanics-artifacts.mjs coa_scraper/package.json package.json \
-        coa_scraper/tests/no-ascensiondb.test.mjs
-git commit -m "M1.14E0R Task 11: hard-cut AscensionDB from canonical mechanics + negative-dependency gate"
+        coa_scraper/scripts/build-mechanics-artifacts.mjs coa_scraper/scripts/download-spell-icons.mjs \
+        coa_meta/guide_tooltips.py coa_scraper/package.json package.json coa_scraper/tests/no-ascensiondb.test.mjs
+git rm coa_scraper/scripts/enrich-ascensiondb.mjs coa_scraper/scripts/enrich-ascensiondb-assets.mjs \
+       coa_scraper/scripts/enrich-linked-items.mjs coa_scraper/scripts/apply-db-enrichment.mjs
+git commit -m "M1.14E0R Task 11: remove AscensionDB integration entirely; network-trap negative gate; image-only download utility"
 ```
 
 ---
@@ -1377,8 +1491,15 @@ def test_unknown_costs_is_none_not_empty_dict():
 
 def test_verified_empty_costs_survives():
     r = mechanic_from_raw(_rec(costs={}, field_readiness={"costs": {"status": "verified_empty",
-                          "reason_code": "not_extracted"}}))
+                          "reason_code": "proven_empty"}}))
     assert r.costs == {} and r.field_readiness["costs"]["status"] == "verified_empty"
+
+
+def test_contradictory_readiness_is_rejected():
+    # verified_empty must carry an empty value + a "proven" reason; `not_extracted` contradicts it.
+    with pytest.raises(MechanicsLoadError, match="readiness invariant"):
+        mechanic_from_raw(_rec(costs=None, field_readiness={"costs": {"status": "verified_empty",
+                          "reason_code": "not_extracted"}}))
 
 
 def test_v1_is_rejected():
@@ -1401,11 +1522,11 @@ git commit -m "M1.14E0R Task 12: coa-mechanics-v2 (nullable costs + field readin
 ## Task 13: Consumer fail-closed interlock (behavioral)
 
 **Files:**
-- Modify: `coa_meta/action_catalog.py`, `coa_meta/simulation.py`, `coa_meta/reporting.py`
+- Modify: `coa_meta/action_catalog.py` (nullable fields + `quantitative_readiness` + null-safe serialization), `coa_meta/rotation_simulation.py` (**`simulate_apl` lives here**, still `gcd_ms or 1500`), `coa_meta/combat/state.py` + `coa_meta/combat/engine.py` (`CombatAction` defaults), `coa_meta/reporting.py` (label the heuristic path)
 - Test: `tests/test_action_catalog_interlock.py`, `tests/test_simulation_interlock.py`
 
 **Interfaces:**
-- Produces: `CatalogAction.cooldown_ms: int | None`, `gcd_ms: int | None`, `costs: dict | None`; `ActionCatalog.quantitative_readiness -> {ready: bool, blocking: list[{action_key, field, reason_code}]}`; `simulate_apl`/combat conversion raise `QuantitativeScopeUnready` when `not ready`; `heuristic_combat_action(node, category)` is the **only** place invented `1500`/`45_000`/estimated costs live (default-off; tagged `source: "heuristic"`).
+- Produces: `CatalogAction.cooldown_ms: int | None`, `gcd_ms: int | None`, `costs: dict | None`; `ActionCatalog.quantitative_readiness -> {ready: bool, blocking: list[{action_key, field, status, reason_code}]}` propagated from `MechanicRecord.field_readiness` (not inferred from nullness); `simulate_apl` (in `rotation_simulation.py`) and combat conversion (`combat/engine.py`) raise `QuantitativeScopeUnready` when `not ready`; `heuristic_combat_action(node, category)` is the **only** place invented `1500`/`45_000`/estimated costs live (default-off; tagged `source: "heuristic"`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1465,8 +1586,9 @@ def _catalog_action_from_mechanic(node, mechanic, ...):
 ```
 
 ```python
-# ActionCatalog gains readiness (design B5):
+# ActionCatalog gains readiness (design B5) — driven by MechanicRecord.field_readiness, not nullness.
 _LOAD_BEARING = ("gcd_ms", "cooldown_ms", "costs")
+_BLOCKING_STATUSES = {"unavailable", "ambiguous"}     # per contracts.READINESS_INVARIANTS
 
 
 @property
@@ -1474,8 +1596,11 @@ def quantitative_readiness(self) -> dict:
     blocking = []
     for a in self.actions:
         for field in _LOAD_BEARING:
-            if getattr(a, field) is None:
-                blocking.append({"action_key": a.action_key, "field": field, "reason_code": "pending_e1_operand"})
+            fr = (a.field_readiness or {}).get(field, {})
+            status = fr.get("status") or ("available" if getattr(a, field) is not None else "unavailable")
+            if status in _BLOCKING_STATUSES:
+                blocking.append({"action_key": a.action_key, "field": field, "status": status,
+                                 "reason_code": fr.get("reason_code", "pending_e1_operand")})
     return {"ready": not blocking, "blocking": blocking}
 
 
@@ -1485,7 +1610,7 @@ def assert_quantitative_ready(self) -> None:
         raise QuantitativeScopeUnready(f"{len(rd['blocking'])} action(s) lack load-bearing data")
 ```
 
-In `simulation.py`, move the invented `gcd_ms=1500`/`cooldown_ms=45_000`/`_estimated_costs` into `heuristic_combat_action(node, category)` (tagged `source="heuristic"`), default the simulator off unless an explicit `mode="heuristic"` is passed, and call `catalog.assert_quantitative_ready()` before a quantitative loop. `reporting.py` labels the tooltip-inference path `heuristic`.
+`CatalogAction` carries `field_readiness: dict | None` (from `MechanicRecord.field_readiness`), and its `to_dict` serializes nullable `cooldown_ms`/`gcd_ms`/`costs` without coercion. In **`rotation_simulation.py`** (where `simulate_apl` lives — it still uses `gcd_ms or 1500`) and **`combat/engine.py`**, move the invented `gcd_ms=1500`/`cooldown_ms=45_000`/`_estimated_costs` into `heuristic_combat_action(node, category)` in `combat/state.py` (tagged `source="heuristic"`), keep it **off** unless an explicit `mode="heuristic"` is passed, and call `catalog.assert_quantitative_ready()` before any quantitative loop. `reporting.py` labels the tooltip-inference path `heuristic` and surfaces an explicit blocked result in canonical mode.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1505,11 +1630,11 @@ git commit -m "M1.14E0R Task 13: consumer fail-closed interlock (nullable timers
 ## Task 14: Client-native spell icons in the guide
 
 **Files:**
-- Modify: `coa_meta/guide_assets.py`, `coa_scraper/scripts/lib/icon-assets.mjs`
+- Modify: `coa_meta/guide_assets.py`, `coa_meta/guide_builder.py` (and its callers that pass DB icon names/cached paths), `coa_scraper/scripts/lib/icon-assets.mjs`
 - Test: `tests/test_guide_icons.py`, `coa_scraper/tests/icon-assets-e0r.test.mjs`
 
 **Interfaces:**
-- Produces: `GuideAssetCatalog(icon_catalog=<coa-client-spell-icons-v1 map>)` — resolves icons from the client catalog; when a catalog entry/asset is absent it returns a `source="placeholder"` asset, **never** an `ascension_db_remote` one. The `ASCENSIONDB_ICON_URL_TEMPLATE` and its use are deleted.
+- Produces: `GuideAssetCatalog(icon_catalog=<coa-client-spell-icons-v1 map>)` — resolves icons **only** from the client catalog: a `converted` row (with a bundle asset) renders it; a `source_only`/`missing` row (a verified BLP that is not itself browser-renderable, or no client member) renders a `source="placeholder"`; it **never** returns an `ascension_db_remote` asset and **never** falls through to a generic `asset_root` search that could resurrect a cached AscensionDB image. `ASCENSIONDB_ICON_URL_TEMPLATE` and the three `icon-assets.mjs` URL templates are deleted. (The BLP-bytes asset resolver that populates the catalog lives in `spell_icons.py`, Task 6.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1530,11 +1655,17 @@ def test_absent_client_icon_is_placeholder_not_remote():
     assert asset.href is None or not str(asset.href).startswith("http")
 
 
-def test_client_catalog_icon_is_used():
-    cat = GuideAssetCatalog(icon_catalog={133: {"client_path": "Interface/Icons/Spell_Fire_Fireball.blp",
-                                                 "asset_status": "source_only"}})
-    asset = cat.icon_for(icon=None, label="Fireball", spell_id=133)
-    assert asset.source in ("client_icon", "asset_root") and "db.ascension.gg" not in str(asset.href or "")
+def test_source_only_renders_placeholder_and_converted_renders_asset():
+    # source_only (BLP verified but not browser-renderable) -> placeholder, NOT an asset_root fallthrough
+    src = GuideAssetCatalog(icon_catalog={133: {"client_path": "Interface/Icons/Spell_Fire_Fireball.blp",
+                                                "asset_status": "source_only"}})
+    a1 = src.icon_for(icon=None, label="Fireball", spell_id=133)
+    assert a1.source == "placeholder" and "db.ascension.gg" not in str(a1.href or "")
+    # converted -> the bundle asset is rendered from the client catalog
+    conv = GuideAssetCatalog(icon_catalog={133: {"client_path": "Interface/Icons/Spell_Fire_Fireball.blp",
+                                                 "asset_status": "converted", "converted_ref": "icons.tar#fireball.png"}})
+    a2 = conv.icon_for(icon=None, label="Fireball", spell_id=133)
+    assert a2.source == "client_icon" and "db.ascension.gg" not in str(a2.href or "")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1544,7 +1675,8 @@ Expected: FAIL — `ASCENSIONDB_ICON_URL_TEMPLATE` still exists and `icon_for` h
 
 - [ ] **Step 3: Implement client-native icons**
 
-- Delete `ASCENSIONDB_ICON_URL_TEMPLATE` and the `ascension_db_remote` branch in `guide_assets.py`; add an `icon_catalog` constructor arg; in `icon_for(..., spell_id=None)`, look up the client catalog by `spell_id` first (→ `source="client_icon"`, `href` from a client asset when present), else the existing `asset_root` search, else a `source="placeholder"` asset. Never construct a `db.ascension.gg` URL.
+- Delete `ASCENSIONDB_ICON_URL_TEMPLATE` and the `ascension_db_remote` branch in `guide_assets.py`; add an `icon_catalog` constructor arg; in `icon_for(..., spell_id=None)`, look up the client catalog by `spell_id`: a `converted` row → `source="client_icon"` (href = the bundle asset); a `source_only`/`missing`/absent row → `source="placeholder"`. **Do not** fall through to the generic `asset_root` search (which could resurrect a cached AscensionDB image), and never construct a `db.ascension.gg` URL.
+- Update `guide_builder.py` and its callers to pass `spell_id` + the client `icon_catalog` instead of DB icon names/cached paths.
 - In `icon-assets.mjs`, delete the three `https://db.ascension.gg/...` URL templates and any code that emits them; a missing asset yields a placeholder record.
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1655,14 +1787,18 @@ git add .github/workflows/ci.yml docs/ tests/test_e0r_acceptance_summary.py \
 git commit -m "M1.14E0R Task 16: CI + schema/decision docs + recorded full real-client regenerate within budget"
 ```
 
-> ### ⛔ HUMAN CHECK-IN 2 — end of E0R
-> Human review of the whole milestone against the [design](../specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md) **Exit criteria**: canonical build pointer-only + AscensionDB-free; full-topology hard hold in recon **and** regenerate; `raw_only` never populates normalized + Node independent verification; transactional candidate→pointer with the trust digest + cross-child; streaming within the three-part budget with a recorded real-client regenerate; missing ≠ default with the consumer interlock; client-native icons; clean tree; CI green. On approval, E0R is ready to ff-merge and M1.14E1 planning begins against the realized interfaces.
+> ### ⛔ HUMAN CHECK-IN — end of E0R (the single human gate; performed on the pushed WIP branch)
+> Now — and **only** now — push the branch for review:
+> ```bash
+> git push -u origin m1-14-e0r     # the one and only push in the milestone
+> ```
+> The human reviews `m1-14-e0r` on the remote against the [design](../specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md) **Exit criteria**: canonical build pointer-only + fully AscensionDB-free (integration deleted, only the opt-in image-download utility remains); full-topology hard hold in recon **and** regenerate; `raw_only` never populates normalized + Node independent (biconditional) verification; transactional candidate→pointer with the trust digest + streaming cross-child; streaming within the three-part budget with a recorded real-client regenerate; missing ≠ default with the consumer interlock; client-native icons; clean tree; CI green. On approval, E0R ff-merges and M1.14E1 planning begins against the realized interfaces.
 
 ---
 
 ## Self-Review
 
-**Spec coverage:** design-lock invariants (T1, also the plan's Global Constraints); A1 promotion + string join (T2, T3, T6); A2 shared topology + structured bound (T2, T4, and the hard hold in T10); A3 Node boundary numeric/string via `policy_ref` + lock (T7, wired in T10); A4 streaming compact-raw + hoisted provenance + three-part budget (T5 budget, T6 producer, T10 regenerate); A5 registry + candidate/final trust digest + cross-child + icon bundle + process lock + manifest-not-a-child (T9, T10); A6 `power_type` static negative anchor (T5, adjudicated at the T8 gate); A7 hygiene (T15); B1/B2 AscensionDB hard-cut + negative-dependency gate (T11); B3 `coa-mechanics-v2` (T12); B4 icons (T6 catalog, T14 guide); B5 interlock (T13); B6 item/asset tracked (T11 quarantine + T16 docs); CI + docs + real-client regenerate (T16). Two human check-ins (recon adjudication after T8; end after T16).
+**Spec coverage:** design-lock invariants (T1, also the plan's Global Constraints); A1 promotion + string join (T2, T3, T6); A2 shared topology + structured bound (T2, T4, and the hard hold in T10); A3 Node boundary numeric/string via `policy_ref` + lock (T7, wired in T10); A4 streaming compact-raw + hoisted provenance + three-part budget (T5 budget, T6 producer, T10 regenerate); A5 registry + candidate/final trust digest + cross-child + icon bundle + process lock + manifest-not-a-child (T9, T10); A6 `power_type` static negative anchor (T5, authored at the agent-run T8b adjudication); A7 hygiene (T15); B1/B2 total AscensionDB removal + network-trap negative gate + download-only image utility (T11); B3 `coa-mechanics-v2` (T12); B4 icons (T6 catalog + asset resolver, T14 guide/guide_builder); B5 interlock (T13); B6 item/asset AscensionDB code removed (T11); CI + docs + real-client regenerate (T16). One human check-in (the end-of-E0R review on the pushed branch); the recon adjudication (T8b) is agent-executable.
 
 **Placeholder scan:** none — `spell_layout_v2.json` join cells and `spell_layout.lock.json` are honestly authored at the T8 recon gate (a human step, code-gated), not stubbed; every code task carries full test + implementation code and a named commit; the two prose-summarized steps (T8 Step 2–4, T10/T11/T12/T15/T16 Step 2–4) each name the exact functions/files and the green command.
 
