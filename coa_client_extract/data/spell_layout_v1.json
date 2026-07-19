@@ -1,0 +1,288 @@
+{
+  "schema_version": "coa-spell-layout-v1",
+  "reviewed": true,
+  "provenance_note": "Scalar substrate reviewed and bound to the real Ascension client build 3.3.5a+patch-CZZ. Verified normalized fields (id, name, power_type, school_mask) derive solely from Spell.dbc; description is raw-only (reference). All side-table joins (cast/duration/range/icon) are deliberately un-adjudicated in E0: a plain FK-validity scan is ambiguous, so they ship raw_only/unproven with null index cells pending value-anchor disambiguation in M1.14E1. bound therefore byte-binds Spell.dbc (the only source of promoted values); side tables are existence-bound via required_tables.",
+  "bound": {
+    "client_build": "3.3.5a+patch-CZZ",
+    "source_dbc_sha256": {
+      "Spell": "6823bd9ba51bf7a351af751d7a79fce3fe199bd2b2ef9343b56dfb65151a7abb"
+    }
+  },
+  "required_tables": [
+    "Spell",
+    "SpellCastTimes",
+    "SpellDuration",
+    "SpellRange",
+    "SpellIcon"
+  ],
+  "expected_absent": [
+    "SpellEffect",
+    "SpellCooldowns"
+  ],
+  "enum_policy": {
+    "power_types": [
+      -2,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "school_bits": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
+  },
+  "anchor_set": {
+    "spells": [
+      {
+        "id": 133,
+        "name": "Fireball",
+        "power_type": 0,
+        "school_mask": 4
+      },
+      {
+        "id": 116,
+        "name": "Frostbolt",
+        "power_type": 0,
+        "school_mask": 16
+      },
+      {
+        "id": 585,
+        "name": "Smite",
+        "power_type": 0,
+        "school_mask": 2
+      },
+      {
+        "id": 78,
+        "name": "Heroic Strike",
+        "power_type": 1,
+        "school_mask": 1
+      },
+      {
+        "id": 686,
+        "name": "Shadow Bolt",
+        "power_type": 0,
+        "school_mask": 32
+      },
+      {
+        "id": 5176,
+        "name": "Wrath",
+        "power_type": 0,
+        "school_mask": 8
+      },
+      {
+        "id": 1449,
+        "name": "Arcane Explosion",
+        "power_type": 0,
+        "school_mask": 64
+      },
+      {
+        "id": 2098,
+        "name": "Eviscerate",
+        "power_type": 3,
+        "school_mask": 1
+      }
+    ],
+    "sha256": "88b91c24b1df7e5ea2b87db07a2e9218ca7e0383de255892b742e1f99d36e20e"
+  },
+  "tables": {
+    "Spell": {
+      "expected_field_count": 234,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "spell id; M1.14A/B id anchor, unique across 208431 rows."
+        },
+        "name": {
+          "cell": 136,
+          "kind": "string",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "localized enUS name @136; normalized-exact match on 8 stock spells (Fireball 133, Frostbolt 116, Smite 585, Heroic Strike 78, Shadow Bolt 686, Wrath 5176, Arcane Explosion 1449, Eviscerate 2098) vs real client 3.3.5a+patch-CZZ."
+        },
+        "power_type": {
+          "cell": 41,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "confirmed @41 via 8 anchors incl. Heroic Strike(rage=1) and Eviscerate(energy=3); stock 3.3.5a @110 is wrong on this client."
+        },
+        "school_mask": {
+          "cell": 225,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "confirmed @225 via 7 single-school anchors (Physical=1,Holy=2,Fire=4,Nature=8,Frost=16,Shadow=32,Arcane=64); stock 3.3.5a @139 is wrong on this client."
+        },
+        "description": {
+          "cell": 170,
+          "kind": "string",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "tooltip text @170 confirmed on anchors (Fireball/Smite/etc.); tooltip macros ($s1) are unresolved templates, so interpretation is reference, not verified."
+        },
+        "casting_time_index": {
+          "cell": null,
+          "kind": "uint32",
+          "layout": "unproven",
+          "interpretation": "unproven",
+          "promotion": "raw_only",
+          "evidence": "recon-pending: FK column not uniquely resolvable by validity scan (>25 candidate columns fall in the side-table id range); awaits value-anchor joined-pair disambiguation (M1.14E1)."
+        },
+        "duration_index": {
+          "cell": null,
+          "kind": "uint32",
+          "layout": "unproven",
+          "interpretation": "unproven",
+          "promotion": "raw_only",
+          "evidence": "recon-pending: FK column not uniquely resolvable by validity scan (>25 candidate columns fall in the side-table id range); awaits value-anchor joined-pair disambiguation (M1.14E1)."
+        },
+        "range_index": {
+          "cell": null,
+          "kind": "uint32",
+          "layout": "unproven",
+          "interpretation": "unproven",
+          "promotion": "raw_only",
+          "evidence": "recon-pending: FK column not uniquely resolvable by validity scan (>25 candidate columns fall in the side-table id range); awaits value-anchor joined-pair disambiguation (M1.14E1)."
+        },
+        "spell_icon_id": {
+          "cell": null,
+          "kind": "uint32",
+          "layout": "unproven",
+          "interpretation": "unproven",
+          "promotion": "raw_only",
+          "evidence": "FK into SpellIcon; @133 is the strongest single candidate (694 distinct values) but not uniquely provable by FK-validity alone; awaits joined-pair disambiguation (M1.14E1)."
+        }
+      }
+    },
+    "SpellCastTimes": {
+      "expected_field_count": 4,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "WDBC row id, column 0."
+        },
+        "base_ms": {
+          "cell": 1,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "base cast time in ms @1 (sample: id2=250, id3=500, id4=1000, id5=2000). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+        }
+      }
+    },
+    "SpellDuration": {
+      "expected_field_count": 4,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "WDBC row id, column 0."
+        },
+        "base_ms": {
+          "cell": 1,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "base duration in ms @1. side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+        }
+      }
+    },
+    "SpellRange": {
+      "expected_field_count": 40,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "WDBC row id, column 0."
+        },
+        "min_yd": {
+          "cell": 1,
+          "kind": "float",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "min range (yards) @1 (sample rows show 0 for the min-hostile column). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+        },
+        "max_yd": {
+          "cell": 3,
+          "kind": "float",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "max range (yards) @3 (sample: id2=5, id3=20, id4=30). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+        }
+      }
+    },
+    "SpellIcon": {
+      "expected_field_count": 2,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "WDBC row id (icon id), column 0."
+        }
+      }
+    }
+  },
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    },
+    "duration_ms": {
+      "index_field": "duration_index",
+      "side_table": "SpellDuration",
+      "side_value_field": "base_ms"
+    },
+    "range_min_yd": {
+      "index_field": "range_index",
+      "side_table": "SpellRange",
+      "side_value_field": "min_yd"
+    },
+    "range_max_yd": {
+      "index_field": "range_index",
+      "side_table": "SpellRange",
+      "side_value_field": "max_yd"
+    },
+    "spell_icon_id": {
+      "index_field": "spell_icon_id",
+      "side_table": "SpellIcon",
+      "side_value_field": "id"
+    }
+  },
+  "sha256": "0773df6ca7b7b28e0e28362836bce1c326c767158f276a35d0f9b4584b64b73d"
+}
