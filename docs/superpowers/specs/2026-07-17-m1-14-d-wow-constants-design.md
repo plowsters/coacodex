@@ -204,8 +204,12 @@ mechanics/effects, not constants).
 
 - `rating_enum` — a **pinned, versioned** `CombatRating` ID→name map (`0` weapon-skill … `24`
   armor-penetration), with supported IDs distinguished from unused storage slots.
-- `power_type` — the int→string map, **reused from M1.14C** (`coa-mechanics-v1`/`client-spell-schema.md`)
-  rather than re-invented, so the two artifacts agree.
+- `power_type` — the int→string map, sourced from the **shared, versioned power-type enum**
+  (`coa_client_extract/data/power_type_enum_v1.json`, version `m1.14c-power-v1`) rather than re-invented,
+  so every consumer agrees on one authority. It is **not** tied to any `coa-mechanics` artifact version:
+  M1.14E0R introduces `coa-mechanics-v2` and may withhold `power_type` normalization entirely (absent a
+  static negative anchor — see the [E0R design](2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md)),
+  so D depends only on the shared enum's ID→name mapping, which is independent of that decision.
 
 Both are validated in recon against observed values (observed-but-undefined → failure; the M1.14C rule)
 and carry a version string that the manifest binds.
