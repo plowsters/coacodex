@@ -644,9 +644,15 @@ def mechanics_recon_command(client_root: Path, out_dir: Path, *, backend: Archiv
     plan = discover_plan(client_root)
     policy = spell_policy or load_default_policy()
     root, attach = plan.open_chain
+    # E0R.1: the join value-anchors + the static power_type negative anchor are MANDATORY recon inputs.
+    # They live in the reviewed anchor_set (authored in T1.2/T1.3); absent them the join/negative probes
+    # cannot run, so recon cannot reach `verified` (the state machine records the unprobed joins).
+    join_value_anchors = policy.anchor_set.get("joins")
+    power_type_anchors = policy.anchor_set.get("power_type_static")
     report = recon_spell_mechanics(
         backend, root, attach, spell_policy=policy, anchors=policy.anchors, budget=DEFAULT_BUDGET,
-        extractor_commit=_extractor_commit(), client_build=_client_build(plan))
+        extractor_commit=_extractor_commit(), client_build=_client_build(plan),
+        join_value_anchors=join_value_anchors, power_type_anchors=power_type_anchors)
     write_json(report, Path(out_dir) / "coa_spell_mechanics_recon.json")
     return report
 

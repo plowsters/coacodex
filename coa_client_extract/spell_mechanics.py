@@ -139,6 +139,35 @@ def discover_power_type_signedness(view, id_to_rec, *, cell, anchors) -> bool:
     return True
 
 
+def _recon_status(*, blocking, bound_mismatch, layout_proof, reviewed, required_joins, join_pairs,
+                  authored_join_cells, power_type_interpretation, power_type_signed) -> str:
+    """The E0R.1 recon lifecycle (self-consistent). `verified` requires: no blocking finding; a reviewed
+    policy whose structured bound matches; every scalar anchor at its policy cell; **every** required join
+    probed and either uniquely discovered AND adopted at the authored cell, or ambiguous (recorded with
+    evidence); and — ONLY if the policy claims a verified `power_type` interpretation — a proven signed
+    reading. When the policy declares `power_type` raw_only/unproven, `no_static_anchor` is acceptable and
+    signedness is not required. A uniquely-discovered join the policy has not adopted ⇒ `review_required`."""
+    if blocking:
+        return "blocked"
+    if not reviewed or bound_mismatch:
+        return "review_required"
+    if not all(p.get("matches_policy") for p in layout_proof.values()):
+        return "review_required"
+    for field in required_joins:
+        probe = join_pairs.get(field)
+        if probe is None:                                  # a required join was never probed
+            return "review_required"
+        pair = probe.get("pair")
+        if pair is None:
+            continue                                       # ambiguous, recorded ⇒ stays raw_only, ok
+        discovered_index = pair[0]                         # (index_cell, value_cell)
+        if authored_join_cells.get(field) != discovered_index:
+            return "review_required"                       # unique but unadopted, or mismatched
+    if power_type_interpretation == "verified" and power_type_signed is not True:
+        return "review_required"
+    return "verified"
+
+
 def three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> dict:
     """within_budget requires ALL THREE of serialized bytes, subprocess peak RSS, and elapsed to be
     under ceiling (the shipped code estimated raw DBC bytes and ignored RSS)."""
@@ -278,16 +307,32 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
     if not budget_report["within_budget"]:
         blocking.append({"field": "budget", "reason": "over_budget", "breach": budget_report["breach"]})
 
-    # lifecycle. verified requires the reviewed policy's structured bound to match the opened topology
-    # facet-for-facet (the shared verifier), not just a client-build string.
+    # lifecycle (E0R.1 state machine): verified requires the reviewed bound to match AND every required
+    # join probed+adopted-or-ambiguous AND power_type signedness ONLY if the policy claims a verified
+    # power_type interpretation. A uniquely-discovered-but-unadopted join is review_required.
     bound_mismatch = topology_matches_bound(topology, getattr(spell_policy, "bound", None))
-    if blocking:
-        status = "blocked"
-    elif (getattr(spell_policy, "reviewed", False) and not bound_mismatch
-          and all(p["matches_policy"] for p in layout_proof.values())):
-        status = "verified"
+    # EVERY join is required to be probed (E0R.1 pulls all four forward). Use the full join set on a real
+    # SpellPolicy (incl. null-cell joins); fall back to a stub's `index_fields`. Authored cells come from
+    # the public `columns` view (non-null cells only), so a null-cell join reads as unadopted.
+    _joins = getattr(spell_policy, "joins", None)
+    if _joins is not None:
+        required_joins = tuple(dict.fromkeys(j.index_field for j in _joins.values()))
     else:
-        status = "review_required"
+        required_joins = tuple(getattr(spell_policy, "index_fields", {}).keys())
+    columns = getattr(spell_policy, "columns", {}) or {}
+    authored_join_cells = {f: columns.get(f) for f in required_joins}
+    _spell_tbl = getattr(spell_policy, "tables", {}).get("Spell", {})
+    _fields = _spell_tbl.get("fields") if isinstance(_spell_tbl, dict) else None
+    power_type_interpretation = (_fields["power_type"].interpretation
+                                 if _fields and "power_type" in _fields else "unproven")
+    # A raw_only/unproven power_type with no proven signed reading records no_static_anchor (honest, and an
+    # admissible `verified` state — observation of a negative value is NOT static authorization).
+    no_static_anchor = power_type_interpretation != "verified" and power_type_signed is not True
+    status = _recon_status(
+        blocking=blocking, bound_mismatch=bound_mismatch, layout_proof=layout_proof,
+        reviewed=getattr(spell_policy, "reviewed", False), required_joins=required_joins,
+        join_pairs=join_pairs, authored_join_cells=authored_join_cells,
+        power_type_interpretation=power_type_interpretation, power_type_signed=power_type_signed)
 
     return {
         "schema_version": SCHEMA, "status": status, "blocking_findings": blocking,
@@ -297,7 +342,8 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
                         "effective_archive": str(member.effective_archive),
                         "patch_chain": [str(p) for p in member.patch_chain]},
         "layout_proof": layout_proof, "index_fk": index_fk, "join_pairs": join_pairs,
-        "power_type_signed": power_type_signed, "enum_domains": enum_domains,
+        "power_type_signed": power_type_signed, "no_static_anchor": no_static_anchor,
+        "required_joins": list(required_joins), "enum_domains": enum_domains,
         "topology": topology, "proposed_policy_delta": delta, "duplicates": sorted(dupes)[:20],
         "budget": budget_report,
     }

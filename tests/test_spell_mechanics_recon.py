@@ -77,10 +77,18 @@ def test_verified_when_reviewed_and_structured_bound_matches():
                   "source": {"member": s["member"], "effective_archive": s["effective_archive"],
                              "patch_chain": s["patch_chain"]}} for t, s in topo["tables"].items()}
     bound = {"client_build": "3.3.5a+T", "expected_absent": ["SpellEffect"], "tables": tables}
+    # E0R.1: `verified` now requires the join to be PROBED and adopted at the authored cell (28). Supply a
+    # state-bearing value anchor that resolves uniquely through (casting_time_index@28 -> base_ms@1).
+    join_anchors = {"casting_time_index": {
+        "side_table": "SpellCastTimes", "side_id_cell": 0, "side_value_cells": [1], "side_value_kind": "int32",
+        "anchors": [{"spell_id": 133, "expected_state": "resolved", "expected_value": 500},
+                    {"spell_id": 116, "expected_state": "resolved", "expected_value": 7100},
+                    {"spell_id": 78, "expected_state": "not_applicable"}]}}
     r = recon_spell_mechanics(b, Path("c.MPQ"), (Path("patch-T.MPQ"),),
-                              **_kwargs(_policy(reviewed=True, bound=bound)))
-    assert r["status"] == "verified", r["blocking_findings"]
+                              **_kwargs(_policy(reviewed=True, bound=bound)), join_value_anchors=join_anchors)
+    assert r["status"] == "verified", (r["status"], r["join_pairs"], r["blocking_findings"])
     assert r["blocking_findings"] == []
+    assert r["join_pairs"]["casting_time_index"]["pair"][0] == 28    # index cell discovered + adopted
 
 
 def test_blocked_when_expected_absent_table_present():
