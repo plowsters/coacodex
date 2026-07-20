@@ -171,3 +171,12 @@ for how canonical vs. fallback builds are recorded.
   absent (no separate table-drift eligibility signal exists anymore).
 - Fields may be `null`; consumers tolerate partial records. `field_observations` retains the `raw` for
   every withheld value for audit.
+
+## M1.14E0R — `coa-client-spell-v3`
+
+The full-table child is now the **compact** `coa-client-spell-v3` row: identity + normalized `mechanics`
++ `coa_attribution` + a compact `raw` block (scalar `raw_u32`/string `raw_offset`+`resolved`, join
+components, and `state`), with proof/promotion/evidence **inferred from the pinned policy via a
+`policy_ref`** rather than repeated per row. The CoA projection (`coa-client-spell-projection-v3`) is the
+`is_coa` subset; a consumer re-derives eligibility independently from the staged policy child. Graph
+attribution (class memberships) lives in `coa_client_advancement.jsonl`, not on the spell row.

@@ -384,9 +384,9 @@ function gitHeadCommit() {
   }
 }
 
-export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {} }) {
+export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {}, policyPath = null }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
-  const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds });
+  const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds, policyPath });
 
   if (loaded.absent) {
     if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
@@ -457,7 +457,7 @@ if (isCliEntryPoint()) {
 
   // Producer publishes the pointer; the consumer REQUIRES it for a canonical run. The legacy fixed-path
   // projection runs only under the existing --allow-fallback-mechanics degraded path.
-  let projectionPath, projManifestPath, allowFallback;
+  let projectionPath, projManifestPath, policyPath, allowFallback;
   if (pointerPath) {
     if (has("--projection") || has("--projection-manifest")) {
       console.error("pass EITHER --client-extract-pointer OR --projection/--projection-manifest, not both");
@@ -467,6 +467,7 @@ if (isCliEntryPoint()) {
       const resolved = resolveGeneration(pointerPath);
       projectionPath = resolved.children["coa_client_spell_coa.jsonl"];
       projManifestPath = resolved.children["coa_client_spell_projection.manifest.json"];
+      policyPath = resolved.children["spell_layout_v2.json"];    // the reviewed policy child (v3 verify)
     } catch (err) {
       if (err instanceof GenerationResolveError) { console.error(`error: client-extract pointer: ${err.message}`); process.exit(2); }
       throw err;
@@ -488,7 +489,7 @@ if (isCliEntryPoint()) {
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
       entries, spellRows: [], projectionPath, manifestPath: projManifestPath, outDir,
-      allowFallback,
+      allowFallback, policyPath,
       inputs: {
         builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
         db_spell_tooltips: null,

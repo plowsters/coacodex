@@ -54,7 +54,7 @@ function assertRecordSemantics(rec) {
   }
 }
 
-export function loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds }) {
+export function loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds, policyPath = null }) {
   const hasProj = fs.existsSync(projectionPath);
   const hasMan = fs.existsSync(manifestPath);
   if (!hasProj && !hasMan) return { absent: true };
@@ -64,6 +64,11 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
 
   const manifestBytes = fs.readFileSync(manifestPath);
   const manifest = parseJson(manifestBytes.toString("utf8"), "projection manifest");
+  // E0R v3: rows carry a compact `raw` block re-verified against the pinned policy child, not per-row
+  // `field_observations`. The generation manifest already validated child integrity (sha/bytes/records).
+  if (manifest.schema_version === "coa-client-spell-projection-manifest-v3") {
+    return loadAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath });
+  }
   if (manifest.schema_version === "coa-client-spell-projection-v1") {
     throw new MechanicsBuildError("projection manifest is v1; regenerate with M1.14E (coa-client-spell-projection-v2)");
   }
@@ -186,16 +191,22 @@ export function eligibleFromPolicy(field, obs, policyDoc) {
 export function verifyRowAgainstPolicy(row, policyDoc) {
   const mech = row.mechanics || {};
   for (const [field, obs] of Object.entries(row.raw || {})) {
-    const value = mech[field];
-    const pol = obs.components
-      ? resolvePolicyRef(policyDoc, obs.components.side_value.policy_ref)
-      : resolvePolicyRef(policyDoc, obs.policy_ref);
+    // Identity fields live at the row level (id -> spell_id, name -> name); mechanics fields in `mechanics`.
+    const value = field === "id" ? row.spell_id
+      : (field in mech) ? mech[field]
+      : (field in row) ? row[field]
+      : undefined;
     const eligible = eligibleFromPolicy(field, obs, policyDoc);
     const populated = value !== null && value !== undefined;
     if (eligible !== populated) {
       throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} eligible=${eligible} but populated=${populated} (biconditional violation)`);
     }
     if (!populated) continue;
+    // Resolve the policy node ONLY when populated: an unresolved join (index_zero/side_row_missing) has no
+    // side_value component, and a resolved join always does.
+    const pol = obs.components
+      ? resolvePolicyRef(policyDoc, obs.components.side_value.policy_ref)
+      : resolvePolicyRef(policyDoc, obs.policy_ref);
     if (pol.kind === "string") {
       const resolved = obs.components ? obs.components.side_value.resolved : obs.resolved;
       if (value !== resolved) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} != resolved`);
@@ -204,4 +215,57 @@ export function verifyRowAgainstPolicy(row, policyDoc) {
       if (redecode(raw, pol.kind) !== value) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} re-decode disagrees`);
     }
   }
+}
+
+// E0R: validate a coa-client-spell-projection-v3 projection (compact rows) against the pinned policy
+// child. Per-row: v3 schema, is_coa, positive unique spell_id, and an independent numeric/string
+// re-derivation via verifyRowAgainstPolicy. Child-byte integrity was already enforced by the generation
+// manifest; here we re-hash for the input provenance record and count-check against the manifest.
+export function loadAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath }) {
+  if (!policyPath || !fs.existsSync(policyPath)) {
+    throw new MechanicsBuildError("v3 projection requires the reviewed spell_layout_v2 policy child");
+  }
+  const policyDoc = parseJson(fs.readFileSync(policyPath, "utf8"), "spell policy");
+  const bytes = fs.readFileSync(projectionPath);
+  const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+  const counts = manifest.counts || {};
+
+  const projection = [];
+  const seen = new Set();
+  let lineNo = 0;
+  for (const line of bytes.toString("utf8").split("\n")) {
+    lineNo += 1;
+    if (!line.trim()) continue;
+    const rec = parseJson(line, `projection line ${lineNo}`);
+    if (rec.schema_version !== "coa-client-spell-projection-v3") {
+      throw new MechanicsBuildError(`projection row bad schema_version: ${rec.schema_version}`);
+    }
+    if (rec.coa_attribution?.is_coa !== true) throw new MechanicsBuildError(`projection row not is_coa: ${rec.spell_id}`);
+    if (!Number.isInteger(rec.spell_id) || rec.spell_id <= 0) throw new MechanicsBuildError(`projection non-positive-integer spell_id: ${rec.spell_id}`);
+    if (seen.has(rec.spell_id)) throw new MechanicsBuildError(`projection duplicate spell_id: ${rec.spell_id}`);
+    verifyRowAgainstPolicy(rec, policyDoc);            // independent numeric/string re-derivation
+    seen.add(rec.spell_id);
+    projection.push(rec);
+  }
+  if (Number.isInteger(counts.projected_records) && counts.projected_records !== projection.length) {
+    throw new MechanicsBuildError(`projection count mismatch: manifest ${counts.projected_records} != actual ${projection.length}`);
+  }
+  if (Number.isInteger(counts.unique_spell_ids) && counts.unique_spell_ids !== seen.size) {
+    throw new MechanicsBuildError(`projection unique_spell_ids mismatch: manifest ${counts.unique_spell_ids} != actual ${seen.size}`);
+  }
+
+  const missing = [...builderSpellIds].filter((s) => !seen.has(s));
+  if (missing.length > 0) {
+    throw new MechanicsBuildError(`builder_missing_from_projection: ${missing.length} spell(s), e.g. ${missing.slice(0, 5)}`);
+  }
+  const coverage = {
+    builder_joined_to_projection: [...builderSpellIds].filter((s) => seen.has(s)).length,
+    builder_missing_from_projection: 0,
+    projection_only: [...seen].filter((s) => !builderSpellIds.has(s)).length,
+  };
+  return {
+    absent: false, projection, coverage, projection_sha256: sha,
+    manifest_sha256: crypto.createHash("sha256").update(manifestBytes).digest("hex"),
+    client_build: manifest.client_build ?? null,
+  };
 }

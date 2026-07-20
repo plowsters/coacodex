@@ -56,3 +56,13 @@ existing `--allow-fallback-mechanics` degraded path. Passing both is an error.
 the current pointer target + its immediate predecessor, and removes older `gen-*` only past a grace
 period **and under an enforced quiescent window / advisory lock**. Absent quiescence it deletes nothing
 and returns the plan — the semantics are documented best-effort.
+
+## M1.14E0R — `coa-client-extract-manifest-v3` (transactional)
+
+The manifest gains `publication_state` (`candidate` | `published`) and a `candidate_trust_sha256` over
+every trust-critical field. A **candidate** manifest is never pointer-resolvable; publication validates the
+candidate by path in Python **and** Node (per-child + a streaming cross-child merge-join over sorted
+`spell_id`), then writes the **final** manifest (only `publication_state`/`validation`/`budget` may differ,
+reproducing the trust digest) and the pointer **last** under a process lock. Required children now include
+the full v3 spell child, the v3 projection + its manifest, the `coa-client-spell-icons-v1` catalog, and the
+reviewed `spell_layout_v2.json` policy child. `binding` carries the full verified source **topology**.

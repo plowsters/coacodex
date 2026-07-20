@@ -485,3 +485,41 @@ Reasoning:
   resolution is deferred (M1.14G), the static substrate is proven here.
 - Transactional generations make regeneration collision-safe and every consumed byte re-validated,
   so a half-written or drifted extract can never be silently consumed as canonical.
+
+## M1.14E0R — correctness & AscensionDB sunset
+
+- **Evidence ≠ authorization.** A field's proof (integrity/layout/interpretation) is evidence only;
+  emission is authorized separately by `promotion == "normalized"` in the reviewed policy. A `raw_only`
+  field retains its raw substrate but never populates a normalized value, and the Node consumer
+  independently re-derives the biconditional (eligible ⇔ populated) from the pinned policy, so a producer
+  bug cannot smuggle an unauthorized value past the boundary.
+- **The generation manifest is authoritative — and it is not a child.** `gen-<uuid>/manifest.json` **is**
+  `coa-client-extract-manifest-v3`; it holds the child registry and is hashed by the pointer, so it cannot
+  list or hash itself. Publication is transactional: stage → **candidate** manifest (never
+  pointer-resolvable) carrying a `candidate_trust_sha256` over every trust-critical field → validate the
+  candidate by path in **both** Python and Node (per-child + a streaming cross-child merge-join) → **final**
+  manifest that reproduces the identical trust digest (only `publication_state`/`validation`/`budget` may
+  move) → pointer written **last** under a process lock.
+- **One full-topology hard hold, shared by recon and regenerate.** A single verifier opens every required
+  table (sha256 + full 5-field header + member/archive/patch-chain + density + key-uniqueness) and the
+  expected-absent set, and matches the reviewed policy's structured `bound` **facet-for-facet**. A canonical
+  build never promotes values proven against a different client, and recon and regenerate can never diverge
+  on "the client we proved against."
+- **AscensionDB is not a canonical source.** `db.ascension.gg` is removed from the canonical mechanics
+  pipeline entirely (the `ascension_db` reconciliation tier, the enrichment/apply scripts, the DB identity
+  gate, and every guide-layer link). A canonical build is **pointer-only and network-free**; the only
+  surviving touch is an opt-in, image-download-only utility (`download-spell-icons.mjs`) a human runs by
+  hand. A network-trap test enforces this.
+- **Missing ≠ default.** A not-yet-extracted cost/cooldown/gcd is `null` (unknown), never a fabricated
+  `0`/`1500`/`{}`. `coa-mechanics-v2` carries `field_readiness` (see
+  [field-readiness-schema.md](data/field-readiness-schema.md)); the consumer interlock fails **closed**
+  (`QuantitativeScopeUnready`) unless heuristic estimates are explicitly authorized.
+- **Streaming within a real three-part budget.** The producer streams record-by-record; `within_budget`
+  requires ALL of serialized bytes + subprocess peak RSS + elapsed under ceiling. A full real-client
+  `regenerate` (not just recon) is measured and recorded within budget.
+- **Client-native icons.** Guide icons resolve only from the client `coa-client-spell-icons-v1` catalog by
+  spell_id (a converted row renders its bundle asset; anything else a placeholder) — never a remote or
+  cached-DB image.
+- **Explicit versioning.** Every touched artifact carries an explicit schema version that hard-rejects the
+  prior one: `coa-client-spell-v3`, `coa-client-spell-projection-v3`, `coa-client-extract-manifest-v3`,
+  `coa-mechanics-v2`, `coa-spell-layout-v2`.

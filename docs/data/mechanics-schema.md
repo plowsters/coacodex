@@ -263,3 +263,12 @@ omitted). The four counts:
 - Consumers must tolerate missing optional fields.
 - Low-confidence mechanics should not silently produce high-confidence simulation results.
 - Raw source payloads are audit data and should not replace normalized fields unless debugging enrichment drift.
+
+## M1.14E0R — `coa-mechanics-v2`
+
+`costs` is now `dict | None` (`null` = unknown, `{}` = verified empty) and is **always serialized
+explicitly** (missing ≠ default). Each record may carry `field_readiness` `{field: {status, reason_code}}`
+validated against the readiness state machine — see
+[field-readiness-schema.md](field-readiness-schema.md). The loader hard-rejects `coa-mechanics-v1`. With
+AscensionDB removed, `cooldown_ms`/`gcd_ms`/`costs` are `null` + `{unavailable, pending_e1_operand}` until
+M1.14E1 supplies the operands.

@@ -56,3 +56,11 @@ cell by resolving through to KNOWN cast/duration/range values for anchor spells)
    Re-hash the policy (`compute_policy_sha256`).
 4. Re-run recon → exit 0 (`verified`). Only a `verified`, bound policy lets `regenerate` emit canonical
    v2 artifacts. This procedure is deliberately human — recon never self-approves.
+
+## M1.14E0R
+
+Recon and regenerate share **one** source-topology verifier (`verify_source_topology`): sha256 + full
+5-field header + member/effective-archive/patch-chain + density + key-uniqueness per required table, plus
+the expected-absent set, matched facet-for-facet against the reviewed policy's structured `bound`. Recon
+also reports joined-pair value-anchor discovery (all four side-table joins), a static `power_type`
+negative anchor (a signed reading proven by an observed negative), and the three-part budget.

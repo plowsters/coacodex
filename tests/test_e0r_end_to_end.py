@@ -39,8 +39,7 @@ def _stage_full_generation(root: Path) -> GenerationWriter:
         gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
     gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                 schema_version="coa-client-archive-plan-v1")
-    gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
-                schema_version="coa-spell-layout-v2")
+    gw.add_json("spell_layout_v2.json", v2_policy().doc, schema_version="coa-spell-layout-v2")
     return gw
 
 
@@ -71,3 +70,29 @@ def test_node_rejects_a_candidate_generation(tmp_path):
     r = subprocess.run(["node", "coa_scraper/scripts/lib/generation.mjs", str(dist)],
                        capture_output=True, text=True)
     assert r.returncode != 0
+
+
+def test_build_mechanics_consumes_the_v3_generation_through_the_pointer(tmp_path):
+    # The canonical Node consumer resolves the published v3 generation via the pointer, re-verifies the
+    # projection rows against the staged policy child, and emits coa-mechanics-v2 (cooldown/gcd/costs null).
+    dist = tmp_path / "dist"
+    gw = _stage_full_generation(dist)
+    candidate = gw.publish_candidate(base_manifest={}, binding={})
+    validate_candidate_generation(gw.gen_dir)
+    gw.finalize_and_publish(candidate_manifest=candidate, validation={"ok": True},
+                            budget={"within_budget": True})
+
+    entries = tmp_path / "coa_entries.jsonl"                       # builder domain must ⊆ the projection
+    entries.write_text(json.dumps({"spell_id": 805775, "entry_id": 1, "entry_type": "Ability",
+                                   "name": "Adrenal Venom", "damage_schools": [], "resources": []}) + "\n")
+    out = tmp_path / "mech"
+    r = subprocess.run(["node", "coa_scraper/scripts/build-mechanics-artifacts.mjs",
+                        "--builder-entries", str(entries),
+                        "--client-extract-pointer", str(dist / "coa_client_extract.pointer.json"),
+                        "--out", str(out)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    rows = [json.loads(l) for l in (out / "coa_mechanics.jsonl").read_text().splitlines() if l.strip()]
+    row = next(r for r in rows if r["spell_id"] == 805775)
+    assert row["schema_version"] == "coa-mechanics-v2"
+    assert row["cooldown_ms"] is None and row["gcd_ms"] is None and row["costs"] is None
+    assert row["field_readiness"]["costs"]["reason_code"] == "pending_e1_operand"

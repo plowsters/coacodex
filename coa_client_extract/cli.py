@@ -360,6 +360,63 @@ def _load_content_entries(path: Path) -> list[dict]:
     return payload if isinstance(payload, list) else payload.get("data", [])
 
 
+def write_acceptance_summary(dist: Path, manifest: dict, *, recon_status: str, benchmark_env_id: str,
+                             build_mechanics: dict, out: Path | None = None) -> dict:
+    """The schema-stable curated E0R acceptance record: pins the exact client build, generation identity,
+    manifest + policy digests, extractor commit, per-child {sha256, byte_length, records}, the three-part
+    regenerate budget, the canonical (pointer-only) build-mechanics measurement, the benchmark env, and the
+    recon status. A record OF a clean run — never part of the commit it attests to."""
+    import hashlib
+    children = {name: {"sha256": meta.get("sha256"), "byte_length": meta.get("byte_length"),
+                       "records": meta.get("records")}
+                for name, meta in (manifest.get("children") or {}).items()}
+    binding = manifest.get("binding") or {}
+    manifest_sha256 = None
+    pointer = Path(dist) / "coa_client_extract.pointer.json"
+    if pointer.is_file():
+        try:
+            manifest_sha256 = json.loads(pointer.read_text(encoding="utf-8")).get("manifest_sha256")
+        except (ValueError, OSError):
+            manifest_sha256 = None
+    if manifest_sha256 is None:
+        manifest_sha256 = hashlib.sha256(
+            (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        ).hexdigest()
+    summary = {
+        "schema_version": "coa-e0r-acceptance-summary-v1",
+        "client_build": manifest.get("client_build"),
+        "generation_id": manifest.get("generation_id"),
+        "manifest_sha256": manifest_sha256,
+        "policy_sha256": binding.get("policy_sha256"),
+        "extractor_commit": manifest.get("extractor_commit") or _extractor_commit(),
+        "benchmark_env_id": benchmark_env_id,
+        "children": children,
+        "budget": manifest.get("budget"),
+        "recon_status": recon_status,
+        "build_mechanics": build_mechanics,
+        "generated_at": date.today().isoformat(),
+    }
+    if out is not None:
+        write_json(summary, Path(out))
+    return summary
+
+
+def _parse_gnu_time(text: str) -> dict:
+    """Parse `/usr/bin/time -v` output for elapsed wall time (Elapsed (wall clock)) and peak RSS (Maximum
+    resident set size, KiB on Linux) -> {elapsed_s, peak_rss_mb}."""
+    import re
+    elapsed_s = None
+    peak_rss_mb = None
+    m = re.search(r"Elapsed \(wall clock\) time.*?:\s*([0-9:.]+)", text)
+    if m:
+        parts = [float(p) for p in m.group(1).split(":")]
+        elapsed_s = parts[-1] + (parts[-2] * 60 if len(parts) >= 2 else 0) + (parts[-3] * 3600 if len(parts) >= 3 else 0)
+    m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
+    if m:
+        peak_rss_mb = round(int(m.group(1)) / 1024, 1)
+    return {"elapsed_s": elapsed_s, "peak_rss_mb": peak_rss_mb}
+
+
 def _icon_member_name(client_path: str) -> str:
     """The SpellIcon.dbc path string -> the effective client member key. WoW stores icon paths with
     backslashes and (usually) no extension; the BLP file is that path + '.blp'."""
@@ -491,6 +548,14 @@ def main(argv: list[str] | None = None) -> int:
     mr.add_argument("--client-root", required=True, type=Path)
     mr.add_argument("--out", required=True, type=Path)
     mr.add_argument("--stormlib", default=None)
+
+    acc = sub.add_parser("acceptance-summary", help="write the curated E0R acceptance record from a published generation")
+    acc.add_argument("--dist", required=True, type=Path)
+    acc.add_argument("--recon-status", default="verified")
+    acc.add_argument("--benchmark-env-id", default="local")
+    acc.add_argument("--build-mechanics-time", default=None,
+                     help="a /usr/bin/time -v capture of the canonical pointer-only build-mechanics run")
+    acc.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
 
     if args.command == "regenerate":
@@ -532,6 +597,20 @@ def main(argv: list[str] | None = None) -> int:
         status = report["status"]
         print(f"mechanics-recon: {status} ({len(report['blocking_findings'])} blocking)", file=sys.stderr)
         return _RECON_EXIT.get(status, 1)
+    if args.command == "acceptance-summary":
+        from .publish import resolve_active_generation, ResolveError
+        try:
+            manifest = resolve_active_generation(args.dist)["manifest"]
+        except ResolveError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 3
+        bm = {"pointer_only": True}
+        if args.build_mechanics_time and Path(args.build_mechanics_time).is_file():
+            bm.update(_parse_gnu_time(Path(args.build_mechanics_time).read_text(encoding="utf-8")))
+        write_acceptance_summary(args.dist, manifest, recon_status=args.recon_status,
+                                 benchmark_env_id=args.benchmark_env_id, build_mechanics=bm, out=args.out)
+        print(f"acceptance-summary: wrote {args.out}", file=sys.stderr)
+        return 0
     return 1
 
 

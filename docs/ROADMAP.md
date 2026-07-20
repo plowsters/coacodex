@@ -333,11 +333,17 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     classes is a hard gate) as `coa-resource-candidate-v1` (candidates + adjudication, **no** live claims);
     live carrier resolution + canonical `coa-resource-contract-v1` are M1.14G, the resource state machine
     is M1.16. Also adds an operands sidecar + CoA mechanical dependency closure and bumps the client
-    extract to `coa-client-spell-v2`. Decomposed E0 (correctness/publication) → E1 (raw operands +
-    closure) → E2 (per-slot interpretations) → E3 (static resource discovery). Depends on A + C;
-    independent of D. Design:
-    [M1.14E Mechanics Extraction Completion](superpowers/specs/2026-07-18-m1-14-e-mechanics-extraction-completion-design.md).
-    See also the [client DBC reference](data/client-dbc-reference.md).
+    extract to `coa-client-spell-v2`. Decomposed E0 (correctness/publication) → **E0R (correctness &
+    AscensionDB sunset — inserted after E0, before E1)** → E1 (raw operands + closure) → E2 (per-slot
+    interpretations) → E3 (static resource discovery). Depends on A + C; independent of D. Design:
+    [M1.14E Mechanics Extraction Completion](superpowers/specs/2026-07-18-m1-14-e-mechanics-extraction-completion-design.md)
+    and [M1.14E0R correctness & sunset remediation](superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md).
+    E0R makes the E0 evidence model enforced/non-bypassable at every boundary (evidence ≠ authorization,
+    one shared full-topology hard hold, transactional candidate→pointer publication, streaming within a
+    three-part budget), hard-cuts `db.ascension.gg` from the canonical spell-mechanics pipeline
+    (`coa-mechanics-v2` nullable costs + field readiness, consumer fail-closed interlock, client-native
+    icons), and records a real-client regenerate within budget. See also the
+    [client DBC reference](data/client-dbc-reference.md).
   - **M1.14F carried-forward audit item (from M1.14B, M1 follow-up).** The `coa-builder-parity-v3`
     `per_class`/`per_tab` breakdown tables group on raw, un-canonicalized class labels, so the four
     CamelCase CoA classes (`WitchDoctor`, `WitchHunter`, `KnightOfXoroth`, `SunCleric`) surface
