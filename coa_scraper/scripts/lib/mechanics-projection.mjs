@@ -119,3 +119,89 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
     client_build: manifest.client_build ?? null,
   };
 }
+
+// --- E0R independent projection-v3 verification --------------------------------------------------
+// Node holds the artifact + the pinned policy but NOT the client DBC bytes, so it re-derives
+// layout/interpretation/promotion via each observation's policy_ref and re-decodes numeric raw_u32 (a
+// string is verified against `resolved`). It validates transport integrity, not source integrity.
+
+function resolvePolicyRef(doc, ref) {
+  return ref.split("/").slice(1).reduce((n, t) => n[t.replace(/~1/g, "/").replace(/~0/g, "~")], doc);
+}
+
+function redecode(rawU32, kind) {
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32LE(rawU32 >>> 0, 0);
+  if (kind === "int32") return buf.readInt32LE(0);
+  if (kind === "float") return buf.readFloatLE(0);
+  return buf.readUInt32LE(0);
+}
+
+// Recursively key-sort so JSON.stringify(sortDeep(x)) mirrors Python
+// json.dumps(sort_keys=True, separators=(",",":")).
+function sortDeep(v) {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v && typeof v === "object") {
+    return Object.keys(v).sort().reduce((acc, k) => { acc[k] = sortDeep(v[k]); return acc; }, {});
+  }
+  return v;
+}
+
+function canonicalSha256(doc) {
+  const { sha256: _omit, ...rest } = doc;
+  return crypto.createHash("sha256").update(JSON.stringify(sortDeep(rest))).digest("hex");
+}
+
+// Recompute the policy hash with the SAME canonical algorithm as Python compute_policy_sha256, so Node
+// does not trust the policy's self-declared field, and compare to the committed lock.
+export function assertPolicyLock(policyDoc, lock) {
+  const actual = canonicalSha256(policyDoc);
+  if (!lock || actual !== lock.sha256) {
+    throw new MechanicsBuildError(`policy lock mismatch: recomputed ${actual} != lock ${lock?.sha256}`);
+  }
+  if (policyDoc.sha256 && policyDoc.sha256 !== actual) {
+    throw new MechanicsBuildError(`policy self-declared sha256 ${policyDoc.sha256} != recomputed ${actual}`);
+  }
+}
+
+// Biconditional eligibility recomputed from (policy, obs). A join's OWN promotion is consulted via
+// policyDoc.joins[...], not just its components' — otherwise a normalized component set under a raw_only
+// join would wrongly read as eligible.
+export function eligibleFromPolicy(field, obs, policyDoc) {
+  if (obs.components) {
+    const join = (policyDoc.joins || {})[obs.join_name || field] || {};
+    if (join.promotion !== "normalized" || obs.state !== "resolved") return false;
+    return Object.entries(obs.components).every(([, c]) => {
+      const cp = resolvePolicyRef(policyDoc, c.policy_ref);
+      return cp.promotion === "normalized" && cp.layout === "verified" && cp.interpretation === "verified";
+    });
+  }
+  const pol = resolvePolicyRef(policyDoc, obs.policy_ref);
+  return pol.promotion === "normalized" && pol.layout === "verified" && pol.interpretation === "verified"
+    && (obs.state === "present" || obs.state === "resolved") && obs.decoded_reason === "decoded";
+}
+
+// For EVERY field: eligible <=> populated (both halves of the biconditional), and a populated value must
+// agree with a re-decode of raw_u32 (numeric) or the resolved string.
+export function verifyRowAgainstPolicy(row, policyDoc) {
+  const mech = row.mechanics || {};
+  for (const [field, obs] of Object.entries(row.raw || {})) {
+    const value = mech[field];
+    const pol = obs.components
+      ? resolvePolicyRef(policyDoc, obs.components.side_value.policy_ref)
+      : resolvePolicyRef(policyDoc, obs.policy_ref);
+    const eligible = eligibleFromPolicy(field, obs, policyDoc);
+    const populated = value !== null && value !== undefined;
+    if (eligible !== populated) {
+      throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} eligible=${eligible} but populated=${populated} (biconditional violation)`);
+    }
+    if (!populated) continue;
+    if (pol.kind === "string") {
+      const resolved = obs.components ? obs.components.side_value.resolved : obs.resolved;
+      if (value !== resolved) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} != resolved`);
+    } else {
+      const raw = obs.components ? obs.components.side_value.raw_u32 : obs.raw_u32;
+      if (redecode(raw, pol.kind) !== value) throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} re-decode disagrees`);
+    }
+  }
+}

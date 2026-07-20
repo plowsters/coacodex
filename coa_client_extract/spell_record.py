@@ -343,3 +343,38 @@ def eligible_from_row(obs: dict, pol: dict, policy_doc: dict) -> bool:
     return (pol.get("promotion") == "normalized" and pol.get("layout") == "verified"
             and pol.get("interpretation") == "verified"
             and obs.get("state") in ("present", "resolved") and obs.get("decoded_reason") == "decoded")
+
+
+def _redecode(raw_u32: int, kind: str):
+    b = struct.pack("<I", raw_u32 & 0xFFFFFFFF)
+    if kind == "int32":
+        return struct.unpack("<i", b)[0]
+    if kind == "float":
+        return struct.unpack("<f", b)[0]
+    return struct.unpack("<I", b)[0]
+
+
+def verify_row_against_policy(row: dict, policy_doc: dict) -> None:
+    """Independent Python mirror of Node's verifyRowAgainstPolicy: for every field the biconditional
+    (eligible iff populated) must hold, and a populated value must agree with a re-decode of raw_u32
+    (numeric) or the resolved string (string). Raises ValueError on any mismatch. Exercised against the
+    same golden fixtures as the Node verifier, so the two can never silently diverge on the rule."""
+    mech = row.get("mechanics", {})
+    for field, obs in (row.get("raw") or {}).items():
+        pol = (resolve_policy_ref(policy_doc, obs["components"]["side_value"]["policy_ref"])
+               if obs.get("components") else resolve_policy_ref(policy_doc, obs["policy_ref"]))
+        eligible = eligible_from_row(obs, pol, policy_doc)
+        value = mech.get(field)
+        populated = value is not None
+        if eligible != populated:
+            raise ValueError(f"{row.get('spell_id')}:{field} eligible={eligible} populated={populated}")
+        if not populated:
+            continue
+        if pol.get("kind") == "string":
+            resolved = obs["components"]["side_value"]["resolved"] if obs.get("components") else obs.get("resolved")
+            if value != resolved:
+                raise ValueError(f"{row.get('spell_id')}:{field} string != resolved")
+        else:
+            raw = obs["components"]["side_value"]["raw_u32"] if obs.get("components") else obs["raw_u32"]
+            if _redecode(raw, pol.get("kind")) != value:
+                raise ValueError(f"{row.get('spell_id')}:{field} re-decode disagrees")

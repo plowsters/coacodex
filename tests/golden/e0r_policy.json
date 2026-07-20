@@ -1,0 +1,14 @@
+{
+  "schema_version": "coa-spell-layout-v2",
+  "tables": {
+    "Spell": {"fields": {
+      "power_type": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
+      "school_mask": {"kind": "uint32", "layout": "verified", "interpretation": "reference", "promotion": "raw_only"},
+      "casting_time_index": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}},
+    "SpellCastTimes": {"fields": {
+      "id": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
+      "base_ms": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}}
+  },
+  "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
+                             "side_value_field": "base_ms", "promotion": "normalized"}}
+}
