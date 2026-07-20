@@ -10,13 +10,13 @@
     ],
     "tables": {
       "Spell": {
-        "sha256": "fb46a6f071c97234b8888bc0d82e5e42b5668f27801437a828e46e2e6d21220d",
+        "sha256": "7763bb517f8c77419a562d32d037cd4831f7853fbcf0add244c6e4b6c3949767",
         "header": {
           "field_count": 234,
           "magic": "WDBC",
-          "record_count": 208433,
+          "record_count": 208444,
           "record_size": 936,
-          "string_block_size": 13258618
+          "string_block_size": 13259628
         },
         "source": {
           "member": "DBFilesClient\\Spell.dbc",
@@ -395,5 +395,5 @@
       "promotion": "raw_only"
     }
   },
-  "sha256": "f817b59b7f02d4889c4376cfb817249a5e4818ee01729adda0aa2464627e2b0d"
+  "sha256": "88b26343a6b6b31ce0b1b95d3c0f7a6aea5e24bdfc41b7588c319a8f4fbcdcc3"
 }
