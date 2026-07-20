@@ -177,12 +177,15 @@ def test_reject_join_with_unknown_side_value_field():
         load_spell_policy(_rehash(p))
 
 
-def test_committed_default_policy_loads_scalar_substrate():
-    # The shipped v2 default carries the reviewed scalar substrate; joins are un-adjudicated and `bound`
-    # is null until Task 8b runs real-client recon and authors the structured bound + join cells + lock.
+def test_committed_default_policy_is_client_bound():
+    # The shipped v2 default carries the reviewed scalar substrate + the structured bound authored from
+    # real-client recon (Task 8b). Joins stay un-adjudicated (raw_only) pending M1.14E1.
     pol = load_default_policy()
     assert pol.schema_version == "coa-spell-layout-v2"
     assert pol.columns["power_type"] == 41 and pol.columns["school_mask"] == 225
     assert pol.columns["name"] == 136
     assert pol.joins["cast_time_ms"].promotion == "raw_only"
-    assert pol.bound is None          # authored at Task 8b (real-client recon)
+    assert pol.bound is not None and pol.bound["client_build"] == "3.3.5a+patch-CZZ"
+    assert set(pol.bound["tables"]) == set(pol.required_tables)   # every required table byte-bound
+    assert len(pol.bound["tables"]["Spell"]["sha256"]) == 64
+    assert pol.bound["tables"]["Spell"]["header"]["field_count"] == 234

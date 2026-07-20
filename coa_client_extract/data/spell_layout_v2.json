@@ -1,8 +1,101 @@
 {
   "schema_version": "coa-spell-layout-v2",
   "reviewed": true,
-  "provenance_note": "E0R schema port of the reviewed v1 scalar substrate. Adds per-table key_cell/uniqueness, explicit join promotion, and SpellIcon.path. Joins stay un-adjudicated (null index cells, raw_only) and bound is null until Task 8b runs value-anchor recon against the real client and authors the structured bound + join cells + policy lock.",
-  "bound": null,
+  "provenance_note": "E0R structured bound authored from real-client recon (build 3.3.5a+patch-CZZ). Every required table byte-bound by sha256 + full WDBC header + logical member/effective-archive/patch-chain. power_type stays normalized@41: the signed int32 reading is proven by the observed -2 health-cost value (0xFFFFFFFE is not a plausible unsigned power type). The four side-table joins remain un-adjudicated (raw_only, null index cells) pending value-anchor joined-pair discovery in M1.14E1; power_type=7 is observed-but-unknown and stays withheld per-value.",
+  "bound": {
+    "client_build": "3.3.5a+patch-CZZ",
+    "expected_absent": [
+      "SpellEffect",
+      "SpellCooldowns"
+    ],
+    "tables": {
+      "Spell": {
+        "sha256": "fb46a6f071c97234b8888bc0d82e5e42b5668f27801437a828e46e2e6d21220d",
+        "header": {
+          "field_count": 234,
+          "magic": "WDBC",
+          "record_count": 208433,
+          "record_size": 936,
+          "string_block_size": 13258618
+        },
+        "source": {
+          "member": "DBFilesClient\\Spell.dbc",
+          "effective_archive": "patch-T.MPQ",
+          "patch_chain": [
+            "patch-T.MPQ"
+          ]
+        }
+      },
+      "SpellCastTimes": {
+        "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981",
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 71,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "source": {
+          "member": "DBFilesClient\\SpellCastTimes.dbc",
+          "effective_archive": "patch-S.MPQ",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellDuration": {
+        "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0",
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 866,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "source": {
+          "member": "DBFilesClient\\SpellDuration.dbc",
+          "effective_archive": "patch-S.MPQ",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellRange": {
+        "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd",
+        "header": {
+          "field_count": 40,
+          "magic": "WDBC",
+          "record_count": 323,
+          "record_size": 160,
+          "string_block_size": 3707
+        },
+        "source": {
+          "member": "DBFilesClient\\SpellRange.dbc",
+          "effective_archive": "patch-S.MPQ",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellIcon": {
+        "sha256": "14c60e7da6a536f5d31b89bf9861d56ce08bcdca7fde676ae727c5ae5a1f2977",
+        "header": {
+          "field_count": 2,
+          "magic": "WDBC",
+          "record_count": 16354,
+          "record_size": 8,
+          "string_block_size": 654241
+        },
+        "source": {
+          "member": "DBFilesClient\\SpellIcon.dbc",
+          "effective_archive": "patch-S.MPQ",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      }
+    }
+  },
   "required_tables": [
     "Spell",
     "SpellCastTimes",
@@ -302,5 +395,5 @@
       "promotion": "raw_only"
     }
   },
-  "sha256": "a4a6b27856d098eadb2fed4081fa0e9d27ad7f9fbf28621ee1682b9e6deb3de7"
+  "sha256": "f817b59b7f02d4889c4376cfb817249a5e4818ee01729adda0aa2464627e2b0d"
 }
