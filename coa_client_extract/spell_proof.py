@@ -185,6 +185,26 @@ def make_join(components: dict, *, resolution, decode) -> JoinObservation:
                            "decoded" if ok else "non_finite", _TOKEN)
 
 
+def make_string_join(components: dict, *, resolution, side_key: str = "side_value") -> JoinObservation:
+    """A join whose side value is a StringObservation (e.g. SpellIcon.path). Mirrors make_join's states,
+    but the resolved value is the side observation's `resolved` text; a string cannot be re-decoded from
+    an offset, so consumers verify equality against `resolved`. index_zero -> not_applicable,
+    side_row_missing -> unresolved, and a withheld composed proof (or an unresolved side) withholds."""
+    if not components:
+        raise ValueError("string join requires components")
+    composed = compose_proof(*(c.proof for c in components.values()))
+    if resolution == "index_zero":
+        return JoinObservation("not_applicable", components, composed, None, "index_zero", _TOKEN)
+    if resolution == "side_row_missing":
+        return JoinObservation("unresolved", components, composed, None, "side_row_missing", _TOKEN)
+    if resolution != "resolved":
+        raise ValueError(f"invalid string-join resolution {resolution!r} (fail closed)")
+    side = components[side_key]
+    if not semantic_promotion_eligible(composed) or side.resolved is None:
+        return JoinObservation("resolved", components, composed, None, "proof_withheld", _TOKEN)
+    return JoinObservation("resolved", components, composed, side.resolved, "decoded", _TOKEN)
+
+
 def refine_enum(value, allowed):
     """Exact-membership gate for a scalar enum (e.g. power_type)."""
     return (value, True) if value in allowed else (None, False)
