@@ -38,17 +38,7 @@ function builderNormalized(node, field) {
   return { raw: null, value: null, inferred: true };
 }
 
-function dbNormalized(dbRow, field) {
-  if (!dbRow) return { raw: null, value: null };
-  switch (field) {
-    case "cast_time_ms": return { raw: dbRow.cast_time_ms, value: isPresent(dbRow.cast_time_ms) ? dbRow.cast_time_ms : null };
-    case "duration_ms": return { raw: dbRow.duration_ms, value: isPresent(dbRow.duration_ms) ? dbRow.duration_ms : null };
-    case "range_yards": return { raw: dbRow.range_yards, value: isPresent(dbRow.range_yards) ? dbRow.range_yards : null };
-    default: return { raw: null, value: null };
-  }
-}
-
-export function fieldCandidates({ field, clientRec, builderNodes, dbRow, dbExcluded, dbExclusionReason = null }) {
+export function fieldCandidates({ field, clientRec, builderNodes }) {
   const out = [];
   if (clientRec) {
     const { raw, value, unknownBits, unknown } = clientNormalized(clientRec, field);
@@ -74,17 +64,6 @@ export function fieldCandidates({ field, clientRec, builderNodes, dbRow, dbExclu
       source_field: field === "schools" ? "damage_schools" : "resources",
       raw_value: raw, normalized_value: value, confidence: "medium", eligible: true, eligibility_reasons: [],
     });
-  }
-  if (dbRow) {
-    const { raw, value } = dbNormalized(dbRow, field);
-    if (value !== null) {
-      const reasons = dbExcluded ? [dbExclusionReason || REASON.DB_IDENTITY_MISMATCH] : [];
-      out.push({
-        source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`,
-        source_field: field, raw_value: raw, normalized_value: value, confidence: "medium",
-        eligible: !dbExcluded, eligibility_reasons: reasons,
-      });
-    }
   }
   return out;
 }

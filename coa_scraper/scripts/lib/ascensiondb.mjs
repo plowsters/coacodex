@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// readJsonl/writeJsonl/normalizeName now live in the AscensionDB-independent jsonl.mjs; imported (for
+// this module's own internal use) and re-exported so callers keep a stable import surface.
+import { readJsonl, writeJsonl, normalizeName } from "./jsonl.mjs";
+export { readJsonl, writeJsonl, normalizeName };
+
 const DB_HOST = "https://db.ascension.gg";
 
 export function powerUrl(kind, id) {
@@ -356,26 +361,6 @@ function inferMechanicTags(text) {
     tags.add("crowd_control");
   }
   return [...tags].sort();
-}
-
-export function readJsonl(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return [];
-  }
-  const text = fs.readFileSync(filePath, "utf8").trim();
-  if (!text) {
-    return [];
-  }
-  return text.split("\n").filter(Boolean).map(line => JSON.parse(line));
-}
-
-export function writeJsonl(filePath, rows) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${rows.map(row => JSON.stringify(row)).join("\n")}\n`);
-}
-
-export function normalizeName(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export function uniqueSpellIds(entries) {

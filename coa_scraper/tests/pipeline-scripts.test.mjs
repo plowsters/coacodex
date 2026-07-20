@@ -34,12 +34,12 @@ import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs"
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
 import {
   buildMechanicsArtifact,
-  buildMechanicsRows,
+  buildCanonicalMechanics,
   summarizeMechanicsArtifacts
 } from "../scripts/build-mechanics-artifacts.mjs";
 import { buildItemRows } from "../scripts/build-item-artifacts.mjs";
 import { normalizeSchoolMask, normalizePowerType } from "../scripts/lib/mechanics-normalize.mjs";
-import { reconcileField, REASON, dbIdentityReference, applyDbIdentityGate } from "../scripts/lib/mechanics-reconcile.mjs";
+import { reconcileField, REASON } from "../scripts/lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "../scripts/lib/mechanics-candidates.mjs";
 import { loadAndValidateProjection, MechanicsBuildError } from "../scripts/lib/mechanics-projection.mjs";
 import { resolveGeneration, GenerationResolveError } from "../scripts/lib/generation.mjs";
@@ -412,7 +412,6 @@ test("manifest writer records builder, validation, artifact hashes, and missing 
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/build-mechanics-artifacts.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_mechanics.jsonl" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_items.jsonl" && artifact.missing === true));
-  assert(manifest.scripts.some(artifact => artifact.path === "scripts/enrich-ascensiondb-assets.mjs" && artifact.missing === true));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/icon-assets.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_spell_records.jsonl" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_asset_records.jsonl" && artifact.missing === true));
@@ -579,19 +578,7 @@ test("metadata summary reports tabs without node rows", () => {
   assert.deepEqual(rows.tabs_without_nodes.map(row => row.tab_name), ["None"]);
 });
 
-test("DB enrichment can be joined into normalized entries", async () => {
-  const { applyDbEnrichmentToEntries } = await import("../scripts/apply-db-enrichment.mjs");
-  const rows = applyDbEnrichmentToEntries(
-    [validNode({ spell_id: 92117, required_level: 0, description_text: "Level 10 Passive" })],
-    [enrichedSpellRow()]
-  );
-
-  assert.equal(rows[0].db_enrichment.status, "matched");
-  assert.equal(rows[0].availability.effective_required_level, 10);
-  assert.equal(rows[0].availability.level_source, "db_tooltip");
-});
-
-test("mechanics artifact builder emits spell mechanics and linked item rows", () => {
+test("mechanics artifact builder emits client-derived spell mechanics (no AscensionDB source)", () => {
   const entry = validNode({
     entry_id: 501,
     spell_id: 92117,
@@ -601,25 +588,13 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
     resources: ["Energy"],
     description_text: "Deals Nature damage over 12 sec."
   });
-  const spellRow = enrichedSpellRow({
-    id: 92117,
-    entry_id: 501,
-    name: "Dream Flowers",
-    tooltip_text: "Deals 120 Nature damage over 12 sec.",
-    cooldown_ms: 30000,
-    gcd_ms: 1500,
-    cast_time_ms: 0,
-    range_yards: 30,
-    duration_ms: 12000,
-    period_ms: 3000,
-    power_costs: [{ amount: 25, resource: "Energy" }],
-    mechanic_tags: ["damage", "dot"],
-    linked_item_ids: [23887],
-    provenance: {
-      url: "https://db.ascension.gg/?spell=92117&power",
-      fetched_at: "2026-07-05T00:00:00.000Z"
-    }
-  });
+  // Client projection supplies the mechanical fields; the Builder supplies tags/effects. cooldown/gcd/
+  // costs have NO source after AscensionDB removal and are null (E0R: missing != default).
+  const projection = [{
+    spell_id: 92117, name: "Dream Flowers",
+    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
+    coa_attribution: { is_coa: true, confidence: "high" },
+  }];
   const itemPayload = parsePowerPayload(ITEM_POWER_FIXTURE, {
     kind: "item",
     id: 23887,
@@ -627,7 +602,7 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
     fetchedAt: "2026-07-05T00:00:00.000Z"
   });
 
-  const mechanicsRows = buildMechanicsRows({ entries: [entry], spellRows: [spellRow] });
+  const mechanicsRows = buildCanonicalMechanics({ entries: [entry], spellRows: [], projection });
   const itemRows = buildItemRows({ itemPayloadRows: [itemPayload] });
   const summary = summarizeMechanicsArtifacts({ mechanicsRows, itemRows });
 
@@ -636,15 +611,13 @@ test("mechanics artifact builder emits spell mechanics and linked item rows", ()
   assert.deepEqual(mechanicsRows[0].source_node_ids, [501]);
   assert.equal(mechanicsRows[0].effects[0].effect_type, "damage");
   assert.equal(mechanicsRows[0].effects[0].school, "nature");
-  assert.deepEqual(mechanicsRows[0].costs, { Energy: 25 });
-  assert.equal(mechanicsRows[0].cooldown_ms, 30000);
-  assert.equal(mechanicsRows[0].gcd_ms, 1500);
   assert.equal(mechanicsRows[0].cast_time_ms, 0);
   assert.equal(mechanicsRows[0].range_yards, 30);
-  assert.equal(mechanicsRows[0].effects[0].duration_ms, 12000);
-  assert.equal(mechanicsRows[0].effects[0].tick_interval_ms, 3000);
-  assert(mechanicsRows[0].raw.linked_item_ids.includes(23887));
-  assert(mechanicsRows[0].provenance.some((p) => p.source === "ascension_db"));
+  assert.equal(mechanicsRows[0].cooldown_ms, null);   // no AscensionDB source
+  assert.equal(mechanicsRows[0].gcd_ms, null);
+  assert.equal(mechanicsRows[0].costs, null);
+  assert(!mechanicsRows[0].provenance.some((p) => p.source === "ascension_db"));
+  // the item pipeline (parser + buildItemRows) is untouched by the mechanics DB removal
   assert.equal(itemRows[0].schema_version, "coa-item-v1");
   assert.equal(itemRows[0].item_id, 23887);
   assert.equal(itemRows[0].required_level, 58);
@@ -728,16 +701,14 @@ test("normalizeSchoolMask flags unknown bits; normalizePowerType flags unknown e
   assert.equal(normalizePowerType(999).unknown, true);                                          // undocumented enum
 });
 
-test("M1.8 pipeline refreshes manifest after DB enrichment artifacts", () => {
+test("build-mechanics is pointer-only + network-free in package.json (no AscensionDB)", () => {
   const packageJson = JSON.parse(
     fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")
   );
-
-  assert.match(packageJson.scripts["pipeline:m1.8"], /enrich-db/);
-  assert.match(packageJson.scripts["pipeline:m1.8"], /apply-db-enrichment/);
-  assert.match(packageJson.scripts["pipeline:m1.8"], /write-artifact-manifest/);
   assert.match(packageJson.scripts["build-mechanics"], /build-mechanics-artifacts/);
-  assert.match(packageJson.scripts["pipeline:m1.9"], /build-mechanics/);
+  assert.match(packageJson.scripts["build-mechanics"], /--client-extract-pointer/);
+  assert.doesNotMatch(packageJson.scripts["build-mechanics"], /--db-spells/);
+  assert.equal(packageJson.scripts["pipeline:m1.9"], undefined);
 });
 
 test("reconcileField picks first eligible by tier and records all candidates", () => {
@@ -746,12 +717,12 @@ test("reconcileField picks first eligible by tier and records all candidates", (
     raw_value: null, normalized_value: null, confidence: "low", eligible: true, eligibility_reasons: [],
     ...over,
   });
-  // client wins over db even though both eligible
+  // client wins over a lower-tier inferred candidate even though both are eligible
   const out = reconcileField({
     field: "cast_time_ms",
     candidates: [
       cand({ source: "client_dbc", precedence_tier: "client_dbc", normalized_value: 1500, confidence: "high" }),
-      cand({ source: "ascension_db", precedence_tier: "ascension_db", normalized_value: 2000, confidence: "medium" }),
+      cand({ source: "builder", precedence_tier: "inferred", normalized_value: 2000, confidence: "medium" }),
     ],
   });
   assert.equal(out.selected, 1500);
@@ -792,34 +763,17 @@ test("reconcileField omits field when only tier conflicts", () => {
   assert.equal(out.provenance.selection_reason, REASON.OMITTED_UNRESOLVED_CONFLICT);
 });
 
-test("dbIdentityReference prefers client name, then consensus builder, then db", () => {
-  assert.equal(dbIdentityReference({ clientName: "Adrenal Venom", builderNames: ["X"], dbName: "Y" }), "Adrenal Venom");
-  assert.equal(dbIdentityReference({ clientName: "", builderNames: ["Ward", "Ward"], dbName: "Y" }), "Ward");
-  assert.equal(dbIdentityReference({ clientName: "", builderNames: ["A", "B"], dbName: "Y" }), "Y");
-});
-
-test("applyDbIdentityGate excludes a name-mismatched db row (name_match ignored as veto)", () => {
-  const stale = { name: "Fang Venom: Lifeblood", name_match: false };
-  const fresh = { name: "Adrenal Venom", name_match: false }; // builder-based name_match is audit-only
-  assert.equal(applyDbIdentityGate({ dbRow: stale, referenceName: "Adrenal Venom" }).excluded, true);
-  assert.equal(applyDbIdentityGate({ dbRow: fresh, referenceName: "Adrenal Venom" }).excluded, false);
-});
-
-test("fieldCandidates: client cast_time 0 is present (missing != zero), db excluded contributes nothing", () => {
+test("fieldCandidates: client cast_time 0 is present (missing != zero) and eligible", () => {
   const clientRec = {
     mechanics: { cast_time_ms: 0, school_mask: 8, power_type: 3, duration_ms: null, range_max_yd: 30 },
-    provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
     coa_attribution: { confidence: "high" },
     spell_id: 42,
   };
-  const dbRow = { id: 42, cast_time_ms: 2000, name: "Stale" };
-  const cands = fieldCandidates({ field: "cast_time_ms", clientRec, builderNodes: [], dbRow, dbExcluded: true });
+  const cands = fieldCandidates({ field: "cast_time_ms", clientRec, builderNodes: [] });
   const client = cands.find((c) => c.source === "client_dbc");
   assert.equal(client.normalized_value, 0);
   assert.equal(client.eligible, true);
-  // db excluded → either absent or ineligible db_identity_mismatch
-  const db = cands.find((c) => c.source === "ascension_db");
-  assert(!db || db.eligible === false);
+  assert(!cands.some((c) => c.source === "ascension_db"));   // no DB tier exists anymore
 });
 
 test("fieldCandidates: v2 withheld (null) client field yields no eligible client candidate", () => {
@@ -829,86 +783,50 @@ test("fieldCandidates: v2 withheld (null) client field yields no eligible client
     mechanics: { cast_time_ms: null },
     coa_attribution: { confidence: "high" }, spell_id: 7,
   };
-  const cands = fieldCandidates({ field: "cast_time_ms", clientRec, builderNodes: [], dbRow: null, dbExcluded: false });
+  const cands = fieldCandidates({ field: "cast_time_ms", clientRec, builderNodes: [] });
   const client = cands.find((c) => c.source === "client_dbc");
   assert.equal(client.eligible, false);
   // a populated client value, by contrast, is eligible by construction (already proof-gated)
-  const ok = fieldCandidates({ field: "cast_time_ms", clientRec: { mechanics: { cast_time_ms: 1500 }, coa_attribution: { confidence: "high" }, spell_id: 7 }, builderNodes: [], dbRow: null, dbExcluded: false });
+  const ok = fieldCandidates({ field: "cast_time_ms", clientRec: { mechanics: { cast_time_ms: 1500 }, coa_attribution: { confidence: "high" }, spell_id: 7 }, builderNodes: [] });
   assert.equal(ok.find((c) => c.source === "client_dbc").eligible, true);
 });
 
-test("buildMechanicsRows: one row per spell_id, client field wins, schools + field_provenance present", () => {
+test("buildCanonicalMechanics: one row per spell_id, client field wins, schools + field_provenance present", () => {
   const projection = [{
     spell_id: 92117, name: "Adrenal Venom",
-    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30, category: 0, spell_icon_id: 1 },
-    provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
+    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
   const entryA = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const entryB = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
-  const dbRow = { id: 92117, name: "Adrenal Venom", name_match: true, cast_time_ms: 2000, cooldown_ms: 30000, gcd_ms: 1500, tooltip_text: "Deals Nature damage." };
-  const rows = buildMechanicsRows({ entries: [entryA, entryB], spellRows: [dbRow], projection });
+  const rows = buildCanonicalMechanics({ entries: [entryA, entryB], spellRows: [], projection });
   assert.equal(rows.length, 1);
   const r = rows[0];
   assert.equal(r.spell_id, 92117);
   assert.deepEqual(r.source_node_ids, [501, 777]);
-  assert.equal(r.cast_time_ms, 0); // client 0 beats db 2000 (missing != zero)
+  assert.equal(r.cast_time_ms, 0); // client 0 (missing != zero)
   assert.deepEqual(r.schools, ["nature"]);
-  assert.equal(r.cooldown_ms, 30000); // db-only field survives (identity matched)
+  assert.equal(r.cooldown_ms, null);   // no AscensionDB source
   assert.equal(r.field_provenance.cast_time_ms.selected_source, "client_dbc");
   assert.equal(r.field_provenance.effects.selected_source, "inferred"); // effects field has provenance
   assert.deepEqual(r.raw.tags, ["damage"]); // builder tags carried under raw, not a top-level v1 field
   assert.equal(r.tags, undefined); // NOT a top-level field (would be dropped by the v1 loader)
-  // the identity-matched db tooltip participated in classifying kind → recorded as a db candidate
-  assert(r.field_provenance.kind.candidates.some((c) => c.source === "ascension_db" && c.source_field === "tooltip_text"));
+  // kind is Builder-only now — no AscensionDB tooltip candidate ever appears
+  assert(!r.field_provenance.kind.candidates.some((c) => c.source === "ascension_db"));
 });
 
-test("buildMechanicsRows: identity-mismatched db row supplies zero fields", () => {
-  const projection = [{
-    spell_id: 5, name: "Adrenal Venom",
-    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 1500, duration_ms: null, range_min_yd: null, range_max_yd: null, category: 0, spell_icon_id: 1 },
-    provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
-    coa_attribution: { is_coa: true, confidence: "high" },
-  }];
-  const entry = { spell_id: 5, entry_id: 9, entry_type: "Ability", name: "Adrenal Venom", damage_schools: [], resources: [] };
-  const staleDb = { id: 5, name: "Fang Venom: Lifeblood", name_match: false, cooldown_ms: 999, gcd_ms: 1500 };
-  const rows = buildMechanicsRows({ entries: [entry], spellRows: [staleDb], projection });
-  assert.equal(rows[0].cooldown_ms ?? null, null); // db excluded → no cooldown leaks
-  // and the excluded db cooldown candidate is recorded as ineligible (audit retained)
-  assert.equal(rows[0].field_provenance.cooldown_ms.candidates[0].eligible, false);
-  // the excluded db row must not leak into kind classification either (no db tooltip candidate)
-  assert(!rows[0].field_provenance.kind.candidates.some((c) => c.source === "ascension_db"));
-  assert(!rows[0].provenance.some((p) => p.source === "ascension_db")); // nothing db survives
-});
-
-test("buildMechanicsRows: output is input-node-order-independent (canonicalized by entry_id)", () => {
+test("buildCanonicalMechanics: output is input-node-order-independent (canonicalized by entry_id)", () => {
   const projection = [{
     spell_id: 92117, name: "Adrenal Venom",
-    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30, category: 0, spell_icon_id: 1 },
-    provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
+    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
   const a = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const b = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["dot"] };
-  const forward = buildMechanicsRows({ entries: [a, b], spellRows: [], projection });
-  const reversed = buildMechanicsRows({ entries: [b, a], spellRows: [], projection });
+  const forward = buildCanonicalMechanics({ entries: [a, b], spellRows: [], projection });
+  const reversed = buildCanonicalMechanics({ entries: [b, a], spellRows: [], projection });
   assert.equal(JSON.stringify(forward), JSON.stringify(reversed));
   assert.deepEqual(forward[0].raw.tags, ["damage", "dot"]); // set-like union, sorted, under raw
-});
-
-test("buildMechanicsRows: db-derived cooldown always leaves a db provenance entry", () => {
-  const projection = [{
-    spell_id: 9, name: "X",
-    mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: null, range_min_yd: null, range_max_yd: null, category: 0, spell_icon_id: 1 },
-    provenance: { schema_match_confidence_by_dbc: { Spell: "high", SpellCastTimes: "high", SpellDuration: "high", SpellRange: "high" } },
-    coa_attribution: { is_coa: true, confidence: "high" },
-  }];
-  const entry = { spell_id: 9, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] };
-  const dbRow = { id: 9, name: "X", name_match: true, cooldown_ms: 30000 };
-  const rows = buildMechanicsRows({ entries: [entry], spellRows: [dbRow], projection });
-  assert.equal(rows[0].cooldown_ms, 30000);
-  assert(rows[0].provenance.some((p) => p.source === "ascension_db")); // union includes db
-  assert.equal(rows[0].field_provenance.cooldown_ms.selected_source, "ascension_db");
 });
 
 function writeProjectionFixture(dir, records) {
@@ -1160,40 +1078,19 @@ test("acceptance: fallback does NOT modify a pre-existing canonical artifact", (
   assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
 });
 
-test("acceptance: identity-mismatched db supplies zero fields AND zero db-derived effects end-to-end", () => {
+test("acceptance: a canonical build emits no ascension_db provenance (DB removed)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acc3-"));
-  // No client school and no builder tooltip → the ONLY thing that could produce an effect is the
-  // db's "summon a pet" tooltip. Since the db row fails identity, it must be excluded → zero effects.
   const rec = validProjRec(7);
-  rec.mechanics.school_mask = 0; rec.field_observations.school_mask = _env(0, "uint32");
-  rec.mechanics.duration_ms = null;
-  rec.mechanics.range_min_yd = null;
-  rec.mechanics.range_max_yd = null;
   const { proj, man } = writeProjectionFixture(dir, [rec]);
-  const out = buildMechanicsArtifact({
+  buildMechanicsArtifact({
     entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
-    spellRows: [{ id: 7, name: "Totally Different", name_match: false, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
-    projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
   });
   const row = JSON.parse(fs.readFileSync(path.join(dir, "coa_mechanics.jsonl"), "utf8").trim());
   assert.equal(row.cooldown_ms ?? null, null);
   assert.equal(row.gcd_ms ?? null, null);
-  assert.equal(row.raw.db_excluded, true);
-  assert(!row.provenance.some((p) => p.source === "ascension_db")); // no db provenance leaked
-  assert.equal(row.effects.length, 0); // the excluded db "summon a pet" tooltip yields NO effect
-  // Non-vacuous counts check: isolate the db-identity-gate's contribution with a CONTROL build that is
-  // byte-for-byte identical except the db name MATCHES identity (gate does NOT trigger), so cooldown_ms
-  // and gcd_ms resolve to ascension_db instead of being barred+omitted. The fixture's null client fields
-  // (school_mask:0, null duration/range) are identical in both runs and cancel in the delta — so a
-  // regression that silently disabled applyDbIdentityGate would break this exact-2 delta.
-  const ctrlDir = fs.mkdtempSync(path.join(os.tmpdir(), "acc3ctrl-"));
-  const ctrl = buildMechanicsArtifact({
-    entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
-    spellRows: [{ id: 7, name: "S7", name_match: true, cooldown_ms: 999, gcd_ms: 1500, tooltip_text: "summon a pet" }],
-    projectionPath: proj, manifestPath: man, outDir: ctrlDir, allowFallback: false,
-  });
-  assert.equal(out.manifest.counts.ineligible_candidates - ctrl.manifest.counts.ineligible_candidates, 2); // exactly the 2 barred db candidates
-  assert.equal(out.manifest.counts.omitted_fields - ctrl.manifest.counts.omitted_fields, 2);               // exactly cooldown_ms + gcd_ms
+  assert.equal(row.costs ?? null, null);
+  assert(!row.provenance.some((p) => p.source === "ascension_db"));
 });
 
 test("acceptance: kind_disagreements counts a real Builder kind disagreement (Ability vs Talent, no tooltip)", () => {

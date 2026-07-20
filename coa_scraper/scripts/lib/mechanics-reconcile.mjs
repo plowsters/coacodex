@@ -1,12 +1,13 @@
 import { isPresent } from "./mechanics-normalize.mjs";
-import { normalizeName } from "./ascensiondb.mjs";
+import { normalizeName } from "./jsonl.mjs";
 
-export const TIERS = Object.freeze(["client_dbc", "verified_builder", "ascension_db", "inferred"]);
+// AscensionDB (db.ascension.gg) has been removed as a canonical reconciliation source (E0R). The tiers
+// are now client DBC, the verified Builder, and last-resort inference — no `ascension_db`.
+export const TIERS = Object.freeze(["client_dbc", "verified_builder", "inferred"]);
 
 export const REASON = Object.freeze({
   HIGHEST_PRECEDENCE_ELIGIBLE: "highest_precedence_eligible",
   ONLY_CANDIDATE: "only_candidate",
-  DB_FALLBACK: "db_fallback",
   INFERRED_LAST_RESORT: "inferred_last_resort",
   INFERRED_FROM_TEXT: "inferred_from_text",
   KIND_NODE_DISAGREEMENT_RESOLVED: "kind_node_disagreement_resolved",
@@ -14,8 +15,6 @@ export const REASON = Object.freeze({
   OMITTED_NO_ELIGIBLE_CANDIDATE: "omitted_no_eligible_candidate",
   SAME_TIER_CONFLICT: "same_tier_conflict",
   CLIENT_TABLE_DRIFT: "client_table_drift",
-  DB_IDENTITY_MISMATCH: "db_identity_mismatch",
-  DB_IDENTITY_UNVERIFIABLE: "db_identity_unverifiable",
   UNKNOWN_ENUM: "unknown_enum",
   UNKNOWN_MASK_BIT: "unknown_mask_bit",
   ABSENT: "absent",
@@ -68,8 +67,7 @@ export function reconcileField({ field, candidates }) {
     provenance.selected_tier = winner.precedence_tier;
     provenance.selected_value = selected;
     provenance.selection_reason =
-      winner.precedence_tier === "ascension_db" ? REASON.DB_FALLBACK
-      : winner.precedence_tier === "inferred" ? REASON.INFERRED_LAST_RESORT
+      winner.precedence_tier === "inferred" ? REASON.INFERRED_LAST_RESORT
       : candidates.length === 1 ? REASON.ONLY_CANDIDATE
       : REASON.HIGHEST_PRECEDENCE_ELIGIBLE;
     return { field, selected, provenance, hadConflict };
@@ -81,24 +79,13 @@ export function reconcileField({ field, candidates }) {
   return { field, selected: undefined, provenance, hadConflict: anyConflict };
 }
 
-// Identity reference: client name → consensus verified-Builder name → db name.
-export function dbIdentityReference({ clientName, builderNames, dbName }) {
+// Identity reference: client name → consensus verified-Builder name (the AscensionDB fallback is gone).
+export function identityReference({ clientName, builderNames }) {
   if (clientName) return clientName;
   const names = (builderNames || []).filter(Boolean).map(String);
   if (names.length) {
     const first = names[0];
     if (names.every((n) => normalizeName(n) === normalizeName(first))) return first;
   }
-  return dbName || null;
-}
-
-// A db row is excluded from every contribution when its normalized name != the reference.
-// The existing Builder-based name_match is NOT consulted as a veto (audit-only). A row that cannot
-// be identity-checked (no db name, or no reference to check against) is excluded as UNVERIFIABLE,
-// never silently allowed.
-export function applyDbIdentityGate({ dbRow, referenceName }) {
-  if (!dbRow) return { excluded: false, reason: null };
-  if (!dbRow.name || !referenceName) return { excluded: true, reason: REASON.DB_IDENTITY_UNVERIFIABLE };
-  const mismatch = normalizeName(dbRow.name) !== normalizeName(referenceName);
-  return { excluded: mismatch, reason: mismatch ? REASON.DB_IDENTITY_MISMATCH : null };
+  return null;
 }

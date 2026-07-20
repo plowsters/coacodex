@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 
-import { readJsonl } from "./lib/ascensiondb.mjs";
-import { reconcileField, dbIdentityReference, applyDbIdentityGate, REASON } from "./lib/mechanics-reconcile.mjs";
+import { readJsonl } from "./lib/jsonl.mjs";
+import { reconcileField, identityReference, REASON } from "./lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "./lib/mechanics-candidates.mjs";
 import { isPresent } from "./lib/mechanics-normalize.mjs";
 import { loadAndValidateProjection, MechanicsBuildError } from "./lib/mechanics-projection.mjs";
@@ -15,12 +15,15 @@ import { resolveGeneration, GenerationResolveError } from "./lib/generation.mjs"
 const MECHANICS_SCHEMA_VERSION = "coa-mechanics-v1";
 
 const CLIENT_FIELDS = ["cast_time_ms", "duration_ms", "range_yards", "schools", "power_type"];
+// AscensionDB previously supplied cooldown/gcd/costs; with the DB removed these have NO canonical source
+// here and are emitted null/{} (E0R: missing != default). Task 12 makes them nullable with readiness.
 const DB_ONLY_FIELDS = ["cooldown_ms", "gcd_ms", "costs"];
 const KIND_BEHAVIOR_ORDER = { pet_action: 0, cooldown: 1, ability: 2, debuff: 3, passive: 4 };
 
-export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
+// Canonical mechanics from the CLIENT projection + the verified Builder only — no AscensionDB. `spellRows`
+// is retained in the signature (kept for callers) but is no longer a reconciliation source.
+export function buildCanonicalMechanics({ entries, spellRows = [], projection = [] }) {
   const clientById = new Map(projection.map((r) => [Number(r.spell_id), r]));
-  const dbById = new Map(spellRows.map((r) => [Number(r.id ?? r.spell_id), r]));
 
   const bySpell = new Map();
   for (const entry of entries) {
@@ -35,46 +38,33 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
     // Determinism: canonicalize nodes by entry_id so reversing input order is byte-identical.
     const nodes = [...rawNodes].sort((a, b) => Number(a.entry_id) - Number(b.entry_id));
     const clientRec = clientById.get(sid) || null;
-    const dbRow = dbById.get(sid) || null;
 
     const clientName = clientRec?.name || "";
     const builderNames = nodes.map((n) => n.name).filter(Boolean);
-    const referenceName = dbIdentityReference({ clientName, builderNames, dbName: dbRow?.name || "" });
-    const gate = dbRow ? applyDbIdentityGate({ dbRow, referenceName }) : { excluded: false, reason: null };
-    const dbUsable = Boolean(dbRow && !gate.excluded);
 
     const fieldProvenance = {};
     const selected = {};
 
-    // name: client_dbc → verified_builder (consensus) → ascension_db (only if identity-usable)
-    const nameOut = reconcileField({ field: "name", candidates: nameCandidates({ clientRec, nodes, dbRow, dbUsable }) });
+    // name: client_dbc → verified_builder (consensus)
+    const nameOut = reconcileField({ field: "name", candidates: nameCandidates({ clientRec, nodes }) });
     fieldProvenance.name = nameOut.provenance;
-    const name = nameOut.selected ?? (clientName || builderNames[0] || dbRow?.name || "");
+    const name = nameOut.selected ?? (clientName || builderNames[0] || "");
 
-    // reconciled mechanical fields (client/builder/db)
+    // reconciled mechanical fields (client/builder)
     for (const field of CLIENT_FIELDS) {
-      const candidates = fieldCandidates({ field, clientRec, builderNodes: nodes, dbRow, dbExcluded: gate.excluded, dbExclusionReason: gate.reason });
+      const candidates = fieldCandidates({ field, clientRec, builderNodes: nodes });
       if (candidates.length === 0) continue;
       const { selected: value, provenance } = reconcileField({ field, candidates });
       fieldProvenance[field] = provenance;
       if (value !== undefined) selected[field] = value;
     }
 
-    // db-only fields: single-source field_provenance (barred when the db row failed identity)
-    for (const field of DB_ONLY_FIELDS) {
-      const fp = dbOnlyProvenance({ field, dbRow, dbUsable, gate });
-      if (fp) fieldProvenance[field] = fp;
-    }
-
-    // Tooltip used to classify kind and infer effects. When the identity-matched db row supplies
-    // the tooltip, that participation is recorded in provenance (not silently attributed to the
-    // builder); otherwise fall back to the first builder description in entry_id order.
-    const dbTooltip = dbUsable && dbRow.tooltip_text ? String(dbRow.tooltip_text) : "";
+    // Tooltip (for kind classification + effect inference) is now Builder-only: the first builder
+    // description in entry_id order. cooldown/gcd/costs lost their only source with AscensionDB.
     const builderTooltip = nodes.map((n) => n.description_text).filter(Boolean)[0] || "";
-    const tooltipText = dbTooltip || builderTooltip;
-    const tooltipMeta = dbTooltip
-      ? { text: dbTooltip, source: "ascension_db", tier: "ascension_db", source_id: `ascension_db:${dbRow.id}` }
-      : { text: builderTooltip, source: "builder", tier: "verified_builder", source_id: `builder_node:${nodes[0]?.entry_id}` };
+    const tooltipText = builderTooltip;
+    const tooltipMeta = { text: builderTooltip, source: "builder", tier: "verified_builder",
+                         source_id: `builder_node:${nodes[0]?.entry_id}` };
 
     // kind: derived from ALL nodes (order-independent) + the tooltip's real source
     const { kind, provenance: kindProv } = resolveKind(nodes, tooltipText, tooltipMeta);
@@ -85,7 +75,7 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
     // plus the tooltip — never one arbitrary node — so output is input-order-independent.
     const mergedTags = [...new Set(nodes.flatMap((n) => n.tags || []))].sort();
     const mergedEntry = { tags: mergedTags, description_text: builderTooltip };
-    const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: dbUsable ? dbRow : null, schools, durationMs: selected.duration_ms ?? null });
+    const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: null, schools, durationMs: selected.duration_ms ?? null });
     fieldProvenance.effects = effectsProvenance({ effects, tooltip: tooltipMeta });
 
     rows.push({
@@ -94,16 +84,16 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
       name,
       kind,
       source_node_ids: [...new Set(nodes.map((n) => Number(n.entry_id)).filter(Number.isFinite))].sort((a, b) => a - b),
-      source_urls: dbUsable ? sourceUrls(dbRow) : [],
+      source_urls: [],
       school: schools.length === 1 ? schools[0] : "",
       schools,
       power_type: selected.power_type || "",
       cast_time_ms: selected.cast_time_ms ?? null,
       duration_ms: selected.duration_ms ?? null,
       range_yards: selected.range_yards ?? null,
-      cooldown_ms: dbUsable ? numberOrNull(dbRow.cooldown_ms) : null,
-      gcd_ms: dbUsable ? numberOrNull(dbRow.gcd_ms) : null,
-      costs: dbUsable ? costsObject(dbRow.power_costs) : {},
+      cooldown_ms: null,               // no canonical source after AscensionDB removal (Task 12: readiness)
+      gcd_ms: null,
+      costs: null,
       generates: {},
       spends: {},
       effects,
@@ -115,43 +105,17 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
         category: clientRec?.mechanics?.category ?? null,
         spell_icon_id: clientRec?.mechanics?.spell_icon_id ?? null,
         school_mask: clientRec?.mechanics?.school_mask ?? null,
-        db_status: dbRow?.status || null,
-        db_excluded: gate.excluded,
-        db_exclusion_reason: gate.reason,
-        linked_item_ids: dbUsable ? (dbRow.linked_item_ids || []) : [],
       },
     });
   }
   return rows;
 }
 
-function nameCandidates({ clientRec, nodes, dbRow, dbUsable }) {
+function nameCandidates({ clientRec, nodes }) {
   const out = [];
   if (clientRec?.name) out.push({ source: "client_dbc", precedence_tier: "client_dbc", source_id: `client_spell:${clientRec.spell_id}`, source_field: "name", raw_value: clientRec.name, normalized_value: clientRec.name, confidence: clientRec?.coa_attribution?.confidence || "low", eligible: true, eligibility_reasons: [] });
   for (const n of nodes) if (n.name) out.push({ source: "builder", precedence_tier: "verified_builder", source_id: `builder_node:${n.entry_id}`, source_field: "name", raw_value: n.name, normalized_value: n.name, confidence: "high", eligible: true, eligibility_reasons: [] });
-  if (dbUsable && dbRow?.name) out.push({ source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`, source_field: "name", raw_value: dbRow.name, normalized_value: dbRow.name, confidence: "medium", eligible: true, eligibility_reasons: [] });
   return out;
-}
-
-function dbOnlyProvenance({ field, dbRow, dbUsable, gate }) {
-  if (!dbRow) return null;
-  const rawByField = { cooldown_ms: dbRow.cooldown_ms, gcd_ms: dbRow.gcd_ms, costs: dbRow.power_costs };
-  const raw = rawByField[field];
-  if (!isPresent(raw)) return null;
-  const value = field === "costs" ? costsObject(raw) : numberOrNull(raw);
-  const eligible = dbUsable;
-  return {
-    selected_source: eligible ? "ascension_db" : null,
-    selected_tier: eligible ? "ascension_db" : null,
-    selected_value: eligible ? value : null,
-    selection_reason: eligible ? REASON.DB_FALLBACK : REASON.OMITTED_NO_ELIGIBLE_CANDIDATE,
-    warnings: [],
-    candidates: [{
-      source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`,
-      source_field: field, raw_value: raw, normalized_value: value, confidence: "medium",
-      eligible, eligibility_reasons: eligible ? [] : [gate.reason || REASON.DB_IDENTITY_MISMATCH],
-    }],
-  };
 }
 
 // kind is classified from every node's entry_type AND the tooltip text (the tooltip can flip the
@@ -170,7 +134,7 @@ function resolveKind(nodes, tooltipText, tooltip) {
     candidates.push({
       source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
       source_field: "tooltip_text", raw_value: null, normalized_value: chosen,
-      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: false,   // tooltip is Builder-only now
     });
   }
   return {
@@ -194,7 +158,7 @@ function effectsProvenance({ effects, tooltip }) {
     candidates.push({
       source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
       source_field: "tooltip_text", raw_value: null, normalized_value: effects.length,
-      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: false,   // tooltip is Builder-only now
     });
   }
   return {
@@ -216,10 +180,10 @@ function buildProvenance(fieldProvenance) {
     if (fp.selected_source) used.add(fp.selected_source);
     for (const c of fp.candidates || []) if (c.contributed) used.add(c.source);
   }
-  const conf = { client_dbc: "high", builder: "medium", ascension_db: "medium", inferred: "low" };
-  const notes = { client_dbc: "client_dbc_mechanical", builder: "verified_builder_or_inferred", ascension_db: "db_fallback", inferred: "inferred" };
+  const conf = { client_dbc: "high", builder: "medium", inferred: "low" };
+  const notes = { client_dbc: "client_dbc_mechanical", builder: "verified_builder_or_inferred", inferred: "inferred" };
   const out = [];
-  for (const src of ["client_dbc", "builder", "ascension_db", "inferred"]) {
+  for (const src of ["client_dbc", "builder", "inferred"]) {
     if (used.has(src)) out.push({ source: src, parser: "build-mechanics-artifacts", confidence: conf[src], notes: [notes[src]] });
   }
   if (out.length === 0) out.push({ source: "inferred", parser: "build-mechanics-artifacts", confidence: "low", notes: ["no_source"] });
@@ -337,18 +301,6 @@ function inferSchool(text) {
   return match ? match[1].toLowerCase() : "";
 }
 
-function costsObject(costs) {
-  const output = {};
-  for (const item of costs || []) {
-    const resource = item?.resource ? String(item.resource) : "";
-    const amount = Number(item?.amount);
-    if (resource && Number.isFinite(amount)) {
-      output[resource] = amount;
-    }
-  }
-  return output;
-}
-
 export function sourceUrls(row) {
   const urls = [
     row?.source_url,
@@ -426,14 +378,14 @@ export function buildMechanicsArtifact({ entries, spellRows, projectionPath, man
 
   if (loaded.absent) {
     if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
-    const rows = buildMechanicsRows({ entries, spellRows, projection: [] });
+    const rows = buildCanonicalMechanics({ entries, spellRows, projection: [] });
     // A degraded build writes ONLY the coa_mechanics.fallback.* files. It NEVER writes the canonical
     // filename — MechanicsRepository reads the JSONL directly and would ingest degraded bytes as
     // canonical regardless of a canonical:false marker. There is no override.
     return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
   }
 
-  const rows = buildMechanicsRows({ entries, spellRows, projection: loaded.projection });
+  const rows = buildCanonicalMechanics({ entries, spellRows, projection: loaded.projection });
   return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
 }
 
@@ -486,7 +438,6 @@ if (isCliEntryPoint()) {
   };
   const has = (name) => args.includes(name);
   const entriesPath = flag("--builder-entries", "dist/coa_entries.jsonl");
-  const dbPath = flag("--db-spells", "dist/coa_db_spell_tooltips.jsonl");
   const outDir = flag("--out", "dist");
   const pointerPath = flag("--client-extract-pointer", null);
   const allowFallbackFlag = has("--allow-fallback-mechanics");
@@ -522,14 +473,13 @@ if (isCliEntryPoint()) {
     allowFallback = true;
   }
   const entries = readJsonl(entriesPath);
-  const spellRows = fs.existsSync(dbPath) ? readJsonl(dbPath) : [];
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
-      entries, spellRows, projectionPath, manifestPath: projManifestPath, outDir,
+      entries, spellRows: [], projectionPath, manifestPath: projManifestPath, outDir,
       allowFallback,
       inputs: {
         builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
-        db_spell_tooltips: fs.existsSync(dbPath) ? { path: dbPath, sha256: sha256File(dbPath) } : null,
+        db_spell_tooltips: null,
         projection_path: projectionPath, projection_manifest_path: projManifestPath,
         reconciler_commit: gitHeadCommit(),
       },

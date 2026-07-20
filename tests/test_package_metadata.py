@@ -46,7 +46,10 @@ def test_root_package_json_delegates_scraper_pipeline_commands():
     assert path.exists()
     data = json.loads(path.read_text(encoding="utf-8"))
     scripts = data["scripts"]
-    assert scripts["pipeline:m1.8"] == "npm --prefix coa_scraper run pipeline:m1.8"
+    # The M1.8/M1.9 AscensionDB pipelines were retired in M1.14E0R; the surviving delegation is the
+    # normalization pipeline (no db.ascension.gg step).
+    assert scripts["pipeline"] == "npm --prefix coa_scraper run pipeline"
+    assert "pipeline:m1.8" not in scripts and "pipeline:m1.9" not in scripts
 
 
 def test_root_package_json_exposes_tree_layout_capture_from_repo_root():
