@@ -46,6 +46,13 @@ export function resolveGeneration(rootOrPointer) {
   if (sha256(manifestBytes) !== pointer.manifest_sha256) throw new GenerationResolveError("manifest sha256 does not match the pointer");
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (manifest.generation_id !== genId) throw new GenerationResolveError("manifest generation_id disagrees with the pointer");
+  // A candidate manifest is never consumable (an interrupted publish leaves no half-live generation).
+  if (manifest.publication_state === "candidate") throw new GenerationResolveError("pointer resolves a candidate manifest (never publishable)");
+  // Pre-E0R generations are rejected: E0R consumers require the manifest-v3 transaction.
+  if (manifest.schema_version && manifest.schema_version !== "coa-client-extract-manifest-v3" &&
+      manifest.schema_version !== "coa-client-extract-manifest-v2") {
+    throw new GenerationResolveError(`unsupported manifest schema_version ${manifest.schema_version}`);
+  }
 
   const children = manifest.children || {};
   const resolved = {};
