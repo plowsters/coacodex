@@ -31,8 +31,20 @@ def test_raw_only_join_withholds_normalized_but_keeps_compact_raw():
     assert r["raw"]["cast_time_ms"]["state"] in ("resolved", "not_applicable")   # compact raw retained
 
 
-def test_custom_id_row_is_marked_is_coa():
+def test_is_coa_is_authoritative_not_the_id_floor():
+    # is_coa comes ONLY from the supplied authoritative CoA set (the advancement-graph attribution), never
+    # the spell_id>=100000 id floor. id_range stays the provenance signal (high/base).
+    prov = {"effective_archive": "patch-T.MPQ"}
+    # A high-id spell NOT attributed is excluded; a low-id spell (133) that IS attributed is included.
+    rows = {r["spell_id"]: r for r in iter_spell_records(
+        spell_dbc(), side_views(), policy=v2_policy(), provenance=prov, coa_spell_ids={133})}
+    assert rows[133]["coa_attribution"]["is_coa"] is True          # low id, attributed -> CoA
+    assert rows[133]["coa_attribution"]["id_range"] == "base"      # id_range is provenance only
+    assert rows[805775]["coa_attribution"]["is_coa"] is False      # high id, NOT attributed -> excluded
+    assert rows[805775]["coa_attribution"]["id_range"] == "high"
+
+
+def test_is_coa_fails_closed_without_an_attribution_set():
     rows = {r["spell_id"]: r for r in iter_spell_records(
         spell_dbc(), side_views(), policy=v2_policy(), provenance={"effective_archive": "patch-T.MPQ"})}
-    assert rows[805775]["coa_attribution"]["is_coa"] is True
-    assert rows[133]["coa_attribution"]["is_coa"] is False
+    assert all(r["coa_attribution"]["is_coa"] is False for r in rows.values())

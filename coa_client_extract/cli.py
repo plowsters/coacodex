@@ -113,18 +113,10 @@ def regenerate(
 
     content_records = read_content_records(client_root / "Content")
 
-    # === stream the v3 spell children (sorted by spell_id so the cross-child merge-join is a linear scan
-    # and the icon catalog covers every spell). The full child is the compact client-DBC row: identity +
-    # normalized mechanics + coa_attribution + a compact raw block; per-row proof/provenance/evidence text
-    # are inferred from the pinned policy + manifest, never repeated per row (A4). ===
-    full_rows = sorted(iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance),
-                       key=lambda r: r["spell_id"])
-    projection_rows = [{**r, "schema_version": "coa-client-spell-projection-v3"}
-                       for r in full_rows if r["coa_attribution"].get("is_coa") is True]
-    icon_rows = sorted(iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver),
-                       key=lambda r: r["spell_id"])
-    unknown_symbol_inventory = _unknown_symbol_inventory(spell_view, policy)
-
+    # === TWO-PASS attribution (design B / M1.14B): pass 1 builds the authoritative CoA attribution from
+    # CharacterAdvancement + the proven skill-line index; pass 2 (below) streams the Spell table using it.
+    # `coa_attribution.is_coa` is NEVER the `spell_id >= 100000` id floor (that is `id_range` provenance
+    # only — it tags ~139k enemy/NPC/aura/dev spells and would distort the projection, closure, coverage).
     # --- advancement pipeline: read the CoA advancement graph, attribute spells, and prove parity ---
     import hashlib
     from .class_types import resolve_class_types, resolve_tab_types, assert_playable_cardinality
@@ -188,6 +180,19 @@ def regenerate(
     coa_skill_lines = derive_coa_skill_lines(sla_raw.rows, coa_spell_ids)
     skill_index = build_skill_line_index(sla_raw.rows, coa_skill_lines)
     spell_attr = attribute(nodes, class_types, skill_line_index=skill_index)
+
+    # === PASS 2: the AUTHORITATIVE CoA spell-id set (graph attribution + proven skill-line fallback) drives
+    # is_coa. Stream the v3 spell children sorted by spell_id (so the cross-child merge-join is a linear
+    # scan and the icon catalog covers every spell); project ONLY authoritatively-attributed rows. ===
+    coa_attributed_ids = {sid for sid, sa in spell_attr.items() if sa.result.is_coa}
+    full_rows = sorted(iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance,
+                                          coa_spell_ids=coa_attributed_ids),
+                       key=lambda r: r["spell_id"])
+    projection_rows = [{**r, "schema_version": "coa-client-spell-projection-v3"}
+                       for r in full_rows if r["coa_attribution"].get("is_coa") is True]
+    icon_rows = sorted(iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver),
+                       key=lambda r: r["spell_id"])
+    unknown_symbol_inventory = _unknown_symbol_inventory(spell_view, policy)
 
     adv_provenance = {
         "client_build": _client_build(plan),
@@ -560,6 +565,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "regenerate":
         from .errors import ClientBindingError
+        from .publish import PublishError
         try:
             regenerate(
                 args.client_root, args.out, stormlib_path=args.stormlib,
@@ -572,6 +578,11 @@ def main(argv: list[str] | None = None) -> int:
         except ClientBindingError as exc:
             print(f"error: client-binding hard hold: {exc}", file=sys.stderr)
             return 3
+        except PublishError as exc:
+            # A budget breach / staging failure fails CLOSED: the pointer is untouched and NO generation is
+            # published (exit 4, distinct from the backend/binding holds), so a wrapper cannot mask it.
+            print(f"error: publication hard hold: {exc}", file=sys.stderr)
+            return 4
         return 0
     if args.command == "decode-advancement":
         try:

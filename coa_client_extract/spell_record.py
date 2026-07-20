@@ -269,9 +269,16 @@ def _side_maps(side_views: dict) -> dict:
     return out
 
 
-def iter_spell_records(spell_view, side_views, *, policy, provenance):
+def iter_spell_records(spell_view, side_views, *, policy, provenance, coa_spell_ids=None):
     """Stream coa-client-spell-v3 rows. String joins (SpellIcon.path) are emitted by the icon catalog,
-    not here, so `mechanics` stays numeric."""
+    not here, so `mechanics` stays numeric.
+
+    `coa_attribution.is_coa` is AUTHORITATIVE: a spell is CoA iff its id is in `coa_spell_ids` — the set
+    the M1.14B advancement-graph + skill-line attribution proves (built two-pass by the caller). It is NOT
+    the `spell_id >= 100000` id floor, which is only the `id_range` PROVENANCE signal (marking ~139k
+    enemy/NPC/aura/dev spells CoA distorts the projection, closure, and coverage). When `coa_spell_ids` is
+    None (a caller with no attribution, e.g. a raw compact-raw unit test) is_coa fails closed to False."""
+    coa_ids = coa_spell_ids if coa_spell_ids is not None else frozenset()
     sf = policy.tables["Spell"]["fields"]
     allowed_pt = policy.enum_policy["power_types"]
     allowed_bits = policy.enum_policy["school_bits"]
@@ -319,7 +326,7 @@ def iter_spell_records(spell_view, side_views, *, policy, provenance):
 
         yield {"schema_version": SCHEMA_V3, "spell_id": spell_id, "name": name_val,
                "mechanics": mech, "raw": raw,
-               "coa_attribution": {"is_coa": spell_id >= _CUSTOM_ID_FLOOR, "status": "unknown",
+               "coa_attribution": {"is_coa": spell_id in coa_ids, "status": "unknown",
                                    "archive_family": archive_family,
                                    "id_range": "high" if spell_id >= _CUSTOM_ID_FLOOR else "base",
                                    "policy_sha256": policy.sha256}}

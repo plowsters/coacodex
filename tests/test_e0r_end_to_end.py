@@ -21,7 +21,9 @@ def _resolver(path):
 
 def _stage_full_generation(root: Path) -> GenerationWriter:
     prov = {"effective_archive": "patch-T.MPQ"}
-    full = sorted(iter_spell_records(spell_dbc(), side_views(), policy=v2_policy(), provenance=prov),
+    # 805775 is the authoritatively-attributed CoA spell (id_range: high is only provenance).
+    full = sorted(iter_spell_records(spell_dbc(), side_views(), policy=v2_policy(), provenance=prov,
+                                     coa_spell_ids={805775}),
                   key=lambda r: r["spell_id"])
     proj = [{**r, "schema_version": "coa-client-spell-projection-v3"}
             for r in full if r["coa_attribution"]["is_coa"] is True]
