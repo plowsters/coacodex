@@ -146,20 +146,48 @@ def file_patch_chain(lib: ctypes.CDLL, file_handle: ctypes.c_void_p) -> list[str
     return [part.decode("utf-8", "replace") for part in buffer.raw.split(b"\x00") if part]
 
 
+def open_patched_handle(lib, base_path, patch_paths):
+    """Open the base archive and attach each patch in load order, returning the handle. The caller owns
+    the handle and MUST close_handle() it. Opening a 50+-archive chain is the dominant cost of a read
+    (~1.5 min on the real client), so callers that read many members should open ONCE and reuse."""
+    handle = ctypes.c_void_p()
+    if not lib.SFileOpenArchive(str(base_path).encode("utf-8"), 0, 0x00000100, ctypes.byref(handle)):
+        raise ArchiveError(f"SFileOpenArchive failed for {base_path}")
+    for patch in patch_paths:
+        # StormLib returns false for a patch that does not apply to this base; skip it.
+        lib.SFileOpenPatchArchive(handle, str(patch).encode("utf-8"), b"", 0)
+    return handle
+
+
+def close_handle(lib, handle):
+    lib.SFileCloseArchive(handle)
+
+
 @contextmanager
 def open_patched_archive(lib, base_path, patch_paths):
     """Open the base archive and attach each patch in load order. Always closes the
     archive handle on exit, even if a patch attach or a read raises."""
-    handle = ctypes.c_void_p()
-    if not lib.SFileOpenArchive(str(base_path).encode("utf-8"), 0, 0x00000100, ctypes.byref(handle)):
-        raise ArchiveError(f"SFileOpenArchive failed for {base_path}")
+    handle = open_patched_handle(lib, base_path, patch_paths)
     try:
-        for patch in patch_paths:
-            # StormLib returns false for a patch that does not apply to this base; skip it.
-            lib.SFileOpenPatchArchive(handle, str(patch).encode("utf-8"), b"", 0)
         yield handle
     finally:
-        lib.SFileCloseArchive(handle)
+        close_handle(lib, handle)
+
+
+def read_member_with_handle(lib, handle, logical_path):
+    """Read (effective bytes, participating archive paths) for logical_path from an already-open patched
+    archive handle. Reusing one handle across many reads avoids re-attaching the whole chain each call."""
+    if not lib.SFileHasFile(handle, logical_path.encode("utf-8")):
+        raise ArchiveError(f"{logical_path}: not found in patched archive chain")
+    with open_file(lib, handle, logical_path) as fh:
+        # Query the chain while the file handle is still open.
+        data = read_all(lib, fh)
+        chain = file_patch_chain(lib, fh)
+        return data, chain
+
+
+def member_exists_with_handle(lib, handle, logical_path):
+    return bool(lib.SFileHasFile(handle, logical_path.encode("utf-8")))
 
 
 def read_effective_member(lib, base_path, patch_paths, logical_path):
@@ -167,15 +195,9 @@ def read_effective_member(lib, base_path, patch_paths, logical_path):
     patched archive chain. The chain is StormLib's own report (winner last), not the
     attach order, so it reflects which archives actually supplied the winning bytes."""
     with open_patched_archive(lib, base_path, patch_paths) as handle:
-        if not lib.SFileHasFile(handle, logical_path.encode("utf-8")):
-            raise ArchiveError(f"{logical_path}: not found in patched archive chain")
-        with open_file(lib, handle, logical_path) as fh:
-            # Query the chain while the file handle is still open.
-            data = read_all(lib, fh)
-            chain = file_patch_chain(lib, fh)
-            return data, chain
+        return read_member_with_handle(lib, handle, logical_path)
 
 
 def member_exists(lib, base_path, patch_paths, logical_path):
     with open_patched_archive(lib, base_path, patch_paths) as handle:
-        return bool(lib.SFileHasFile(handle, logical_path.encode("utf-8")))
+        return member_exists_with_handle(lib, handle, logical_path)
