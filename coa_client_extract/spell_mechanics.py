@@ -237,9 +237,13 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
     # break the FK ambiguity; power_type_anchors admit the signed int32 reading only via a static negative.
     join_pairs: dict[str, dict] = {}
     if join_value_anchors:
-        for field, side_name in spell_policy.index_fields.items():
-            spec = join_value_anchors.get(field)
-            if not spec:
+        # Iterate the SUPPLIED anchors (not index_fields, which pre-filters to already-adjudicated joins)
+        # — the whole point is to discover the cell of an un-adjudicated join. side_table comes from the
+        # anchor spec, falling back to the policy's join map.
+        field_to_side = {j.index_field: j.side_table for j in getattr(spell_policy, "joins", {}).values()}
+        for field, spec in join_value_anchors.items():
+            side_name = spec.get("side_table") or field_to_side.get(field)
+            if not side_name:
                 continue
             try:
                 sm = backend.read_effective_file(root, attach, f"DBFilesClient\\{side_name}.dbc")
