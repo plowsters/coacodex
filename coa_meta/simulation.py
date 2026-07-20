@@ -128,6 +128,10 @@ def _combat_actions_from_apl(
 
 
 def _action_from_node(node: TalentNode, category: str) -> CombatAction:
+    # HEURISTIC factory: this estimates amount/costs/cooldown/gcd from node tags + category (it does NOT
+    # consult the client mechanics). It is the invented-defaults path (gcd 1500, cooldown 45s for a
+    # cooldown, _estimated_costs) — the canonical APL sim (rotation_simulation.simulate_apl) fails closed
+    # instead of reaching here unless heuristic mode is explicitly authorized (design B5).
     amount = _estimated_amount(node, category)
     effect_type = "heal" if "heal" in node.tags else "damage"
     duration_ms = 12_000 if "dot" in node.tags and effect_type == "damage" else None

@@ -9,17 +9,29 @@ from .mechanics import MechanicEffect, MechanicRecord
 from .mechanics_repository import MechanicsRepository
 
 
+class QuantitativeScopeUnready(RuntimeError):
+    """A quantitative consumer (APL sim, combat conversion) was asked to run over actions that lack
+    load-bearing timing/cost data. E0R fails CLOSED here rather than silently substituting invented
+    defaults (missing != default, design B5). Pass an explicit heuristic mode to opt into estimates."""
+
+
+# The fields a quantitative loop cannot honestly run without. `costs` unknown (None) is distinct from a
+# proven-empty {} — only the former blocks.
+_LOAD_BEARING = ("gcd_ms", "cooldown_ms", "costs")
+_BLOCKING_STATUSES = {"unavailable", "ambiguous"}
+
+
 @dataclass(frozen=True)
 class CatalogAction:
     action_key: str
     entry_id: int
     spell_id: int
     name: str
-    costs: dict[str, float]
+    costs: dict[str, float] | None       # None = unknown (blocks quantitative scope); {} = verified empty
     generates: dict[str, float]
     spends: dict[str, float]
-    cooldown_ms: int
-    gcd_ms: int
+    cooldown_ms: int | None              # None = unknown; a proven 0 is preserved (missing != default)
+    gcd_ms: int | None                   # None = unknown; a proven 1500 is preserved
     cast_time_ms: int | None
     range_yards: float | None
     duration_ms: int | None
@@ -31,16 +43,27 @@ class CatalogAction:
     role_classification: str
     source: str
     warnings: tuple[str, ...] = tuple()
+    field_readiness: dict[str, dict] | None = None
     mechanic: MechanicRecord | None = None
     node: TalentNode | None = None
 
+    def readiness_of(self, field_name: str) -> str:
+        """The readiness status of a load-bearing field: the MechanicRecord's field_readiness if present,
+        else inferred from nullness (a null value is unavailable, a present value is available)."""
+        entry = (self.field_readiness or {}).get(field_name)
+        if entry and entry.get("status"):
+            return entry["status"]
+        return "available" if getattr(self, field_name) is not None else "unavailable"
+
     def to_dict(self) -> dict[str, Any]:
+        # Nullable fields serialize WITHOUT coercion — a null cooldown/gcd/costs is a distinct, load-bearing
+        # value a downstream consumer must see as unknown (never a defaulted 0/1500/{}).
         return {
             "action_key": self.action_key,
             "entry_id": self.entry_id,
             "spell_id": self.spell_id,
             "name": self.name,
-            "costs": dict(self.costs),
+            "costs": dict(self.costs) if self.costs is not None else None,
             "generates": dict(self.generates),
             "spends": dict(self.spends),
             "cooldown_ms": self.cooldown_ms,
@@ -56,6 +79,7 @@ class CatalogAction:
             "role_classification": self.role_classification,
             "source": self.source,
             "warnings": list(self.warnings),
+            "field_readiness": dict(self.field_readiness) if self.field_readiness else {},
         }
 
 
@@ -69,6 +93,28 @@ class ActionCatalog:
     @property
     def actions(self) -> tuple[CatalogAction, ...]:
         return tuple(self.actions_by_key.values())
+
+    @property
+    def quantitative_readiness(self) -> dict[str, Any]:
+        """Whether every action carries the load-bearing gcd/cooldown/costs a quantitative scope needs —
+        driven by each action's readiness (B5), NOT merely by nullness. `blocking` names every offending
+        (action_key, field)."""
+        blocking: list[dict[str, Any]] = []
+        for action in self.actions:
+            for field_name in _LOAD_BEARING:
+                status = action.readiness_of(field_name)
+                if status in _BLOCKING_STATUSES:
+                    entry = (action.field_readiness or {}).get(field_name, {})
+                    blocking.append({"action_key": action.action_key, "field": field_name,
+                                     "status": status,
+                                     "reason_code": entry.get("reason_code", "pending_e1_operand")})
+        return {"ready": not blocking, "blocking": blocking}
+
+    def assert_quantitative_ready(self) -> None:
+        readiness = self.quantitative_readiness
+        if not readiness["ready"]:
+            raise QuantitativeScopeUnready(
+                f"{len(readiness['blocking'])} action(s) lack load-bearing gcd/cooldown/costs data")
 
 
 def build_action_catalog(
@@ -144,13 +190,13 @@ def _action_from_mechanic(node: TalentNode, mechanic: MechanicRecord, role: str)
         entry_id=node.entry_id,
         spell_id=int(node.spell_id or mechanic.spell_id),
         name=mechanic.name or node.name,
-        # v2 costs is nullable (None = unknown). Bridge to the existing dict-typed CatalogAction here;
-        # Task 13 replaces this with a nullable field + the quantitative-readiness fail-closed gate.
-        costs=dict(mechanic.costs) if mechanic.costs is not None else {},
+        # Nullable passthrough — NO invented defaults. A missing cooldown/gcd/costs stays None (unknown)
+        # and blocks the quantitative scope via quantitative_readiness; a proven 0/1500/{} is preserved.
+        costs=dict(mechanic.costs) if mechanic.costs is not None else None,
         generates=dict(mechanic.generates),
         spends=dict(mechanic.spends),
-        cooldown_ms=mechanic.cooldown_ms or 0,
-        gcd_ms=mechanic.gcd_ms if mechanic.gcd_ms is not None else 1500,
+        cooldown_ms=mechanic.cooldown_ms,
+        gcd_ms=mechanic.gcd_ms,
         cast_time_ms=mechanic.cast_time_ms,
         range_yards=mechanic.range_yards,
         duration_ms=mechanic.duration_ms,
@@ -162,6 +208,7 @@ def _action_from_mechanic(node: TalentNode, mechanic: MechanicRecord, role: str)
         role_classification=classify_action_role(mechanic, role=role),
         source="mechanics",
         warnings=tuple(),
+        field_readiness=dict(mechanic.field_readiness) if mechanic.field_readiness else None,
         mechanic=mechanic,
         node=node,
     )
@@ -173,11 +220,12 @@ def _fallback_action(node: TalentNode, role: str) -> CatalogAction:
         entry_id=node.entry_id,
         spell_id=int(node.spell_id or 0),
         name=node.name,
-        costs={},
+        # No mechanic at all -> every load-bearing field is unknown (blocks the quantitative scope).
+        costs=None,
         generates={},
         spends={},
-        cooldown_ms=0,
-        gcd_ms=1500,
+        cooldown_ms=None,
+        gcd_ms=None,
         cast_time_ms=None,
         range_yards=None,
         duration_ms=None,
@@ -189,6 +237,8 @@ def _fallback_action(node: TalentNode, role: str) -> CatalogAction:
         role_classification="unknown",
         source="fallback",
         warnings=(f"missing_mechanics:{node.spell_id}",),
+        field_readiness={f: {"status": "unavailable", "reason_code": "not_extracted"}
+                         for f in ("gcd_ms", "cooldown_ms", "costs")},
         mechanic=None,
         node=node,
     )

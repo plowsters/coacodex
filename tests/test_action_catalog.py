@@ -87,7 +87,7 @@ def test_action_catalog_maps_selected_active_mechanics_and_excludes_passives():
     assert catalog.warnings == tuple()
 
 
-def test_action_catalog_missing_mechanics_emit_warning_and_defaults():
+def test_action_catalog_missing_mechanics_emit_warning_and_null_timing():
     catalog = build_action_catalog(
         (_node(999, 2999, "Unknown Strike", tags=("builder",)),),
         MechanicsRepository.from_jsonl(MECHANICS),
@@ -98,14 +98,18 @@ def test_action_catalog_missing_mechanics_emit_warning_and_defaults():
     action = catalog.actions_by_spell_id[2999]
 
     assert action.name == "Unknown Strike"
-    assert action.cooldown_ms == 0
-    assert action.gcd_ms == 1500
-    assert action.costs == {}
+    # E0R B5: a missing mechanic yields UNKNOWN (null) timing/costs, never invented 0/1500/{} defaults —
+    # and it blocks the quantitative scope with an explicit readiness reason.
+    assert action.cooldown_ms is None
+    assert action.gcd_ms is None
+    assert action.costs is None
+    assert action.field_readiness["gcd_ms"] == {"status": "unavailable", "reason_code": "not_extracted"}
     assert action.effects == tuple()
     assert action.confidence == "low"
     assert action.role_classification == "unknown"
     assert "missing_mechanics:2999" in catalog.warnings
     assert catalog.coverage_summary["mechanics_coverage_pct"] == 0.0
+    assert catalog.quantitative_readiness["ready"] is False
 
 
 def test_action_role_classification_is_role_aware():

@@ -352,7 +352,7 @@ def _section_rules(
         action = action_by_key.get(apl_action.action_key)
         if apl_action.action_key not in used_keys:
             continue
-        if apl_action.category != category and not (category == "cooldown" and action and action.cooldown_ms > 0):
+        if apl_action.category != category and not (category == "cooldown" and action and (action.cooldown_ms or 0) > 0):
             continue
         rules.append(_rule_from_action(apl_action.action_key, category, apl_action, action, len(rules) + 1))
     return tuple(rules[:12])

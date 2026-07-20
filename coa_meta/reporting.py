@@ -686,6 +686,11 @@ class MetaReportRunner:
                 return None, ("rotation_guide_no_executable_candidates", *action_catalog.warnings)
 
             max_resources, initial_resources = _rotation_resource_defaults(action_catalog)
+            # The simulated rotation guide is a THEORYCRAFT illustration. Since client timing (cooldown/gcd/
+            # costs) is not yet extracted (E1 supplies it), the sim runs in explicit heuristic mode and the
+            # guide is labeled heuristic when any action lacks load-bearing data (design B5) — rather than
+            # silently defaulting or dropping the guide.
+            timing_heuristic = not action_catalog.quantitative_readiness["ready"]
             scored = []
             for candidate in rotation_candidates:
                 result = simulate_apl(
@@ -697,6 +702,7 @@ class MetaReportRunner:
                         target_count=_target_count_for_encounter(encounter),
                         initial_resources=initial_resources,
                         max_resources=max_resources,
+                        allow_heuristic=timing_heuristic,
                     ),
                 )
                 scored.append(score_rotation_result(result, role, action_catalog))
@@ -712,7 +718,8 @@ class MetaReportRunner:
                 encounter=encounter,
                 build_id=build_id,
             )
-            warnings = tuple(dict.fromkeys((*guide.warnings, *action_catalog.warnings)))
+            extra = ("rotation_timing_heuristic_pending_e1",) if timing_heuristic else ()
+            warnings = tuple(dict.fromkeys((*guide.warnings, *action_catalog.warnings, *extra)))
             return guide.to_dict(), warnings
         except Exception as exc:  # pragma: no cover - defensive report fallback
             return None, (f"rotation_guide_failed:{exc.__class__.__name__}",)
@@ -776,7 +783,7 @@ def _rotation_resource_defaults(action_catalog: Any) -> tuple[dict[str, float], 
     resource_names: set[str] = set()
     generated_names: set[str] = set()
     for action in action_catalog.actions:
-        resource_names.update(action.costs)
+        resource_names.update(action.costs or {})   # costs is nullable (unknown) in coa-mechanics-v2
         resource_names.update(action.generates)
         generated_names.update(action.generates)
     max_resources = {resource: 100.0 for resource in resource_names}
