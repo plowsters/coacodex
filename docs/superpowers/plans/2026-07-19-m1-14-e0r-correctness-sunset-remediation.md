@@ -18,7 +18,7 @@ Copied from `docs/superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-reme
 - **Independent Node boundary (bounded).** Node re-derives layout/interpretation/promotion via `policy_ref` from a **pinned** policy child; re-decodes numeric `raw_u32`; for strings verifies `state`/normalization/`resolved` equality; validates transport integrity but **not** source integrity.
 - **Streaming + three-part budget.** Iterator/two-pass everywhere (incl. `generation.mjs`); repeated provenance/evidence hoisted to the manifest; `within_budget` = serialized bytes **and** subprocess peak RSS **and** elapsed; per-child and whole-generation, uncompressed bytes; a full real-client regenerate is measured and recorded.
 - **Compact-raw retention.** A full-table row never carries a normalized value without enough compact raw (scalar `u32`/string offset, join component cells, `state`) to reconstruct eligibility.
-- **Transactional candidate→pointer.** Stage children → candidate manifest (`publication_state: "candidate"`, `candidate_trust_sha256` over all trust-critical fields) → Python+Node validate by path (incl. cross-child merge-join) → final manifest changes only `/validation`+`/budget` and reproduces the digest → pointer last. The manifest is **not** a child. Process file lock over predecessor-read → replace.
+- **Transactional candidate→pointer.** Stage children → candidate manifest (`publication_state: "candidate"`, `candidate_trust_sha256` over all trust-critical fields) → Python+Node validate by path (incl. cross-child merge-join) → final manifest changes only the `CANDIDATE_MUTABLE_KEYS` (`publication_state` candidate→published, `/validation`, `/budget` — all three excluded from the digest) and reproduces the digest → pointer last. The manifest is **not** a child. Process file lock over predecessor-read → replace.
 - **AscensionDB-free canonical.** Canonical `build-mechanics` is pointer-only, network-free, no `--db-spells`; `ascension_db` is not a selectable canonical tier; a negative-dependency test enforces it. Frozen payloads survive only as fixtures/diagnostic.
 - **Missing ≠ default.** Unknown load-bearing mechanics are `null` with a closed `reason_code`; never `0`/`1500`/free; a quantitative scope with unready load-bearing data fails closed.
 - **Schema versions (explicit).** `coa-spell-layout-v2`, `coa-client-spell-v3`, `coa-client-spell-projection-v3` (+ `coa-client-spell-projection-manifest-v3`), `coa-client-spell-icons-v1`, `coa-client-extract-manifest-v3` (the generation manifest, not a child), `coa-mechanics-v2`. Pre-E0R generations are rejected.
@@ -463,37 +463,40 @@ git commit -m "M1.14E0R Task 3: string-valued join observation; proof layer stay
 - Test: `tests/test_topology.py`
 
 **Interfaces:**
-- Consumes: `recordview.open_view`, the backend's `read_effective_file`/`has_file`.
-- Produces: `verify_source_topology(policy, backend, root, attach) -> dict` with `tables[t] = {sha256, header{5 fields}, effective_archive, patch_chain, key_unique: bool}`, `expected_absent_ok: bool`, and `blocking: list[dict]`; `topology_matches_bound(report, bound) -> list[dict]` (empty ⇒ match). Used by recon (Task 5) **and** regenerate (Task 10).
+- Consumes: `recordview.open_view`, the backend's `read_effective_file`/`has_file`/`client_build`.
+- Produces: `require_dense(data, header) -> bool` (the file is exactly `20 + record_count*record_size + string_block_size` bytes — no gaps/trailing bytes); `verify_source_topology(policy, backend, root, attach) -> dict` with `client_build`, `tables[t] = {sha256, header{5 fields}, member, effective_archive, patch_chain, key_unique: bool, dense: bool}`, `expected_absent_ok: bool`, and `blocking: list[dict]`; `topology_matches_bound(report, bound) -> list[dict]` (empty ⇒ match) comparing **every** facet — `client_build`, exact required-table **set equality** (no missing, no extra), `sha256`, full `header`, `member`, `effective_archive`, `patch_chain`, and `expected_absent`. Used by recon (Task 5) **and** regenerate (Task 10).
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_topology.py
-import hashlib, struct
+import copy, hashlib, struct
 import pytest
-from coa_client_extract.topology import verify_source_topology, topology_matches_bound
+from coa_client_extract.topology import verify_source_topology, topology_matches_bound, require_dense
+
+BUILD = "3.3.5a+patch-CZZ"
 
 
-def _dbc(rows: list[tuple[int, int]], field_count=2) -> bytes:
+def _dbc(rows: list[tuple[int, int]], field_count=2, string_block=b"") -> bytes:
     rs = field_count * 4
     body = b"".join(struct.pack("<II", a, b) for a, b in rows)
-    return struct.pack("<4sIIII", b"WDBC", len(rows), field_count, rs, 0) + body
+    return struct.pack("<4sIIII", b"WDBC", len(rows), field_count, rs, len(string_block)) + body + string_block
 
 
 class _Member:
-    def __init__(self, data, archive="patch-T.MPQ"):
+    def __init__(self, data, name, archive="patch-CZZ.MPQ", patch_chain=()):
         self.data = data
+        self.name = name
         self.effective_archive = type("A", (), {"name": archive})()
-        self.patch_chain = []
+        self.patch_chain = [type("A", (), {"name": p})() for p in patch_chain]
 
 
 class _Backend:
-    def __init__(self, files): self.files = files
+    def __init__(self, files, build=BUILD): self.files, self.client_build = files, build
     def has_file(self, root, attach, name): return name in self.files
     def read_effective_file(self, root, attach, name):
         if name not in self.files: raise KeyError(name)
-        return _Member(self.files[name])
+        return _Member(self.files[name], name)
 
 
 class _Policy:
@@ -504,35 +507,71 @@ class _Policy:
         self.bound = None
 
 
-def test_topology_report_captures_header_and_uniqueness():
+def _bound_from(rep):
+    """The structured bound a matching client would carry (built from a good report)."""
+    t = rep["tables"]["Spell"]
+    return {"client_build": rep["client_build"], "expected_absent": ["SpellEffect"], "tables": {
+        "Spell": {"sha256": t["sha256"], "header": t["header"], "source": {
+            "member": t["member"], "effective_archive": t["effective_archive"], "patch_chain": t["patch_chain"]}}}}
+
+
+def test_require_dense_rejects_trailing_bytes():
+    good = _dbc([(1, 10)])
+    hdr = {"record_count": 1, "field_count": 2, "record_size": 8, "string_block_size": 0}
+    assert require_dense(good, hdr) is True
+    assert require_dense(good + b"\x00\x00", hdr) is False       # trailing junk => not dense
+
+
+def test_topology_report_captures_header_member_dense_and_uniqueness():
     data = _dbc([(1, 10), (2, 20)])
     be = _Backend({"DBFilesClient\\Spell.dbc": data})
     rep = verify_source_topology(_Policy(), be, None, None)
     t = rep["tables"]["Spell"]
     assert t["sha256"] == hashlib.sha256(data).hexdigest()
     assert t["header"]["field_count"] == 2 and t["header"]["magic"] == "WDBC"
+    assert t["member"] == "DBFilesClient\\Spell.dbc" and t["dense"] is True
+    assert rep["client_build"] == BUILD
     assert t["key_unique"] is True and rep["expected_absent_ok"] is True and rep["blocking"] == []
 
 
-def test_duplicate_key_and_expected_absent_present_block():
+def test_duplicate_key_expected_absent_and_nondense_all_block():
     dup = _dbc([(1, 10), (1, 20)])
-    be = _Backend({"DBFilesClient\\Spell.dbc": dup, "DBFilesClient\\SpellEffect.dbc": dup})
+    be = _Backend({"DBFilesClient\\Spell.dbc": dup + b"\xff", "DBFilesClient\\SpellEffect.dbc": dup})
     rep = verify_source_topology(_Policy(), be, None, None)
-    assert rep["tables"]["Spell"]["key_unique"] is False
+    assert rep["tables"]["Spell"]["key_unique"] is False and rep["tables"]["Spell"]["dense"] is False
     assert rep["expected_absent_ok"] is False
     reasons = {b["reason"] for b in rep["blocking"]}
-    assert {"duplicate_key", "expected_absent_present"} <= reasons
+    assert {"duplicate_key", "expected_absent_present", "not_dense"} <= reasons
 
 
-def test_topology_matches_bound_reports_mismatch():
-    data = _dbc([(1, 10)])
-    be = _Backend({"DBFilesClient\\Spell.dbc": data})
+def test_matching_bound_reports_no_mismatch():
+    be = _Backend({"DBFilesClient\\Spell.dbc": _dbc([(1, 10)])})
     rep = verify_source_topology(_Policy(), be, None, None)
-    bound = {"client_build": "x", "tables": {"Spell": {"sha256": "0" * 64,
-             "header": rep["tables"]["Spell"]["header"], "source": {"member": "DBFilesClient\\Spell.dbc",
-             "effective_archive": "patch-T.MPQ", "patch_chain": []}}}, "expected_absent": ["SpellEffect"]}
+    assert topology_matches_bound(rep, _bound_from(rep)) == []
+
+
+@pytest.mark.parametrize("facet,mutate", [
+    ("sha256", lambda b: b["tables"]["Spell"].__setitem__("sha256", "0" * 64)),
+    ("header", lambda b: b["tables"]["Spell"]["header"].__setitem__("record_size", 999)),
+    ("member", lambda b: b["tables"]["Spell"]["source"].__setitem__("member", "DBFilesClient\\Other.dbc")),
+    ("effective_archive", lambda b: b["tables"]["Spell"]["source"].__setitem__("effective_archive", "patch-Z.MPQ")),
+    ("patch_chain", lambda b: b["tables"]["Spell"]["source"].__setitem__("patch_chain", ["patch-A.MPQ"])),
+    ("client_build", lambda b: b.__setitem__("client_build", "3.3.5a+patch-OLD")),
+    ("expected_absent", lambda b: b.__setitem__("expected_absent", [])),
+])
+def test_each_bound_facet_is_independently_bound(facet, mutate):
+    be = _Backend({"DBFilesClient\\Spell.dbc": _dbc([(1, 10)])})
+    rep = verify_source_topology(_Policy(), be, None, None)
+    bound = _bound_from(rep); mutate(bound)
     mism = topology_matches_bound(rep, bound)
-    assert any(m["table"] == "Spell" and m["field"] == "sha256" for m in mism)
+    assert any(m["field"] == facet for m in mism), f"{facet} mutation not detected: {mism}"
+
+
+def test_bound_table_set_must_match_exactly():
+    be = _Backend({"DBFilesClient\\Spell.dbc": _dbc([(1, 10)])})
+    rep = verify_source_topology(_Policy(), be, None, None)
+    missing = _bound_from(rep); missing["tables"]["SpellExtra"] = missing["tables"]["Spell"]
+    assert any(m["field"] == "table_set" for m in topology_matches_bound(rep, missing))
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -553,6 +592,7 @@ from .recordview import open_view
 from .errors import ArchiveError, DbcDriftError
 
 _H = struct.Struct("<4sIIII")
+_HEADER_BYTES = 20
 
 
 def _header(data: bytes) -> dict:
@@ -561,10 +601,18 @@ def _header(data: bytes) -> dict:
             "record_size": rs, "string_block_size": ss}
 
 
+def require_dense(data: bytes, header: dict) -> bool:
+    """A WDBC file is dense iff its length is EXACTLY 20-byte header + record_count*record_size +
+    string_block_size — no gaps, no trailing bytes. A non-dense file means the record region is not what
+    the header claims and the layout cannot be trusted."""
+    expected = _HEADER_BYTES + header["record_count"] * header["record_size"] + header["string_block_size"]
+    return len(data) == expected
+
+
 def verify_source_topology(policy, backend, root, attach) -> dict:
-    """Independently open + verify every required table (sha256, full 5-field header, archive/member,
-    patch chain, id-uniqueness under the policy key cell) and the expected-absent set. Shared by recon
-    AND regenerate so they can never diverge."""
+    """Independently open + verify every required table (sha256, full 5-field header, member,
+    archive, patch chain, density, id-uniqueness under the policy key cell) and the expected-absent set.
+    Shared by recon AND regenerate so they can never diverge."""
     tables: dict[str, dict] = {}
     blocking: list[dict] = []
     for name in policy.required_tables:
@@ -575,6 +623,8 @@ def verify_source_topology(policy, backend, root, attach) -> dict:
         except (ArchiveError, DbcDriftError, KeyError) as exc:
             blocking.append({"table": name, "reason": "required_table_unreadable", "detail": str(exc)})
             continue
+        header = _header(member.data)
+        dense = require_dense(member.data, header)
         key_cell = policy.tables[name]["key_cell"]
         seen, unique = set(), True
         for rec in view.records():
@@ -584,12 +634,14 @@ def verify_source_topology(policy, backend, root, attach) -> dict:
                 break
             seen.add(k)
         tables[name] = {
-            "sha256": hashlib.sha256(member.data).hexdigest(), "header": _header(member.data),
-            "effective_archive": member.effective_archive.name,
-            "patch_chain": [p.name for p in member.patch_chain], "key_unique": unique,
+            "sha256": hashlib.sha256(member.data).hexdigest(), "header": header,
+            "member": member.name, "effective_archive": member.effective_archive.name,
+            "patch_chain": [p.name for p in member.patch_chain], "key_unique": unique, "dense": dense,
         }
         if policy.tables[name].get("unique", True) and not unique:
             blocking.append({"table": name, "reason": "duplicate_key", "key_cell": key_cell})
+        if not dense:
+            blocking.append({"table": name, "reason": "not_dense"})
 
     expected_absent_ok = True
     for name in policy.expected_absent:
@@ -597,31 +649,51 @@ def verify_source_topology(policy, backend, root, attach) -> dict:
             expected_absent_ok = False
             blocking.append({"table": name, "reason": "expected_absent_present"})
 
-    return {"tables": tables, "expected_absent_ok": expected_absent_ok, "blocking": blocking}
+    return {"client_build": getattr(backend, "client_build", None), "tables": tables,
+            "expected_absent_ok": expected_absent_ok, "expected_absent_set": list(policy.expected_absent),
+            "blocking": blocking}
 
 
 def topology_matches_bound(report: dict, bound: dict | None) -> list[dict]:
     """Return the list of mismatches between an opened-client topology report and a policy's structured
-    `bound`. Empty ⇒ the opened client is the client the policy was proven against."""
+    `bound`. Empty ⇒ the opened client is the client the policy was proven against. EVERY facet is bound:
+    client_build, exact required-table set equality, sha256, full header, member, effective_archive,
+    patch_chain, and expected_absent topology."""
     if not bound:
         return [{"table": "*", "field": "bound", "reason": "policy has no bound"}]
     mism: list[dict] = []
+    if report.get("client_build") != bound.get("client_build"):
+        mism.append({"table": "*", "field": "client_build", "reason": "build_mismatch"})
     want = bound.get("tables", {})
+    if set(want) != set(report["tables"]):
+        mism.append({"table": "*", "field": "table_set", "reason": "required_table_set_differs",
+                     "missing": sorted(set(want) - set(report["tables"])),
+                     "extra": sorted(set(report["tables"]) - set(want))})
     for name, w in want.items():
         got = report["tables"].get(name)
         if got is None:
             mism.append({"table": name, "field": "*", "reason": "missing_from_client"})
             continue
-        if got["sha256"] != w["sha256"]:
-            mism.append({"table": name, "field": "sha256", "reason": "sha_mismatch"})
-        if got["header"] != w["header"]:
-            mism.append({"table": name, "field": "header", "reason": "header_mismatch"})
-        if got["effective_archive"] != w["source"]["effective_archive"]:
-            mism.append({"table": name, "field": "effective_archive", "reason": "archive_moved"})
+        src = w["source"]
+        for field, got_v, want_v in (
+            ("sha256", got["sha256"], w["sha256"]),
+            ("header", got["header"], w["header"]),
+            ("member", got["member"], src["member"]),
+            ("effective_archive", got["effective_archive"], src["effective_archive"]),
+            ("patch_chain", got["patch_chain"], src["patch_chain"]),
+        ):
+            if got_v != want_v:
+                mism.append({"table": name, "field": field, "reason": f"{field}_differs"})
+    # expected-absent is two facts: the bound pins WHICH tables must be absent (set), and the report
+    # proves they ARE absent on the opened client.
+    if sorted(bound.get("expected_absent", [])) != sorted(report.get("expected_absent_set", [])):
+        mism.append({"table": "*", "field": "expected_absent", "reason": "expected_absent_set_differs"})
     if not report["expected_absent_ok"]:
         mism.append({"table": "*", "field": "expected_absent", "reason": "expected_absent_present"})
     return mism
 ```
+
+`verify_source_topology` also records `report["expected_absent_set"] = list(policy.expected_absent)` (add it to the returned dict) so `topology_matches_bound` can compare the **bound** absent set against the **policy** absent set; the `expected_absent` facet test mutates `bound["expected_absent"]` to `[]` and expects the `expected_absent` field flagged.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -645,7 +717,7 @@ git commit -m "M1.14E0R Task 4: shared verify_source_topology (full header + arc
 
 **Interfaces:**
 - Consumes: `topology.verify_source_topology`, `recordview.open_view`.
-- Produces: `discover_join_pair(view, id_to_rec, side_view, *, side_value_cell, side_id_cell, anchors, side_ids) -> tuple[int | None, list[int]]` (value-anchor joined-pair scan; unique winner or ambiguous); `discover_power_type_signedness(view, id_to_rec, cell, anchors) -> bool` (True only when a static health-cost anchor reads `0xFFFFFFFE`); `three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> dict` (`within_budget` requires **all three** under ceiling). Recon proposes a `proposed_policy_delta`; it never writes the policy.
+- Produces: `discover_join_pair(view, id_to_rec, side_view, *, side_id_cell, side_value_cells, anchors, side_value_kind="int32") -> tuple[tuple[int, int] | None, list[tuple[int, int]]]` — discovers **both** the Spell index cell **and** the side value cell as a jointly-unique pair (not a known-side-cell single-cell scan); anchors are **state-bearing** (`{spell_id, expected_state, expected_value}`, `expected_state ∈ {"resolved", "not_applicable"}`) so a legitimately resolved-zero side row is distinguished from `index_zero`; `discover_power_type_signedness(view, id_to_rec, *, cell, anchors) -> bool` (True only when a static health-cost anchor reads `0xFFFFFFFE`); `three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> dict` (`within_budget` requires **all three** under ceiling). Recon proposes a `proposed_policy_delta`; it never writes the policy.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -670,26 +742,45 @@ def _side(rows: list[tuple[int, int]]) -> "DbcView":
     return open_view(struct.pack("<4sIIII", b"WDBC", len(rows), 2, 8, 0) + body)
 
 
-def test_joined_pair_finds_unique_index_cell():
-    # cell 2 holds the FK; the decoy cell 1 also falls in the id range but resolves to wrong values.
+def test_joined_pair_discovers_both_cells_uniquely():
+    # index FK in spell-cell 2, side value in side-cell 1; decoy spell-cell 1 also holds ids but resolves
+    # to the WRONG values, so only the (2, 1) pair satisfies every anchor.
     spell = _spell([[133, 3, 2], [116, 2, 3], [400, 0, 0]], field_count=3)
     id_to_rec = {r.u32(0): r for r in spell.records()}
     side = _side([(2, 1500), (3, 3000)])
-    anchors = [{"spell_id": 133, "expected_value": 1500}, {"spell_id": 116, "expected_value": 3000},
-               {"spell_id": 400, "expected_value": 0}]
-    cell, winners = discover_join_pair(spell, id_to_rec, side, side_value_cell=1, side_id_cell=0,
-                                       anchors=anchors, side_ids={2, 3})
-    assert cell == 2 and winners == [2]
+    anchors = [{"spell_id": 133, "expected_state": "resolved", "expected_value": 1500},
+               {"spell_id": 116, "expected_state": "resolved", "expected_value": 3000},
+               {"spell_id": 400, "expected_state": "not_applicable", "expected_value": None}]
+    pair, winners = discover_join_pair(spell, id_to_rec, side, side_id_cell=0, side_value_cells=[1],
+                                       anchors=anchors)
+    assert pair == (2, 1) and winners == [(2, 1)]
+
+
+def test_resolved_zero_is_distinguished_from_not_applicable():
+    # spell 133 -> side id 1 whose value is 0 (a RESOLVED zero); spell 400 has fk 0 (not_applicable).
+    spell = _spell([[133, 1], [400, 0]], field_count=2)
+    id_to_rec = {r.u32(0): r for r in spell.records()}
+    side = _side([(1, 0)])
+    correct = [{"spell_id": 133, "expected_state": "resolved", "expected_value": 0},
+               {"spell_id": 400, "expected_state": "not_applicable", "expected_value": None}]
+    pair, _ = discover_join_pair(spell, id_to_rec, side, side_id_cell=0, side_value_cells=[1], anchors=correct)
+    assert pair == (1, 1)
+    # Mislabelling the resolved-zero as not_applicable must FAIL to match (its fk is non-zero).
+    mislabelled = [{"spell_id": 133, "expected_state": "not_applicable", "expected_value": None},
+                   {"spell_id": 400, "expected_state": "not_applicable", "expected_value": None}]
+    pair2, _ = discover_join_pair(spell, id_to_rec, side, side_id_cell=0, side_value_cells=[1], anchors=mislabelled)
+    assert pair2 is None
 
 
 def test_joined_pair_ambiguous_returns_none():
-    spell = _spell([[133, 2, 2], [116, 3, 3], [400, 0, 0]], field_count=3)  # cells 1 and 2 identical
+    spell = _spell([[133, 2, 2], [116, 3, 3], [400, 0, 0]], field_count=3)  # spell-cells 1 and 2 identical
     id_to_rec = {r.u32(0): r for r in spell.records()}
     side = _side([(2, 1500), (3, 3000)])
-    anchors = [{"spell_id": 133, "expected_value": 1500}, {"spell_id": 116, "expected_value": 3000}]
-    cell, winners = discover_join_pair(spell, id_to_rec, side, side_value_cell=1, side_id_cell=0,
-                                       anchors=anchors, side_ids={2, 3})
-    assert cell is None and winners == [1, 2]
+    anchors = [{"spell_id": 133, "expected_state": "resolved", "expected_value": 1500},
+               {"spell_id": 116, "expected_state": "resolved", "expected_value": 3000}]
+    pair, winners = discover_join_pair(spell, id_to_rec, side, side_id_cell=0, side_value_cells=[1],
+                                       anchors=anchors)
+    assert pair is None and winners == [(1, 1), (2, 1)]
 
 
 def test_power_type_signedness_requires_static_negative_anchor():
@@ -726,32 +817,40 @@ def _read_side(rec, cell, kind):
     return raw
 
 
-def discover_join_pair(view, id_to_rec, side_view, *, side_value_cell, side_id_cell, anchors, side_ids,
+def _anchor_holds(a, id_to_rec, side_by_id, index_cell, value_cell, kind) -> bool:
+    """A STATE-BEARING anchor holds when the (index_cell -> side row -> value_cell) resolution matches its
+    declared state AND value. not_applicable requires fk == 0; resolved requires a non-zero fk pointing at
+    a present side row whose value_cell equals expected_value (expected_value may itself be 0 — a resolved
+    zero, which is why the state, not the value, decides applicability)."""
+    rec = id_to_rec.get(a["spell_id"])
+    if rec is None:
+        return False
+    fk = rec.u32(index_cell)
+    if a["expected_state"] == "not_applicable":
+        return fk == 0
+    if a["expected_state"] != "resolved":
+        return False
+    side = side_by_id.get(fk)
+    return fk != 0 and side is not None and _read_side(side, value_cell, kind) == a["expected_value"]
+
+
+def discover_join_pair(view, id_to_rec, side_view, *, side_id_cell, side_value_cells, anchors,
                        side_value_kind="int32"):
-    """Resolve each anchor's expected value THROUGH the join (candidate index cell -> side row ->
-    side_value_cell) and return the unique index cell that satisfies every anchor. A bare FK-validity
-    scan is ambiguous (dozens of small-int columns fall in a side id range); the value anchors break it."""
+    """Discover BOTH the Spell index cell and the side value cell of a join as a jointly-unique pair.
+    For each candidate index cell (whose non-zero values are ~all valid side ids) and each candidate
+    side value cell, every state-bearing anchor must resolve THROUGH the pair. A bare FK-validity scan is
+    ambiguous (dozens of small-int columns fall in a side id range) and knowing the value cell a priori is
+    cheating; requiring the pair to be jointly unique over the state-bearing anchors breaks both."""
     side_by_id = {r.u32(side_id_cell): r for r in side_view.records()}
-    winners: list[int] = []
-    for c in range(view.cell_count):
-        nonzero = [r.u32(c) for r in view.records() if r.u32(c) != 0]
+    side_ids = set(side_by_id)
+    winners: list[tuple[int, int]] = []
+    for ic in range(view.cell_count):
+        nonzero = [r.u32(ic) for r in view.records() if r.u32(ic) != 0]
         if len(nonzero) < _MIN_SUPPORT or sum(1 for v in nonzero if v in side_ids) / len(nonzero) < 0.99:
             continue
-        ok = True
-        for a in anchors:
-            rec = id_to_rec.get(a["spell_id"])
-            if rec is None:
-                ok = False; break
-            fk = rec.u32(c)
-            if a["expected_value"] == 0:
-                ok = fk == 0
-            else:
-                side = side_by_id.get(fk)
-                ok = side is not None and _read_side(side, side_value_cell, side_value_kind) == a["expected_value"]
-            if not ok:
-                break
-        if ok:
-            winners.append(c)
+        for vc in side_value_cells:
+            if all(_anchor_holds(a, id_to_rec, side_by_id, ic, vc, side_value_kind) for a in anchors):
+                winners.append((ic, vc))
     return (winners[0] if len(winners) == 1 else None), winners
 
 
@@ -779,9 +878,9 @@ def three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> 
             "ceilings": dict(ceilings), "within_budget": not breach, "breach": breach}
 ```
 
-**True joined-pair discovery (both cells, not just the index).** `discover_join_pair` above takes a known `side_value_cell` for clarity, but recon must **discover the pair**: it iterates candidate `side_value_cell`s in the side table (and, for `SpellRange`, both value cells under one shared `range_index`) and, for each, runs the index scan; a `(index_cell, side_value_cell)` pair wins only when it is **jointly unique** and satisfies every anchor. `SpellIcon.path` is discovered as a **string** cell by safe string-block resolution (`try_string`) matching the anchors' expected icon names. Anchors are **state-bearing** — `{spell_id, expected_state, expected_value}` — so a legitimately **resolved-zero** side row (`state: resolved`, value `0`) is distinguished from `index_zero` (`state: not_applicable`); floats compare by expected raw bits or a stated tolerance. The `power_type` verdict emits and binds the **static tooltip evidence** for the negative anchor (the health-cost `description`), not merely an input flag.
+`discover_join_pair` passes `side_value_cells` as the candidate set (not a single known cell): for `SpellRange` that set is both value cells under the one shared `range_index`; a `(index_cell, side_value_cell)` pair wins only when it is **jointly unique** over the state-bearing anchors. `SpellIcon.path` is discovered by a sibling `discover_string_join_pair` that resolves candidate side cells through the string block (`try_string`) and matches the anchors' expected icon names (the numeric `_read_side`/`expected_value` comparison is replaced by string equality); floats compare by expected raw bits or a stated tolerance. The `power_type` verdict emits and binds the **static tooltip evidence** for the negative anchor (the health-cost `description`), not merely an input flag.
 
-Then integrate into `recon_spell_mechanics`: replace the ambiguous single-cell `_discover_index_cell` call with this joined-pair discovery for each of cast/duration/range/icon (using the frozen state-bearing anchor set), add the `power_type` negative-anchor scan, call `verify_source_topology` for the topology section (replacing the `has_file`-only loop), and compute `budget` via `three_part_budget` from the **serialized** projection estimate + subprocess `ru_maxrss` + elapsed. The `proposed_policy_delta` names the four discovered `(index, side_value)` pairs, the `SpellIcon.path` string cell, and the `power_type` signedness verdict + its bound evidence. Recon still writes no policy.
+Then integrate into `recon_spell_mechanics`: replace the ambiguous single-cell `_discover_index_cell` call with `discover_join_pair`/`discover_string_join_pair` for each of cast/duration/range/icon (using the frozen state-bearing anchor set), add the `power_type` negative-anchor scan, call `verify_source_topology` for the topology section (replacing the `has_file`-only loop), and compute `budget` via `three_part_budget` from the **serialized** projection estimate + subprocess `ru_maxrss` + elapsed. The `proposed_policy_delta` names the four discovered `(index, side_value)` pairs, the `SpellIcon.path` string cell, and the `power_type` signedness verdict + its bound evidence. Recon still writes no policy.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -806,7 +905,7 @@ git commit -m "M1.14E0R Task 5: recon joined-pair discovery (4 joins) + static p
 
 **Interfaces:**
 - Consumes: `contracts.policy_ref`/`policy_ref_component`, `spell_proof`, `spell_layout` (v2).
-- Produces: `iter_spell_records(spell_view, side_views, *, policy, provenance) -> Iterator[dict]` streaming compact `coa-client-spell-v3` rows (identity + normalized `mechanics` + attribution + a `raw` compact block; each field carries a `policy_ref`, no evidence text); the four-part join promotion gate; `iter_icon_catalog(spell_view, side_views, *, policy) -> Iterator[dict]` (`coa-client-spell-icons-v1`, full-table domain, dedup asset entries).
+- Produces: `iter_spell_records(spell_view, side_views, *, policy, provenance) -> Iterator[dict]` streaming compact `coa-client-spell-v3` rows (identity + normalized `mechanics` + attribution + a `raw` compact block; each field carries a `policy_ref`, no evidence text); `eligible_from_row(obs, pol, policy_doc) -> bool` (the serialized-form eligibility mirror shared with Node, exercised by the Task 7 golden fixtures); the four-part join promotion gate; `iter_icon_catalog(spell_view, side_views, *, policy, asset_resolver) -> Iterator[dict]` (`coa-client-spell-icons-v1`, full-table domain, dedup asset entries) where `asset_resolver(client_path) -> {bytes, archive, member, patch_chain} | None` reads the effective client BLP member so `source_asset_sha256` hashes the **actual BLP bytes** (never the path). The concrete resolver (MPQ-chain reader) is wired in `regenerate` (Task 10); `iter_icon_catalog` only consumes the callable.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -843,17 +942,32 @@ def test_raw_only_join_withholds_normalized_but_keeps_compact_raw():
 
 ```python
 # tests/test_spell_icons.py
+import hashlib
 from coa_client_extract.spell_icons import iter_icon_catalog
 from tests._spell_fixtures import v2_icon_policy, spell_dbc, icon_side_views
 
 
-def test_icon_catalog_full_domain_dedups_assets():
-    rows = list(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy()))
+def _resolver(path):
+    # returns BLP bytes distinct from the path string, so a path-hash would NOT match a bytes-hash
+    return {"bytes": b"BLP:" + path.encode(), "archive": "patch-T.MPQ", "member": path, "patch_chain": []}
+
+
+def test_icon_catalog_hashes_blp_bytes_and_dedups():
+    rows = list(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy(), asset_resolver=_resolver))
     by_id = {r["spell_id"]: r for r in rows}
-    assert by_id[805775]["client_path"].endswith(".blp")
-    assert by_id[805775]["asset_status"] in {"source_only", "placeholder"}
-    # two spells sharing icon 100 produce one deduplicated source asset hash
-    assert by_id[805775]["source_asset_sha256"] == by_id[133]["source_asset_sha256"]
+    r = by_id[805775]
+    assert r["client_path"].endswith(".blp") and r["asset_status"] == "source_only"
+    # the hash is over the BLP BYTES the resolver returned, not the client_path string
+    assert r["source_asset_sha256"] == hashlib.sha256(b"BLP:" + r["client_path"].encode()).hexdigest()
+    assert r["source_archive"] == "patch-T.MPQ"
+    # two spells sharing one icon path produce one deduplicated source asset hash
+    assert r["source_asset_sha256"] == by_id[133]["source_asset_sha256"]
+
+
+def test_icon_catalog_missing_member_is_missing_status():
+    rows = list(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy(),
+                                  asset_resolver=lambda p: None))     # no client member for any path
+    assert all(r["asset_status"] == "missing" and r["source_asset_sha256"] is None for r in rows)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -865,6 +979,8 @@ Expected: FAIL with `ModuleNotFoundError` (module renamed / not yet created).
 
 ```python
 # coa_client_extract/spell_record.py  (key changes vs the ported spell_v2.py)
+from .contracts import policy_ref, policy_ref_component, resolve_policy_ref
+
 SCHEMA = "coa-client-spell-v3"
 
 
@@ -895,6 +1011,27 @@ def _join_normalized(join, idx_fp, id_fp, val_fp, jo) -> bool:
             and semantic_promotion_eligible(jo.composed_proof) and jo.state == "resolved")
 
 
+def eligible_from_row(obs: dict, pol: dict, policy_doc: dict) -> bool:
+    """Recompute a field's promotion eligibility from the SERIALIZED compact form (the exact shape Node
+    consumes), so the golden fixtures pin producer and Node to one rule. A scalar is eligible iff its
+    policy is fully verified+normalized and its observation decoded; a join is eligible iff its own
+    `promotion` is normalized (looked up in `policy_doc['joins']`), it resolved, and every component's
+    policy is verified+normalized."""
+    if obs.get("components"):
+        join = policy_doc.get("joins", {}).get(obs["join_name"], {})
+        if join.get("promotion") != "normalized" or obs.get("state") != "resolved":
+            return False
+        for _, c in obs["components"].items():
+            cp = resolve_policy_ref(policy_doc, c["policy_ref"])
+            if not (cp.get("promotion") == "normalized" and cp.get("layout") == "verified"
+                    and cp.get("interpretation") == "verified"):
+                return False
+        return True
+    return (pol.get("promotion") == "normalized" and pol.get("layout") == "verified"
+            and pol.get("interpretation") == "verified"
+            and obs.get("state") in ("present", "resolved") and obs.get("decoded_reason") == "decoded")
+
+
 def iter_spell_records(spell_view, side_views, *, policy, provenance):
     sf = policy.tables["Spell"]["fields"]
     # ... build side_id_maps once (as in spell_v2) ...
@@ -911,7 +1048,8 @@ def iter_spell_records(spell_view, side_views, *, policy, provenance):
             value, jo_dict, jo = _resolve_join(rec, jname, join, sf, policy, side_views)
             idx_fp, id_fp, val_fp = _join_fps(join, policy)
             mech[jname] = value if _join_normalized(join, idx_fp, id_fp, val_fp, jo) else None
-            raw[jname] = {"state": jo_dict["state"], "decoded_reason": jo_dict["decoded_reason"],
+            raw[jname] = {"join_name": jname, "state": jo_dict["state"],
+                          "decoded_reason": jo_dict["decoded_reason"],
                           "components": {k: _compact(v, policy_ref_str=policy_ref_component(_join_spec(join), k))
                                          for k, v in jo_dict["components"].items()}}
         yield {"schema_version": SCHEMA, "spell_id": rec.u32(sf["id"].cell), "name": _name(rec, sf, spell_view),
@@ -927,30 +1065,42 @@ import hashlib
 SCHEMA = "coa-client-spell-icons-v1"
 
 
-def iter_icon_catalog(spell_view, side_views, *, policy):
+def iter_icon_catalog(spell_view, side_views, *, policy, asset_resolver):
     """coa-client-spell-icons-v1 over the FULL-table domain (every spell whose icon join resolves),
-    dedup asset entries by client_path. Emits {spell_id, spell_icon_id, client_path, source_asset_sha256,
-    source_archive, asset_status, readiness}."""
+    dedup asset entries by client_path. `asset_resolver(client_path) -> {bytes, archive, member,
+    patch_chain} | None` reads the effective client BLP member; source_asset_sha256 hashes those ACTUAL
+    BLP bytes (never the path string), and `missing` means the resolver found no client member. Emits
+    {spell_id, spell_icon_id, client_path, source_asset_sha256, source_archive, asset_status, readiness}."""
     join = policy.joins["spell_icon_id"]
     icon_view = side_views.get(join.side_table)
     id_cell = policy.tables[join.side_table]["fields"]["id"].cell
     path_cell = policy.tables[join.side_table]["fields"][join.side_value_field].cell
     by_id = {r.u32(id_cell): r for r in icon_view.records()} if icon_view else {}
-    asset_cache: dict[str, str] = {}
+    asset_cache: dict[str, dict] = {}                     # client_path -> resolved asset facts (dedup)
     idx_cell = policy.tables["Spell"]["fields"][join.index_field].cell
+    spell_id_cell = policy.tables["Spell"]["fields"]["id"].cell
     for rec in spell_view.records():
-        spell_id = rec.u32(policy.tables["Spell"]["fields"]["id"].cell)
+        spell_id = rec.u32(spell_id_cell)
         fk = rec.u32(idx_cell) if idx_cell is not None else 0
         side = by_id.get(fk)
         client_path = icon_view.read_string(side.u32(path_cell)) if side else None
-        if client_path is None:
+        if not client_path:
             yield {"schema_version": SCHEMA, "spell_id": spell_id, "spell_icon_id": fk,
-                   "client_path": None, "asset_status": "missing", "readiness": "unavailable"}
+                   "client_path": None, "source_asset_sha256": None, "source_archive": None,
+                   "asset_status": "missing", "readiness": "unavailable"}
             continue
-        sha = asset_cache.setdefault(client_path, hashlib.sha256(client_path.encode()).hexdigest())
+        if client_path not in asset_cache:
+            resolved = asset_resolver(client_path)          # reads the effective BLP member once per path
+            if resolved is None:
+                asset_cache[client_path] = {"sha256": None, "archive": None, "status": "missing"}
+            else:
+                asset_cache[client_path] = {"sha256": hashlib.sha256(resolved["bytes"]).hexdigest(),
+                                            "archive": resolved["archive"], "status": "source_only"}
+        a = asset_cache[client_path]
         yield {"schema_version": SCHEMA, "spell_id": spell_id, "spell_icon_id": fk,
-               "client_path": client_path, "source_asset_sha256": sha, "source_archive": "client",
-               "asset_status": "source_only", "readiness": "available"}
+               "client_path": client_path, "source_asset_sha256": a["sha256"], "source_archive": a["archive"],
+               "asset_status": a["status"],
+               "readiness": "available" if a["status"] == "source_only" else "unavailable"}
 ```
 
 Update all `spell_v2`/`build_spell_v2_records` importers (`cli.py`, tests) to `spell_record`/`iter_spell_records`.
@@ -973,12 +1123,13 @@ git commit -m "M1.14E0R Task 6: streaming compact-raw v3 producer + policy_ref +
 ## Task 7: Node projection-v3 — independent numeric/string verification via `policy_ref`
 
 **Files:**
-- Modify: `coa_scraper/scripts/lib/mechanics-projection.mjs`
-- Create: `coa_scraper/config/spell_layout.lock.json` (placeholder digest until the Task 8 gate rebinds it)
-- Test: `coa_scraper/tests/mechanics-projection-e0r.test.mjs`
+- Modify: `coa_scraper/scripts/lib/mechanics-projection.mjs`; `coa_client_extract/spell_record.py` (append the symmetric Python verifier `verify_row_against_policy`)
+- Create: `tests/golden/e0r_policy.json`, `tests/golden/e0r_projection_rows.jsonl` (cross-language golden fixtures — the identical bytes drive both a Node and a Python assertion)
+- Test: `coa_scraper/tests/mechanics-projection-e0r.test.mjs`, `coa_scraper/tests/golden-projection.test.mjs`, `tests/test_golden_projection.py`
+- **No lock file here.** The canonical `coa_scraper/config/spell_layout.lock.json` is authored **only** at Task 8b; Task 7's tests build a lock object inline, committing no placeholder.
 
 **Interfaces:**
-- Produces: `verifyRowAgainstPolicy(row, policyDoc)` — resolves each field's `policy_ref`, re-decodes numeric `raw_u32` (`Int32`/`Uint32`/`Float32`), verifies string `resolved` equality, recomputes the join predicate, and throws unless the producer's normalized value agrees; `assertPolicyLock(policyDoc, lock)` — rejects a policy whose `sha256` ≠ the committed lock.
+- Produces: `verifyRowAgainstPolicy(row, policyDoc)` — resolves each field's `policy_ref`, re-decodes numeric `raw_u32` (`Int32`/`Uint32`/`Float32`), verifies string `resolved` equality, recomputes the **full** join predicate (including the join's own `promotion` from `policyDoc.joins[...]`), and throws unless the producer's normalized value agrees under the biconditional; `assertPolicyLock(policyDoc, lock)` — recomputes the canonical hash and rejects a policy whose recomputed `sha256` ≠ the committed lock; `eligibleFromPolicy(field, obs, policyDoc)` mirrors Python `eligible_from_row` (verified by the shared golden).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -988,7 +1139,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { verifyRowAgainstPolicy, assertPolicyLock } from "../scripts/lib/mechanics-projection.mjs";
 
-const policy = { sha256: "abc", tables: { Spell: { fields: { power_type: { kind: "int32", promotion: "normalized" } } } } };
+const policy = { sha256: "abc", tables: { Spell: { fields: {
+  power_type: { kind: "int32", layout: "verified", interpretation: "verified", promotion: "normalized" } } } } };
 
 test("rejects a numeric value that disagrees with a re-decode of its raw", () => {
   const row = { spell_id: 1, mechanics: { power_type: 5 },
@@ -1050,18 +1202,21 @@ export function assertPolicyLock(policyDoc, lock) {
 
 // Biconditional: for EVERY field observation, recompute eligibility from (policy, obs). Eligible =>
 // the normalized value MUST be present and agree; ineligible => it MUST be null. (The shipped/earlier
-// code only checked "populated => eligible", skipping nulls — half the biconditional.)
-function eligibleFromPolicy(pol, obs, row, policyDoc) {
-  if (pol.promotion !== "normalized") return false;
-  if (obs.components) {                                    // a join observation — recompute the A1 predicate
-    if (obs.state !== "resolved") return false;
+// code only checked "populated => eligible", skipping nulls — half the biconditional.) A join's OWN
+// promotion is consulted via policyDoc.joins[...], not just its components' — otherwise a normalized
+// component set with a raw_only join would wrongly read as eligible.
+export function eligibleFromPolicy(field, obs, policyDoc) {
+  if (obs.components) {                                    // a join observation — recompute the FULL A1 predicate
+    const join = (policyDoc.joins || {})[obs.join_name || field] || {};
+    if (join.promotion !== "normalized" || obs.state !== "resolved") return false;
     return Object.entries(obs.components).every(([, c]) => {
       const cp = resolvePolicyRef(policyDoc, c.policy_ref);
       return cp.promotion === "normalized" && cp.layout === "verified" && cp.interpretation === "verified";
     });
   }
-  return obs.state === "present" && obs.decoded_reason === "decoded"
-         && pol.layout === "verified" && pol.interpretation === "verified";
+  const pol = resolvePolicyRef(policyDoc, obs.policy_ref);
+  return pol.promotion === "normalized" && pol.layout === "verified" && pol.interpretation === "verified"
+         && (obs.state === "present" || obs.state === "resolved") && obs.decoded_reason === "decoded";
 }
 
 export function verifyRowAgainstPolicy(row, policyDoc) {
@@ -1071,7 +1226,7 @@ export function verifyRowAgainstPolicy(row, policyDoc) {
     const pol = obs.components
       ? resolvePolicyRef(policyDoc, obs.components.side_value.policy_ref)
       : resolvePolicyRef(policyDoc, obs.policy_ref);
-    const eligible = eligibleFromPolicy(pol, obs, row, policyDoc);
+    const eligible = eligibleFromPolicy(field, obs, policyDoc);
     const populated = value !== null && value !== undefined;
     if (eligible !== populated) {
       throw new MechanicsBuildError(`projection ${row.spell_id}: ${field} eligible=${eligible} but populated=${populated} (biconditional violation)`);
@@ -1090,22 +1245,139 @@ export function verifyRowAgainstPolicy(row, policyDoc) {
 
 Wire `verifyRowAgainstPolicy` + `assertPolicyLock` into `loadAndValidateProjection` (load the policy child + the committed lock; call per row), and reject a manifest lacking the policy child (pre-E0R).
 
+- [ ] **Step 3b: Author the cross-language golden fixtures**
+
+The golden pins the biconditional to identical bytes across both languages. `tests/golden/e0r_policy.json` is a minimal policy doc; `tests/golden/e0r_projection_rows.jsonl` is one row per accept/reject case, each tagged `golden_accept`.
+
+```json
+// tests/golden/e0r_policy.json
+{
+  "schema_version": "coa-spell-layout-v2",
+  "tables": {
+    "Spell": {"fields": {
+      "power_type": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
+      "school_mask": {"kind": "uint32", "layout": "verified", "interpretation": "reference", "promotion": "raw_only"},
+      "casting_time_index": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}},
+    "SpellCastTimes": {"fields": {
+      "id": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
+      "base_ms": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}}
+  },
+  "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
+                             "side_value_field": "base_ms", "promotion": "normalized"}}
+}
+```
+
+```jsonc
+// tests/golden/e0r_projection_rows.jsonl  (one JSON object per line)
+{"golden_accept": true,  "spell_id": 1, "mechanics": {"power_type": 3}, "raw": {"power_type": {"state": "present", "raw_u32": 3, "decoded_reason": "decoded", "policy_ref": "/tables/Spell/fields/power_type"}}}
+{"golden_accept": false, "spell_id": 2, "mechanics": {"power_type": 5}, "raw": {"power_type": {"state": "present", "raw_u32": 3, "decoded_reason": "decoded", "policy_ref": "/tables/Spell/fields/power_type"}}}
+{"golden_accept": true,  "spell_id": 3, "mechanics": {"school_mask": null}, "raw": {"school_mask": {"state": "present", "raw_u32": 4, "decoded_reason": "decoded", "policy_ref": "/tables/Spell/fields/school_mask"}}}
+{"golden_accept": false, "spell_id": 4, "mechanics": {"school_mask": 4}, "raw": {"school_mask": {"state": "present", "raw_u32": 4, "decoded_reason": "decoded", "policy_ref": "/tables/Spell/fields/school_mask"}}}
+{"golden_accept": true,  "spell_id": 5, "mechanics": {"cast_time_ms": 1500}, "raw": {"cast_time_ms": {"join_name": "cast_time_ms", "state": "resolved", "decoded_reason": "decoded", "components": {"index": {"state": "present", "raw_u32": 7, "decoded_reason": "decoded", "policy_ref": "/tables/Spell/fields/casting_time_index"}, "side_id": {"state": "present", "raw_u32": 7, "decoded_reason": "decoded", "policy_ref": "/tables/SpellCastTimes/fields/id"}, "side_value": {"state": "present", "raw_u32": 1500, "resolved": null, "decoded_reason": "decoded", "policy_ref": "/tables/SpellCastTimes/fields/base_ms"}}}}}
+```
+
+The `school_mask` rows prove the **null half** of the biconditional: a `raw_only` field must be `null` (accept) and is rejected if populated. The `cast_time_ms` row exercises the join-promotion path.
+
+```javascript
+// coa_scraper/tests/golden-projection.test.mjs
+import { test } from "node:test";
+import assert from "node:assert";
+import fs from "node:fs";
+import { verifyRowAgainstPolicy } from "../scripts/lib/mechanics-projection.mjs";
+
+const policy = JSON.parse(fs.readFileSync(new URL("../../tests/golden/e0r_policy.json", import.meta.url)));
+const rows = fs.readFileSync(new URL("../../tests/golden/e0r_projection_rows.jsonl", import.meta.url), "utf8")
+  .split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+
+test("Node agrees with the golden verdict for every row", () => {
+  for (const row of rows) {
+    if (row.golden_accept) assert.doesNotThrow(() => verifyRowAgainstPolicy(row, policy), `row ${row.spell_id}`);
+    else assert.throws(() => verifyRowAgainstPolicy(row, policy), `row ${row.spell_id} should reject`);
+  }
+});
+```
+
+The Python side needs a verifier symmetric to Node's `verifyRowAgainstPolicy` (biconditional **and** value agreement), added to `spell_record.py`:
+
+```python
+# coa_client_extract/spell_record.py  (append — the symmetric Python verifier)
+import struct as _struct
+
+
+def _redecode(raw_u32: int, kind: str):
+    b = _struct.pack("<I", raw_u32 & 0xFFFFFFFF)
+    if kind == "int32":
+        return _struct.unpack("<i", b)[0]
+    if kind == "float":
+        return _struct.unpack("<f", b)[0]
+    return _struct.unpack("<I", b)[0]
+
+
+def verify_row_against_policy(row: dict, policy_doc: dict) -> None:
+    """Independent Python mirror of Node's verifyRowAgainstPolicy: for every field the biconditional
+    (eligible iff populated) must hold, and a populated value must agree with a re-decode of raw_u32
+    (numeric) or the resolved string (string). Raises ValueError on any mismatch."""
+    mech = row.get("mechanics", {})
+    for field, obs in (row.get("raw") or {}).items():
+        pol = (resolve_policy_ref(policy_doc, obs["components"]["side_value"]["policy_ref"])
+               if obs.get("components") else resolve_policy_ref(policy_doc, obs["policy_ref"]))
+        eligible = eligible_from_row(obs, pol, policy_doc)
+        value = mech.get(field)
+        populated = value is not None
+        if eligible != populated:
+            raise ValueError(f"{row.get('spell_id')}:{field} eligible={eligible} populated={populated}")
+        if not populated:
+            continue
+        if pol.get("kind") == "string":
+            resolved = obs["components"]["side_value"]["resolved"] if obs.get("components") else obs.get("resolved")
+            if value != resolved:
+                raise ValueError(f"{row.get('spell_id')}:{field} string != resolved")
+        else:
+            raw = obs["components"]["side_value"]["raw_u32"] if obs.get("components") else obs["raw_u32"]
+            if _redecode(raw, pol.get("kind")) != value:
+                raise ValueError(f"{row.get('spell_id')}:{field} re-decode disagrees")
+```
+
+```python
+# tests/test_golden_projection.py
+import json
+import pytest
+from pathlib import Path
+from coa_client_extract.spell_record import verify_row_against_policy
+
+GOLDEN = Path("tests/golden")
+
+
+def test_python_verifier_agrees_with_golden_verdict():
+    policy = json.loads((GOLDEN / "e0r_policy.json").read_text())
+    rows = [json.loads(l) for l in (GOLDEN / "e0r_projection_rows.jsonl").read_text().splitlines() if l.strip()]
+    for row in rows:
+        if row["golden_accept"]:
+            verify_row_against_policy(row, policy)                 # must not raise
+        else:
+            with pytest.raises(ValueError):
+                verify_row_against_policy(row, policy)
+```
+
+Both languages read the **same two files** and run their **own** full verifier; if the Python and Node implementations ever diverge on the rule (biconditional or value agreement), one of these fails.
+
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test coa_scraper/tests/mechanics-projection-e0r.test.mjs coa_scraper/tests/mechanics-projection.test.mjs`
+Run: `node --test coa_scraper/tests/mechanics-projection-e0r.test.mjs coa_scraper/tests/golden-projection.test.mjs coa_scraper/tests/mechanics-projection.test.mjs`; `pytest tests/test_golden_projection.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add coa_scraper/scripts/lib/mechanics-projection.mjs coa_scraper/config/spell_layout.lock.json \
-        coa_scraper/tests/mechanics-projection-e0r.test.mjs
-git commit -m "M1.14E0R Task 7: Node projection-v3 independent verify (numeric re-decode + string resolved + policy lock)"
+git add coa_scraper/scripts/lib/mechanics-projection.mjs coa_client_extract/spell_record.py \
+        coa_scraper/tests/mechanics-projection-e0r.test.mjs coa_scraper/tests/golden-projection.test.mjs \
+        tests/golden/e0r_policy.json tests/golden/e0r_projection_rows.jsonl tests/test_golden_projection.py
+git commit -m "M1.14E0R Task 7: Node projection-v3 independent verify (numeric re-decode + string resolved + join promotion + policy lock) + cross-language golden"
 ```
 
 ---
 
-## Task 8: Recon CLI + the recon-adjudication artifacts (HARD HOLD — manual gate follows)
+## Task 8: Recon CLI + the recon-adjudication artifacts (HARD HOLD — agent adjudication follows in Task 8b)
 
 **Files:**
 - Modify: `coa_client_extract/cli.py`
@@ -1238,6 +1510,21 @@ def test_cross_child_rejects_is_coa_row_absent_from_projection(tmp_path):
         validate_candidate_generation(gw.gen_dir)
 
 
+def test_cross_child_rejects_identity_mismatch(tmp_path):
+    gw = _stage(tmp_path, full=[_row("coa-client-spell-v3", 1, name="Fireball")],
+                proj=[_row("coa-client-spell-projection-v3", 1, name="Frostbolt")])  # same id, different name
+    with pytest.raises(ResolveError, match="identity_agrees"):
+        validate_candidate_generation(gw.gen_dir)
+
+
+def test_cross_child_rejects_compact_raw_without_raw(tmp_path):
+    bad = _row("coa-client-spell-v3", 1, name="Fireball",
+               raw={"power_type": {"state": "present", "policy_ref": "/tables/Spell/fields/power_type"}})  # no raw_u32
+    gw = _stage(tmp_path, full=[bad], proj=[_row("coa-client-spell-projection-v3", 1, name="Fireball")])
+    with pytest.raises(ResolveError, match="compact_raw_expands_to_envelope"):
+        validate_candidate_generation(gw.gen_dir)
+
+
 def test_icon_bundle_required_when_any_converted(tmp_path):
     gw = _stage(tmp_path, icons=[{"schema_version": "coa-client-spell-icons-v1", "spell_id": 1,
                                   "asset_status": "converted", "converted_ref": "icons.tar#a.png"}])
@@ -1267,7 +1554,8 @@ REQUIRED_CHILDREN = ("coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
 def candidate_trust_sha256(manifest: dict) -> str:
     """Digest the COMPLETE manifest minus ONLY the explicitly-mutable keys (publication_state,
     validation, budget) and the digest field itself — a strict complete view, so an unknown/new
-    top-level field is never silently ignored, and only /validation + /budget may move candidate->final."""
+    top-level field is never silently ignored, and only publication_state (candidate->published),
+    /validation, and /budget may move candidate->final."""
     trust = {k: v for k, v in manifest.items()
              if k not in CANDIDATE_MUTABLE_KEYS and k != "candidate_trust_sha256"}
     return _sha256(json.dumps(trust, sort_keys=True, ensure_ascii=False).encode("utf-8"))
@@ -1280,21 +1568,72 @@ def _read_jsonl(path: Path):
                 yield json.loads(line)
 
 
+class _Cursor:
+    """A forward, ascending-by-spell_id cursor that enforces sorted-unique order as it advances — no
+    set/list materialization of the children."""
+    def __init__(self, it, label):
+        self._it, self._label, self._prev = iter(it), label, None
+        self.row = None
+        self.advance()
+
+    def advance(self):
+        self.row = next(self._it, None)
+        if self.row is not None:
+            sid = self.row["spell_id"]
+            if self._prev is not None and sid <= self._prev:
+                raise ResolveError(f"sorted_unique_ids: {self._label} duplicate/out-of-order spell_id {sid}")
+            self._prev = sid
+        return self.row
+
+
+def _expand_compact(sid, field, cell) -> None:
+    """compact_raw_expands_to_envelope: a compact raw cell must re-expand to a well-formed envelope — a
+    resolvable state, a policy_ref, and enough raw (raw_u32 for numeric; raw_offset+resolved for string;
+    components for a join) to reconstruct the value."""
+    if "state" not in cell or ("policy_ref" not in cell and "components" not in cell):
+        raise ResolveError(f"compact_raw_expands_to_envelope: {sid}:{field} missing state/policy_ref")
+    if not ("raw_u32" in cell or "raw_offset" in cell or "components" in cell):
+        raise ResolveError(f"compact_raw_expands_to_envelope: {sid}:{field} carries no raw to reconstruct")
+
+
+def _identity_agrees(frow, prow) -> None:
+    """identity_agrees: the full-table row and its projection must agree on identity + normalized
+    mechanics (the projection is a re-view of the same spell, never a divergent one)."""
+    if frow.get("name") != prow.get("name"):
+        raise ResolveError(f"identity_agrees: spell {frow['spell_id']} name differs full vs projection")
+    if frow.get("mechanics") != prow.get("mechanics"):
+        raise ResolveError(f"identity_agrees: spell {frow['spell_id']} mechanics differ full vs projection")
+
+
 def _cross_child(gen_dir: Path) -> None:
-    """Streaming merge-join over sorted spell_id across the three spell children (design A5)."""
-    full = list(_read_jsonl(gen_dir / "coa_client_spell.jsonl"))
-    proj_ids = {r["spell_id"] for r in _read_jsonl(gen_dir / "coa_client_spell_coa.jsonl")}
-    icon_ids = {r["spell_id"] for r in _read_jsonl(gen_dir / "coa_client_spell_icons.jsonl")}
-    is_coa = {r["spell_id"] for r in full if r.get("coa_attribution", {}).get("is_coa") is True}
-    if is_coa - proj_ids:
-        raise ResolveError(f"projection_is_coa_subset: {sorted(is_coa - proj_ids)[:5]} missing from projection")
-    if proj_ids - is_coa:
-        raise ResolveError(f"projection_within_domain: {sorted(proj_ids - is_coa)[:5]} outside is_coa domain")
-    ids = [r["spell_id"] for r in full]
-    if ids != sorted(set(ids)):
-        raise ResolveError("sorted_unique_ids: full table has duplicate/out-of-order spell_id")
-    if {r["spell_id"] for r in full} - icon_ids:
-        raise ResolveError("icons_agree: some spells lack an icon-catalog row")
+    """Streaming merge-join over ascending spell_id across the three spell children (design A5) — cursors
+    only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain,
+    identity_agrees, compact_raw_expands_to_envelope, icon coverage, and sorted-unique ids."""
+    full = _Cursor(_read_jsonl(gen_dir / "coa_client_spell.jsonl"), "full")
+    proj = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_coa.jsonl"), "projection")
+    icons = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"), "icons")
+    while full.row is not None:
+        sid = full.row["spell_id"]
+        while icons.row is not None and icons.row["spell_id"] < sid:
+            icons.advance()
+        if icons.row is None or icons.row["spell_id"] != sid:
+            raise ResolveError(f"icons_agree: spell {sid} lacks an icon-catalog row")
+        # a projection id strictly below the current is_coa cursor is outside the is_coa domain
+        if proj.row is not None and proj.row["spell_id"] < sid:
+            raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
+        is_coa = full.row.get("coa_attribution", {}).get("is_coa") is True
+        if is_coa:
+            if proj.row is None or proj.row["spell_id"] != sid:
+                raise ResolveError(f"projection_is_coa_subset: {sid} missing from projection")
+            _identity_agrees(full.row, proj.row)
+            for field, cell in (proj.row.get("raw") or {}).items():
+                _expand_compact(sid, field, cell)
+            proj.advance()
+        for field, cell in (full.row.get("raw") or {}).items():
+            _expand_compact(sid, field, cell)
+        full.advance()
+    if proj.row is not None:                       # projection rows with no is_coa full row are out of domain
+        raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
 
 
 def _icon_bundle(gen_dir: Path, children: dict) -> None:
@@ -1318,7 +1657,7 @@ def validate_candidate_generation(gen_dir: Path) -> dict:
     return active
 ```
 
-`GenerationWriter.publish_candidate` writes the candidate manifest (`publication_state: "candidate"`, `candidate_trust_sha256`) **without** touching the pointer. `finalize_and_publish` reopens under an `fcntl.flock` on a `root/.publish.lock`, asserts `candidate_trust_sha256(final) == candidate digest` (only `/validation`+`/budget` added), writes the final manifest, revalidates the predecessor, then `os.replace`s the pointer last. `resolve_active_generation` refuses any manifest whose `publication_state == "candidate"`.
+`GenerationWriter.publish_candidate` writes the candidate manifest (`publication_state: "candidate"`, `candidate_trust_sha256`) **without** touching the pointer. `finalize_and_publish` reopens under an `fcntl.flock` on a `root/.publish.lock`, asserts `candidate_trust_sha256(final) == candidate digest` (the final differs only in the `CANDIDATE_MUTABLE_KEYS` — `publication_state` flips candidate→published, and `/validation`+`/budget` are added — all three excluded from the digest), writes the final manifest, revalidates the predecessor, then `os.replace`s the pointer last. `resolve_active_generation` refuses any manifest whose `publication_state == "candidate"`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1748,7 +2087,7 @@ git commit -m "M1.14E0R Task 15: relative artifact-manifest paths; untrack dispo
 - Test: `tests/test_e0r_acceptance_summary.py`
 
 **Interfaces:**
-- Produces: a CI workflow running the synthetic Python + Node suites on push/PR; `write_acceptance_summary(...)` emitting the schema-stable curated run record (`client_build`, `generation_id`, `manifest_sha256`, policy `sha256`, `extractor_commit`, `benchmark_env_id`, per-child `{sha256, byte_length, records}`, three-part budget, recon `status`).
+- Produces: a CI workflow running the synthetic Python + Node suites on push/PR; `write_acceptance_summary(...)` emitting the schema-stable curated run record (`client_build`, `generation_id`, `manifest_sha256`, policy `sha256`, `extractor_commit`, `benchmark_env_id`, per-child `{sha256, byte_length, records}`, three-part regenerate `budget`, the canonical `build_mechanics` measurement `{elapsed_s, peak_rss_mb, pointer_only: true}`, recon `status`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1759,32 +2098,50 @@ from coa_client_extract.cli import write_acceptance_summary   # or wherever it l
 
 def test_acceptance_summary_has_stable_fields(tmp_path):
     summary = write_acceptance_summary(tmp_path, _fake_manifest(), recon_status="verified",
-                                       benchmark_env_id="local-x86-64")
+                                       benchmark_env_id="local-x86-64",
+                                       build_mechanics={"elapsed_s": 4.2, "peak_rss_mb": 210, "pointer_only": True})
     assert set(summary) >= {"client_build", "generation_id", "manifest_sha256", "policy_sha256",
-                            "extractor_commit", "benchmark_env_id", "children", "budget", "recon_status"}
+                            "extractor_commit", "benchmark_env_id", "children", "budget", "recon_status",
+                            "build_mechanics"}
     assert summary["recon_status"] == "verified"
+    assert summary["build_mechanics"]["pointer_only"] is True
 ```
 
-- [ ] **Step 2–3:** red → implement `write_acceptance_summary` + `.github/workflows/ci.yml` (checkout → `pip install -e .` → `pytest -q` → `npm --prefix coa_scraper ci` → `npm --prefix coa_scraper test`; the `client`/`stormlib` markers are excluded in CI and kept local); write the schema docs (client-spell v3, mechanics v2, generation v3, recon topology + negative anchor, the new field-readiness doc) and `DECISIONS.md` entries (evidence ≠ authorization; the generation manifest is authoritative, not a child, + candidate trust digest; full-topology hard hold; AscensionDB not a canonical source; missing ≠ default; client-native icons; explicit versioning); update `client-dbc-reference.md` confidence labels + `ROADMAP.md` (E0R inserted before E1) → green.
+- [ ] **Step 2–3:** red → implement `write_acceptance_summary(dist, manifest, *, recon_status, benchmark_env_id, build_mechanics)` and an `acceptance-summary` CLI subcommand that parses the `/usr/bin/time -v` output for elapsed + peak RSS and asserts `pointer_only` (the build-mechanics command carried no `--db-spells`); `.github/workflows/ci.yml` (checkout → `pip install -e .` → `pytest -q` → `npm --prefix coa_scraper ci` → `npm --prefix coa_scraper test`; the `client`/`stormlib` markers are excluded in CI and kept local); write the schema docs (client-spell v3, mechanics v2, generation v3, recon topology + negative anchor, the new field-readiness doc) and `DECISIONS.md` entries (evidence ≠ authorization; the generation manifest is authoritative, not a child, + candidate trust digest; full-topology hard hold; AscensionDB not a canonical source; missing ≠ default; client-native icons; explicit versioning); update `client-dbc-reference.md` confidence labels + `ROADMAP.md` (E0R inserted before E1) → green.
 
-- [ ] **Step 4: Run every suite + record the real-client regenerate**
+- [ ] **Step 4: Commit the code + CI + docs FIRST (a clean commit, no acceptance artifact yet)**
 
-```bash
-pytest -q                                   # synthetic
-pytest -m client -q                         # real client (local only)
-node --test coa_scraper/tests/*.test.mjs
-# Full real-client regenerate (not just recon) — MUST be within the three-part budget:
-COA_CLIENT_ROOT=/path/to/ascension-live/Data python -m coa_client_extract mechanics --client-root "$COA_CLIENT_ROOT" --out coa_scraper/dist
-```
-
-Confirm `manifest["budget"]["within_budget"] is True`; commit the hash-bound acceptance summary.
-
-- [ ] **Step 5: Commit**
+The acceptance summary is a *record of running the clean commit*, so it must not be part of the commit it attests to. Commit code/CI/docs first:
 
 ```bash
 git add .github/workflows/ci.yml docs/ tests/test_e0r_acceptance_summary.py \
-        reports/client_extract/coa_e0r_acceptance_summary.json
-git commit -m "M1.14E0R Task 16: CI + schema/decision docs + recorded full real-client regenerate within budget"
+        coa_client_extract/cli.py
+git commit -m "M1.14E0R Task 16: CI + schema/decision docs + acceptance-summary writer"
+```
+
+- [ ] **Step 5: From that clean commit, run every suite + the real-client regenerate AND the canonical build-mechanics; measure the budget**
+
+```bash
+pytest -q                                   # synthetic (all Python)
+pytest -m client -q                         # real client (local only)
+node --test coa_scraper/tests/*.test.mjs    # all Node
+export COA_CLIENT_ROOT=/path/to/ascension-live/Data   # export FIRST — a `VAR=x cmd "$VAR"` prefix is not visible to "$VAR" on the same line
+# (a) Full real-client regenerate (not just recon) — MUST be within the three-part budget:
+python -m coa_client_extract mechanics --client-root "$COA_CLIENT_ROOT" --out coa_scraper/dist
+# (b) The CANONICAL, pointer-only, network-free Node consumer build — measured end-to-end:
+/usr/bin/time -v npm --prefix coa_scraper run build-mechanics 2>&1 | tee reports/client_extract/build_mechanics_time.txt
+python -m coa_client_extract acceptance-summary --dist coa_scraper/dist --recon-status verified \
+       --build-mechanics-time reports/client_extract/build_mechanics_time.txt \
+       --out reports/client_extract/coa_e0r_acceptance_summary.json
+```
+
+Confirm the regenerate manifest's `budget["within_budget"] is True` **and** that `npm run build-mechanics` is pointer-only (no `--db-spells`, no network) and completes; the acceptance summary records both the regenerate budget and the canonical build-mechanics elapsed/peak-RSS.
+
+- [ ] **Step 6: Commit the acceptance summary separately (attesting to the Step 4 commit)**
+
+```bash
+git add reports/client_extract/coa_e0r_acceptance_summary.json reports/client_extract/build_mechanics_time.txt
+git commit -m "M1.14E0R Task 16: recorded full real-client regenerate + canonical build-mechanics within budget"
 ```
 
 > ### ⛔ HUMAN CHECK-IN — end of E0R (the single human gate; performed on the pushed WIP branch)
@@ -1800,7 +2157,7 @@ git commit -m "M1.14E0R Task 16: CI + schema/decision docs + recorded full real-
 
 **Spec coverage:** design-lock invariants (T1, also the plan's Global Constraints); A1 promotion + string join (T2, T3, T6); A2 shared topology + structured bound (T2, T4, and the hard hold in T10); A3 Node boundary numeric/string via `policy_ref` + lock (T7, wired in T10); A4 streaming compact-raw + hoisted provenance + three-part budget (T5 budget, T6 producer, T10 regenerate); A5 registry + candidate/final trust digest + cross-child + icon bundle + process lock + manifest-not-a-child (T9, T10); A6 `power_type` static negative anchor (T5, authored at the agent-run T8b adjudication); A7 hygiene (T15); B1/B2 total AscensionDB removal + network-trap negative gate + download-only image utility (T11); B3 `coa-mechanics-v2` (T12); B4 icons (T6 catalog + asset resolver, T14 guide/guide_builder); B5 interlock (T13); B6 item/asset AscensionDB code removed (T11); CI + docs + real-client regenerate (T16). One human check-in (the end-of-E0R review on the pushed branch); the recon adjudication (T8b) is agent-executable.
 
-**Placeholder scan:** none — `spell_layout_v2.json` join cells and `spell_layout.lock.json` are honestly authored at the T8 recon gate (a human step, code-gated), not stubbed; every code task carries full test + implementation code and a named commit; the two prose-summarized steps (T8 Step 2–4, T10/T11/T12/T15/T16 Step 2–4) each name the exact functions/files and the green command.
+**Placeholder scan:** none — `spell_layout_v2.json` join cells and `spell_layout.lock.json` are honestly authored at the **agent-executable** T8b recon adjudication (code-gated: recon must return `verified`), not stubbed, and the canonical lock file is created **only** there (T7 uses an inline test lock, committing no placeholder); every code task carries full test + implementation code and a named commit; the prose-summarized steps (T8 Step 2–4, T10/T11/T12/T15/T16 Step 2–4) each name the exact functions/files and the green command.
 
 **Type consistency:** `contracts.policy_ref`/`policy_ref_component`/enums/`TRUST_CRITICAL_MANIFEST_KEYS`/`CROSS_CHILD_CHECKS` (T1) are consumed by T2/T6/T7/T9/T12; `JoinPolicy.promotion` + structured `bound` (T2) by T6's four-part gate and T4/T10's hard hold; `make_string_join` (T3) by T6/T14; `verify_source_topology`/`topology_matches_bound` (T4) by T5/T10; `iter_spell_records`/`iter_icon_catalog` (T6) by T9's cross-child + T14; `candidate_trust_sha256`/`validate_candidate_generation`/`REQUIRED_CHILDREN` (T9) by T10; `verifyRowAgainstPolicy`/`assertPolicyLock` (T7) by T10's Node validation; `MECHANICS_SCHEMA_VERSION = "coa-mechanics-v2"` + `field_readiness` (T12) by T13's readiness gate; the `spell_v2.py` → `spell_record.py` rename is applied from T6 onward.
 

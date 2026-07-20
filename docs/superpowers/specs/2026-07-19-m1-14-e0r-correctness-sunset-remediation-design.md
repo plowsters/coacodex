@@ -267,11 +267,13 @@ generation** by path, not via the pointer:
 2. Write a **candidate** manifest (`publication_state: "candidate"`, which can **never** be resolved
    through a canonical pointer and is safely collectible after an interrupted run) that records a
    **`candidate_trust_sha256`** — a digest over every trust-critical field (child registry, topology
-   binding, policy binding, schema versions), i.e. everything except `/validation` and `/budget`.
+   binding, policy binding, schema versions), i.e. everything except the three legitimately-mutable keys
+   `publication_state` (candidate→published), `/validation`, and `/budget`.
 3. Run the Python **and** Node validators directly against that candidate generation (by path),
    including **cross-child consistency** (below), not merely per-child validity.
-4. Produce the **final** manifest, which may differ from the candidate **only** under `/validation` and
-   `/budget`; it must **reproduce the identical `candidate_trust_sha256`** (so acceptance/budget results
+4. Produce the **final** manifest, which may differ from the candidate **only** under the
+   `CANDIDATE_MUTABLE_KEYS` (`publication_state` flips candidate→published, plus `/validation` and
+   `/budget`); it must **reproduce the identical `candidate_trust_sha256`** (so acceptance/budget results
    can never silently mutate a trust-critical field after validation).
 5. Verify the digest matches, then publish the pointer **last** (the pointer hashes the entire final
    manifest).
