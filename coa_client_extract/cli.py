@@ -57,12 +57,13 @@ def regenerate(
     # be human-reviewed AND its bound Spell.dbc sha256 + client_build must match the opened client.
     spell_sha = hashlib.sha256(spell_member.data).hexdigest()
     bound = policy.bound or {}
+    bound_spell_sha = ((bound.get("tables") or {}).get("Spell") or {}).get("sha256")
     if not policy.reviewed:
         raise ClientBindingError("spell policy is not reviewed; refusing canonical v2 emission")
-    if bound.get("client_build") != client_build or bound.get("source_dbc_sha256", {}).get("Spell") != spell_sha:
+    if bound.get("client_build") != client_build or bound_spell_sha != spell_sha:
         raise ClientBindingError(
             f"spell policy not bound to this client: policy bound={bound.get('client_build')!r} "
-            f"Spell={str(bound.get('source_dbc_sha256', {}).get('Spell'))[:12]}, "
+            f"Spell={str(bound_spell_sha)[:12]}, "
             f"opened build={client_build!r} Spell={spell_sha[:12]}")
 
     # Side tables are read best-effort: an absent side table yields no view (its joins resolve to

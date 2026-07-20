@@ -63,28 +63,36 @@ def _bound_spell_policy(client_build="3.3.5a+patch-C"):
 
     V = ("verified", "verified")
     tables = {
-        "Spell": {"expected_field_count": 4, "fields": {
+        "Spell": {"expected_field_count": 4, "key_cell": 0, "unique": True, "fields": {
             "id": f(0, "uint32", *V, "normalized"), "name": f(1, "string", *V, "normalized"),
             "power_type": f(None, "int32", "unproven", "unproven", "raw_only"),
             "school_mask": f(None, "uint32", "unproven", "unproven", "raw_only"),
             "casting_time_index": f(2, "uint32", *V, "raw_only"),
             "duration_index": f(3, "uint32", *V, "raw_only")}},
-        "SpellCastTimes": {"expected_field_count": 2, "fields": {
+        "SpellCastTimes": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": f(0, "uint32", *V, "raw_only"), "base_ms": f(1, "int32", *V, "raw_only")}},
-        "SpellDuration": {"expected_field_count": 2, "fields": {
+        "SpellDuration": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": f(0, "uint32", *V, "raw_only"), "base_ms": f(1, "int32", *V, "raw_only")}},
     }
     joins = {
-        "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes", "side_value_field": "base_ms"},
-        "duration_ms": {"index_field": "duration_index", "side_table": "SpellDuration", "side_value_field": "base_ms"},
+        "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
+                         "side_value_field": "base_ms", "promotion": "raw_only"},
+        "duration_ms": {"index_field": "duration_index", "side_table": "SpellDuration",
+                        "side_value_field": "base_ms", "promotion": "raw_only"},
     }
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
     anchors = {"spells": [{"id": 133, "name": "Fireball", "power_type": 0, "school_mask": 4}]}
     anchors["sha256"] = compute_policy_sha256(anchors)
-    p = {"schema_version": "coa-spell-layout-v1", "reviewed": True,
-         "bound": {"client_build": client_build,
-                   "source_dbc_sha256": {"Spell": hashlib.sha256(_SPELL_BYTES).hexdigest()}},
+    # Structured E0R bound over the exact Spell bytes the fake backend serves (parsed header + real sha).
+    _hdr = struct.unpack_from("<4sIIII", _SPELL_BYTES, 0)
+    spell_bound = {"sha256": hashlib.sha256(_SPELL_BYTES).hexdigest(),
+                   "header": {"magic": _hdr[0].decode("latin-1"), "record_count": _hdr[1],
+                              "field_count": _hdr[2], "record_size": _hdr[3], "string_block_size": _hdr[4]},
+                   "source": {"member": "DBFilesClient\\Spell.dbc", "effective_archive": "patch-C.MPQ",
+                              "patch_chain": []}}
+    p = {"schema_version": "coa-spell-layout-v2", "reviewed": True,
+         "bound": {"client_build": client_build, "expected_absent": [], "tables": {"Spell": spell_bound}},
          "required_tables": ["Spell"], "expected_absent": [], "enum_policy": enum,
          "anchor_set": anchors, "tables": tables, "joins": joins}
     p["sha256"] = compute_policy_sha256(p)

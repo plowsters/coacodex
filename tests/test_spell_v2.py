@@ -74,11 +74,15 @@ def _policy(*, reviewed=True, bound=None):
         "range_max_yd": {"index_field": "range_index", "side_table": "SpellRange", "side_value_field": "max_yd"},
         "spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon", "side_value_field": "id"},
     }
+    for _t in tables.values():                      # v2: every table declares its key cell + uniqueness
+        _t.setdefault("key_cell", 0); _t.setdefault("unique", True)
+    for _j in joins.values():                        # v2: joins carry explicit promotion (all un-adjudicated)
+        _j.setdefault("promotion", "raw_only")
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
     anchor_set = {"spells": [{"id": 133, "name": "Fireball", "power_type": 0, "school_mask": 4}]}
     anchor_set["sha256"] = compute_policy_sha256(anchor_set)
-    p = {"schema_version": "coa-spell-layout-v1", "reviewed": reviewed, "bound": bound,
+    p = {"schema_version": "coa-spell-layout-v2", "reviewed": reviewed, "bound": bound,
          "required_tables": ["Spell"], "expected_absent": [], "enum_policy": enum,
          "anchor_set": anchor_set, "tables": tables, "joins": joins}
     p["sha256"] = compute_policy_sha256(p)

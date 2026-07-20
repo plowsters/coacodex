@@ -7,6 +7,15 @@ from coa_client_extract.spell_layout import (
 )
 
 
+def _hdr(field_count, record_size):
+    return {"magic": "WDBC", "record_count": 1, "field_count": field_count,
+            "record_size": record_size, "string_block_size": 0}
+
+
+def _src(member):
+    return {"member": member, "effective_archive": "patch-CZZ.MPQ", "patch_chain": []}
+
+
 def _valid_payload() -> dict:
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256({"power_types": enum["power_types"],
@@ -18,14 +27,16 @@ def _valid_payload() -> dict:
     p = {
         "schema_version": SCHEMA,
         "reviewed": True,
-        "bound": {"client_build": "3.3.5a+patch-CZZ",
-                  "source_dbc_sha256": {"Spell": "a" * 64, "SpellCastTimes": "b" * 64}},
+        "bound": {"client_build": "3.3.5a+patch-CZZ", "expected_absent": ["SpellEffect"], "tables": {
+            "Spell": {"sha256": "a" * 64, "header": _hdr(234, 936), "source": _src("DBFilesClient\\Spell.dbc")},
+            "SpellCastTimes": {"sha256": "b" * 64, "header": _hdr(4, 16),
+                               "source": _src("DBFilesClient\\SpellCastTimes.dbc")}}},
         "required_tables": ["Spell", "SpellCastTimes"],
         "expected_absent": ["SpellEffect"],
         "enum_policy": enum,
         "anchor_set": anchor_set,
         "tables": {
-            "Spell": {"expected_field_count": 234, "fields": {
+            "Spell": {"expected_field_count": 234, "key_cell": 0, "unique": True, "fields": {
                 "id": {"cell": 0, "kind": "uint32", "layout": "verified",
                        "interpretation": "verified", "promotion": "normalized", "evidence": "id anchor"},
                 "name": {"cell": 136, "kind": "string", "layout": "verified",
@@ -39,7 +50,7 @@ def _valid_payload() -> dict:
                 "casting_time_index": {"cell": None, "kind": "uint32", "layout": "unproven",
                                        "interpretation": "unproven", "promotion": "raw_only", "evidence": "recon-pending"},
             }},
-            "SpellCastTimes": {"expected_field_count": 4, "fields": {
+            "SpellCastTimes": {"expected_field_count": 4, "key_cell": 0, "unique": True, "fields": {
                 "id": {"cell": 0, "kind": "uint32", "layout": "verified",
                        "interpretation": "verified", "promotion": "raw_only", "evidence": "id col"},
                 "base_ms": {"cell": 1, "kind": "int32", "layout": "unproven",
@@ -48,7 +59,7 @@ def _valid_payload() -> dict:
         },
         "joins": {
             "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
-                             "side_value_field": "base_ms"},
+                             "side_value_field": "base_ms", "promotion": "raw_only"},
         },
     }
     p["sha256"] = compute_policy_sha256(p)
@@ -69,6 +80,7 @@ def test_valid_policy_exposes_recon_views():
     assert pol.enum_policy["power_types"] == frozenset({-2, 0, 1, 2, 3, 4, 5, 6})
     assert 20 not in pol.enum_policy["school_bits"] and 64 in pol.enum_policy["school_bits"]
     assert pol.bound["client_build"] == "3.3.5a+patch-CZZ"
+    assert pol.tables["Spell"]["key_cell"] == 0 and pol.tables["Spell"]["unique"] is True
     assert pol.sha256 == compute_policy_sha256(_valid_payload())
 
 
@@ -118,8 +130,29 @@ def test_reject_school_bit_not_power_of_two():
 
 def test_reject_wrong_schema_version():
     p = _valid_payload()
-    p["schema_version"] = "coa-spell-layout-v2"
-    with pytest.raises(SpellPolicyError, match="schema_version"):
+    p["schema_version"] = "coa-spell-layout-v1"   # the retired schema is now rejected
+    with pytest.raises(SpellPolicyError, match="coa-spell-layout-v2"):
+        load_spell_policy(_rehash(p))
+
+
+def test_reject_key_cell_out_of_bounds():
+    p = _valid_payload()
+    p["tables"]["Spell"]["key_cell"] = 999
+    with pytest.raises(SpellPolicyError, match="key_cell"):
+        load_spell_policy(_rehash(p))
+
+
+def test_reject_bound_table_set_mismatch():
+    p = _valid_payload()
+    del p["bound"]["tables"]["SpellCastTimes"]   # bound no longer covers every required table
+    with pytest.raises(SpellPolicyError, match="bound.tables"):
+        load_spell_policy(_rehash(p))
+
+
+def test_reject_flat_bound_shape():
+    p = _valid_payload()
+    p["bound"] = {"client_build": "x", "source_dbc_sha256": {"Spell": "a" * 64}}
+    with pytest.raises(SpellPolicyError, match="bound.tables"):
         load_spell_policy(_rehash(p))
 
 
@@ -144,9 +177,12 @@ def test_reject_join_with_unknown_side_value_field():
         load_spell_policy(_rehash(p))
 
 
-def test_committed_default_policy_loads_and_is_bound():
+def test_committed_default_policy_loads_scalar_substrate():
+    # The shipped v2 default carries the reviewed scalar substrate; joins are un-adjudicated and `bound`
+    # is null until Task 8b runs real-client recon and authors the structured bound + join cells + lock.
     pol = load_default_policy()
+    assert pol.schema_version == "coa-spell-layout-v2"
     assert pol.columns["power_type"] == 41 and pol.columns["school_mask"] == 225
     assert pol.columns["name"] == 136
-    assert pol.bound is not None and pol.bound["client_build"].startswith("3.3.5a+")
-    assert "Spell" in pol.bound["source_dbc_sha256"]
+    assert pol.joins["cast_time_ms"].promotion == "raw_only"
+    assert pol.bound is None          # authored at Task 8b (real-client recon)

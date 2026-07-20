@@ -43,20 +43,20 @@ def _recon_policy(*, reviewed):
     spells = [{"id": i, "name": n, "power_type": p, "school_mask": s} for (i, p, s, n) in ANCHORS]
     anchor = {"spells": spells}
     anchor["sha256"] = compute_policy_sha256(anchor)
-    p = {"schema_version": "coa-spell-layout-v1", "reviewed": reviewed, "bound": None,
+    p = {"schema_version": "coa-spell-layout-v2", "reviewed": reviewed, "bound": None,
          "required_tables": ["Spell", "SpellCastTimes"], "expected_absent": ["SpellEffect"],
          "enum_policy": enum, "anchor_set": anchor,
          "tables": {
-             "Spell": {"expected_field_count": 234, "fields": {
+             "Spell": {"expected_field_count": 234, "key_cell": 0, "unique": True, "fields": {
                  "id": f(0, "uint32", promo="normalized"),
                  "name": f(136, "string", promo="normalized"),
                  "power_type": f(41, "int32", promo="normalized"),
                  "school_mask": f(225, "uint32", promo="normalized"),
                  "casting_time_index": f(28, "uint32")}},
-             "SpellCastTimes": {"expected_field_count": 2, "fields": {
+             "SpellCastTimes": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
                  "id": f(0, "uint32"), "base_ms": f(1, "int32")}}},
          "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
-                                    "side_value_field": "base_ms"}}}
+                                    "side_value_field": "base_ms", "promotion": "raw_only"}}}
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

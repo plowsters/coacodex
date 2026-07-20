@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .contracts import BOUND_HEADER_FIELDS, BOUND_SOURCE_FIELDS
 from .spell_proof import PROOF_STATES
 
-SCHEMA = "coa-spell-layout-v1"
+SCHEMA = "coa-spell-layout-v2"
 _KINDS = ("int32", "uint32", "float", "string")
 _PROMOTIONS = ("normalized", "raw_only")
 _DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -45,6 +47,7 @@ class JoinPolicy:
     index_field: str      # a Spell column holding the FK into the side table
     side_table: str       # e.g. "SpellCastTimes"
     side_value_field: str # the side-table column carrying the resolved value (e.g. "base_ms")
+    promotion: str        # "normalized" | "raw_only" — whether the emitted join value is authorized
 
 
 @dataclass(frozen=True)
@@ -123,9 +126,35 @@ def _validate_field(table: str, name: str, spec: dict, field_count: int) -> Fiel
                        spec["promotion"], spec["evidence"])
 
 
+def _validate_bound(bound: dict) -> dict:
+    """The structured A2 bound: per-table sha256 + full 5-field header + logical source (member,
+    effective_archive, patch_chain). Rejects the flat E0 shape so a stale flat bound cannot slip through."""
+    if "source_dbc_sha256" in bound:
+        raise SpellPolicyError("bound uses the flat source_dbc_sha256 shape; E0R requires bound.tables{}")
+    if not isinstance(bound.get("client_build"), str):
+        raise SpellPolicyError("bound.client_build must be a string")
+    tables = bound.get("tables")
+    if not isinstance(tables, dict) or not tables:
+        raise SpellPolicyError("bound.tables must be a non-empty dict")
+    for tname, spec in tables.items():
+        if not isinstance(spec.get("sha256"), str) or len(spec["sha256"]) != 64:
+            raise SpellPolicyError(f"bound.tables.{tname}.sha256 must be a 64-char hex digest")
+        header = spec.get("header", {})
+        for h in BOUND_HEADER_FIELDS:
+            if h not in header:
+                raise SpellPolicyError(f"bound.tables.{tname}.header missing {h!r}")
+        source = spec.get("source", {})
+        for s in BOUND_SOURCE_FIELDS:
+            if s not in source:
+                raise SpellPolicyError(f"bound.tables.{tname}.source missing {s!r}")
+        if os.path.isabs(str(source["effective_archive"])):
+            raise SpellPolicyError(f"bound.tables.{tname}.source.effective_archive must be a logical name")
+    return bound
+
+
 def load_spell_policy(payload: dict) -> SpellPolicy:
     if payload.get("schema_version") != SCHEMA:
-        raise SpellPolicyError(f"schema_version must be {SCHEMA!r}")
+        raise SpellPolicyError(f"schema_version must be {SCHEMA!r} (coa-spell-layout-v2)")
     if not isinstance(payload.get("reviewed"), bool):
         raise SpellPolicyError("reviewed must be a bool")
 
@@ -137,6 +166,12 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         fc = tspec.get("expected_field_count")
         if type(fc) is not int or fc <= 0:
             raise SpellPolicyError(f"{tname}: expected_field_count must be a positive int")
+        key_cell = tspec.get("key_cell")
+        if type(key_cell) is not int or isinstance(key_cell, bool) or not (0 <= key_cell < fc):
+            raise SpellPolicyError(f"{tname}: key_cell {key_cell!r} out of [0,{fc})")
+        unique = tspec.get("unique")
+        if not isinstance(unique, bool):
+            raise SpellPolicyError(f"{tname}: unique must be a bool")
         fields, seen_cells = {}, {}
         for fname, fspec in tspec.get("fields", {}).items():
             fp = _validate_field(tname, fname, fspec, fc)
@@ -145,19 +180,29 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
                     raise SpellPolicyError(f"{tname}: cell {fp.cell} reused by {seen_cells[fp.cell]!r} and {fname!r}")
                 seen_cells[fp.cell] = fname
             fields[fname] = fp
-        tables[tname] = {"expected_field_count": fc, "fields": fields}
+        tables[tname] = {"expected_field_count": fc, "key_cell": key_cell, "unique": unique, "fields": fields}
 
     # joins reference real Spell index columns + real side tables/value columns
     joins: dict[str, JoinPolicy] = {}
     for jname, jspec in payload.get("joins", {}).items():
         idx, side, val = jspec.get("index_field"), jspec.get("side_table"), jspec.get("side_value_field")
+        promo = jspec.get("promotion")
         if idx not in tables["Spell"]["fields"]:
             raise SpellPolicyError(f"join {jname}: index_field {idx!r} not a Spell field")
         if side not in tables:
             raise SpellPolicyError(f"join {jname}: side_table {side!r} not defined")
         if val not in tables[side]["fields"]:
             raise SpellPolicyError(f"join {jname}: side_value_field {val!r} not in {side}")
-        joins[jname] = JoinPolicy(idx, side, val)
+        if "id" not in tables[side]["fields"]:
+            raise SpellPolicyError(f"join {jname}: side_table {side!r} has no 'id' field")
+        if promo not in _PROMOTIONS:
+            raise SpellPolicyError(f"join {jname}: promotion {promo!r} not in {_PROMOTIONS}")
+        if promo == "normalized":
+            # A normalized join emits only when every contributing component is itself normalized.
+            for role, tbl, fname in (("index", "Spell", idx), ("side_id", side, "id"), ("side_value", side, val)):
+                if tables[tbl]["fields"][fname].promotion != "normalized":
+                    raise SpellPolicyError(f"join {jname}: normalized join has a raw_only component {fname}")
+        joins[jname] = JoinPolicy(idx, side, val, promo)
 
     enum = payload.get("enum_policy", {})
     power_types, school_bits = enum.get("power_types"), enum.get("school_bits")
@@ -177,10 +222,15 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     if compute_policy_sha256(anchor_set) != anchor_set.get("sha256"):
         raise SpellPolicyError("anchor_set.sha256 mismatch")
 
+    required_tables = tuple(payload.get("required_tables", []))
+    expected_absent = tuple(payload.get("expected_absent", []))
     bound = payload.get("bound")
     if bound is not None:
-        if not isinstance(bound.get("client_build"), str) or not isinstance(bound.get("source_dbc_sha256"), dict):
-            raise SpellPolicyError("bound requires client_build:str and source_dbc_sha256:dict")
+        _validate_bound(bound)
+        if set(bound["tables"]) != set(required_tables):
+            raise SpellPolicyError("bound.tables must equal required_tables (every required table is bound)")
+        if set(bound.get("expected_absent", [])) != set(expected_absent):
+            raise SpellPolicyError("bound.expected_absent must equal the policy expected_absent set")
 
     declared = payload.get("sha256")
     recomputed = _sha({k: v for k, v in payload.items() if k != "sha256"})
@@ -190,8 +240,8 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     return SpellPolicy(
         schema_version=SCHEMA, reviewed=payload["reviewed"], bound=bound, sha256=recomputed,
         tables=tables, joins=joins,
-        required_tables=tuple(payload.get("required_tables", [])),
-        expected_absent=tuple(payload.get("expected_absent", [])),
+        required_tables=required_tables,
+        expected_absent=expected_absent,
         anchor_set=anchor_set, _enum={"power_types": power_types, "school_bits": school_bits},
     )
 
@@ -202,5 +252,5 @@ def compute_policy_sha256(payload: dict) -> str:
 
 
 def load_default_policy(*, root: Path | None = None) -> SpellPolicy:
-    path = (root or _DATA_DIR) / "spell_layout_v1.json"
+    path = (root or _DATA_DIR) / "spell_layout_v2.json"
     return load_spell_policy(json.loads(path.read_text(encoding="utf-8")))
