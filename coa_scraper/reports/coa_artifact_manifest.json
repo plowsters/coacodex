@@ -1,6 +1,6 @@
 {
   "schema_version": "coa-artifact-manifest-v1",
-  "generated_at": "2026-07-13T16:31:32.268Z",
+  "generated_at": "2026-07-20T16:29:06.450Z",
   "builder": {
     "id": 39,
     "slug": "voljin-alpha",
@@ -45,8 +45,8 @@
     },
     {
       "path": "scripts/lib/ascensiondb.mjs",
-      "bytes": 13961,
-      "sha256": "4c1d6d2cf6e3d5f489b0518ef1aa9a614d890ab0efcc9cc7b154564e4da4aeb0"
+      "bytes": 13700,
+      "sha256": "8a42a80d432515ed4e853578e2a76912a228e0b674e4bafc93b13841fab83854"
     },
     {
       "path": "scripts/lib/ascensiondb-cache.mjs",
@@ -60,8 +60,8 @@
     },
     {
       "path": "scripts/lib/icon-assets.mjs",
-      "bytes": 6817,
-      "sha256": "cc701d4fa075770c5bfe6bf8b1aea8b2de3d155cebc2de4216d5f23a3ed61e8f"
+      "bytes": 6947,
+      "sha256": "a1acf83d4ca28b3beb833401e675457c5654555871681627e9228b8234d9f63f"
     },
     {
       "path": "scripts/lib/source-level.mjs",
@@ -69,29 +69,14 @@
       "sha256": "75aa1c6817f07d6b626e95a8874015edd40aaf5808a4485838253bc4adbe810f"
     },
     {
-      "path": "scripts/enrich-ascensiondb-assets.mjs",
-      "bytes": 12004,
-      "sha256": "4d3346fb118447385a96fc9feb4579687fb7e3dff7af2ff2179434ba331fa213"
-    },
-    {
-      "path": "scripts/enrich-ascensiondb.mjs",
-      "bytes": 1799,
-      "sha256": "90867ef45dd6a6f36259f07cce6d90611b2fe89bc96b732a129ba97821f0f28f"
-    },
-    {
-      "path": "scripts/apply-db-enrichment.mjs",
-      "bytes": 1792,
-      "sha256": "fc8fd752bc63b20b41aa227aac7ce5baa6c4bc8e449c03828955f5e37c1c4a60"
-    },
-    {
-      "path": "scripts/enrich-linked-items.mjs",
-      "bytes": 2061,
-      "sha256": "00dfeae60be453230430247a05c8bc757c107a413af27f5b04e45c544d0d801d"
-    },
-    {
       "path": "scripts/build-mechanics-artifacts.mjs",
-      "bytes": 10395,
-      "sha256": "df2a0ca530e3e164175698c9bb7fa2fd466baac02f3dbd44cac5bd337bb9a053"
+      "bytes": 22943,
+      "sha256": "eb08952cba3b91d46cae7aad51b895b78125b64bff26adafe0fa98ea96b827b4"
+    },
+    {
+      "path": "scripts/build-item-artifacts.mjs",
+      "bytes": 3579,
+      "sha256": "e8e6405b773dcaa27567e5e4af22a833d3838c8e06d82ecb57d133fd05cd9c11"
     },
     {
       "path": "scripts/write-source-level-report.mjs",
@@ -105,8 +90,8 @@
     },
     {
       "path": "scripts/write-artifact-manifest.mjs",
-      "bytes": 4293,
-      "sha256": "a6a072c1132d7f54225d7c954703cc14f610864b5d5a18790432c19d4f545e46"
+      "bytes": 4421,
+      "sha256": "ed677e30445397853708ad13a7ccbaf8a17f8cf0761e6cd3a9e01087f66b1caf"
     },
     {
       "path": "scripts/run-normalization-pipeline.mjs",
@@ -192,23 +177,18 @@
     },
     {
       "path": "reports/coa_item_enrichment_summary.json",
-      "bytes": 340,
-      "sha256": "3f02dcd4af1003ed8aa658e2c9ee27a200d2a437eb5d0190ab6191c74b9475fd"
+      "missing": true,
+      "note": "missing: reports/coa_item_enrichment_summary.json"
     },
     {
       "path": "reports/coa_ascensiondb_cache_manifest.json",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/reports/coa_ascensiondb_cache_manifest.json"
+      "note": "missing: reports/coa_ascensiondb_cache_manifest.json"
     },
     {
       "path": "reports/coa_ascensiondb_cache_summary.json",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/reports/coa_ascensiondb_cache_summary.json"
-    },
-    {
-      "path": "reports/coa_mechanics_enrichment_summary.json",
-      "bytes": 362,
-      "sha256": "952ccb81052a66340a910cae095e72a25d27f00a6be33b841ecba7d794288507"
+      "note": "missing: reports/coa_ascensiondb_cache_summary.json"
     },
     {
       "path": "dist/coa_entries.jsonl",
@@ -238,7 +218,7 @@
     {
       "path": "dist/coa_db_spell_records.jsonl",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/dist/coa_db_spell_records.jsonl"
+      "note": "missing: dist/coa_db_spell_records.jsonl"
     },
     {
       "path": "dist/coa_db_spell_tooltips.jsonl",
@@ -248,22 +228,22 @@
     {
       "path": "dist/coa_db_item_records.jsonl",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/dist/coa_db_item_records.jsonl"
+      "note": "missing: dist/coa_db_item_records.jsonl"
     },
     {
       "path": "dist/coa_db_item_tooltips.jsonl",
-      "bytes": 1252,
-      "sha256": "6fa67f046170a649ff28c264cdd59ec24b6a5554e549bfb35faaee912f36a9d7"
+      "missing": true,
+      "note": "missing: dist/coa_db_item_tooltips.jsonl"
     },
     {
       "path": "dist/coa_db_effect_records.jsonl",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/dist/coa_db_effect_records.jsonl"
+      "note": "missing: dist/coa_db_effect_records.jsonl"
     },
     {
       "path": "dist/coa_db_asset_records.jsonl",
       "missing": true,
-      "note": "Required file does not exist: /home/archbug/projects/coacodex/coa_scraper/dist/coa_db_asset_records.jsonl"
+      "note": "missing: dist/coa_db_asset_records.jsonl"
     },
     {
       "path": "dist/coa_entries.enriched.jsonl",
@@ -276,9 +256,19 @@
       "sha256": "965d9dc4c06535c86c0aff51c3b177355946a3367b8c7f291d8593b2408ead21"
     },
     {
+      "path": "dist/coa_mechanics.manifest.json",
+      "missing": true,
+      "note": "missing: dist/coa_mechanics.manifest.json"
+    },
+    {
+      "path": "dist/coa_mechanics.fallback.manifest.json",
+      "missing": true,
+      "note": "missing: dist/coa_mechanics.fallback.manifest.json"
+    },
+    {
       "path": "dist/coa_items.jsonl",
-      "bytes": 763,
-      "sha256": "4917566293bc91e9fd21eaea75cbfe2610e6e792c386c13a2a88ef7f4e0db647"
+      "missing": true,
+      "note": "missing: dist/coa_items.jsonl"
     }
   ],
   "validation": {

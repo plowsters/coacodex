@@ -66,11 +66,13 @@ const artifactPaths = [
 function optionalRecord(relativePath, rootDir) {
   try {
     return artifactRecord(path.join(rootDir, relativePath), rootDir);
-  } catch (err) {
+  } catch {
+    // Note the REPO-RELATIVE path only — never the machine-local absolute path from the error message,
+    // which would pollute the committed manifest with a /home/<user>/... leak (E0R hygiene).
     return {
       path: relativePath,
       missing: true,
-      note: err.message
+      note: `missing: ${relativePath}`
     };
   }
 }

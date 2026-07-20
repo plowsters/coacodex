@@ -62,3 +62,10 @@ coa_scraper/dist/coa_spell_mechanics_recon.json
 reports/client_extract/coa_wow_constants_recon.json
 coa_scraper/dist/coa_wow_constants.json
 coa_scraper/dist/coa_wow_constants.manifest.json
+
+# M1.14E0R AscensionDB sunset: the DB-enrichment pipeline is removed, so its outputs are orphaned
+# disposables — regenerated only by the (deleted) enrichment scripts; never committed.
+coa_scraper/dist/coa_entries.enriched.jsonl
+coa_scraper/reports/coa_db_enrichment_summary.json
+coa_scraper/reports/coa_ascensiondb_cache_manifest.json
+coa_scraper/reports/coa_ascensiondb_cache_summary.json
