@@ -2,7 +2,7 @@ import struct
 
 from coa_client_extract.recordview import open_view
 from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
-from coa_client_extract.spell_v2 import build_spell_v2_records
+from coa_client_extract.spell_record import build_spell_v2_records
 
 # Synthetic Spell record: 9 uint32 cells.
 #  0 id | 1 power_type | 2 school_mask | 3 name_off | 4 desc_off

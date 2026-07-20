@@ -38,7 +38,7 @@ def regenerate(
     import hashlib
     from .recordview import open_view
     from .spell_layout import load_default_policy
-    from .spell_v2 import build_spell_v2_records
+    from .spell_record import build_spell_v2_records
     from .errors import ClientBindingError
 
     if backend is None:
