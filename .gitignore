@@ -69,3 +69,8 @@ coa_scraper/dist/coa_entries.enriched.jsonl
 coa_scraper/reports/coa_db_enrichment_summary.json
 coa_scraper/reports/coa_ascensiondb_cache_manifest.json
 coa_scraper/reports/coa_ascensiondb_cache_summary.json
+
+# M1.14E0R acceptance-run transients (process lock + ad-hoc logs) — never committed
+reports/client_extract/.publish.lock
+reports/client_extract/_regenerate.log
+reports/client_extract/_recon.log

@@ -1,0 +1,85 @@
+{
+  "benchmark_env_id": "x86_64-local",
+  "budget": {
+    "breach": [],
+    "ceilings": {
+      "artifact_size_mb": 512,
+      "elapsed_s": 600,
+      "peak_rss_mb": 4096
+    },
+    "elapsed_s": 427.7518,
+    "peak_rss_mb": 2684.5,
+    "serialized_mb": 414.79,
+    "within_budget": true
+  },
+  "build_mechanics": {
+    "elapsed_s": 3.43,
+    "peak_rss_mb": 2684.5,
+    "pointer_only": true
+  },
+  "children": {
+    "coa_client_advancement.jsonl": {
+      "byte_length": 9387960,
+      "records": 3614,
+      "sha256": "852a22ad10362ce2bc277b235e36e728697c4d0f8b64a1917761f929d6bf977a"
+    },
+    "coa_client_archive_plan.json": {
+      "byte_length": 1657,
+      "records": 1,
+      "sha256": "748ac9234f1504fe51dc225635a04f63d863def774ddc0b1a4392051bf7cd71a"
+    },
+    "coa_client_class_types.jsonl": {
+      "byte_length": 8894,
+      "records": 46,
+      "sha256": "64c1d07b913f45d89e33474d8e60a891a8368eb49009e71ae0740ec34d4efd9f"
+    },
+    "coa_client_content.jsonl": {
+      "byte_length": 31922197,
+      "records": 52744,
+      "sha256": "f9511036a5c234c8729ffe64d6c0c5f4dbe67fef0b53d9342ad5a13dec84d985"
+    },
+    "coa_client_essence.jsonl": {
+      "byte_length": 1836312,
+      "records": 5600,
+      "sha256": "84717fb9ef36a1c2464a7ebb0d1516aab338fbb554a4236cbb050f726584a896"
+    },
+    "coa_client_spell.jsonl": {
+      "byte_length": 330056298,
+      "records": 208444,
+      "sha256": "0cbf6136064bb8b111de222bbf906f4ee796dcb30f77f31330ecb9fe27186c50"
+    },
+    "coa_client_spell_coa.jsonl": {
+      "byte_length": 16495965,
+      "records": 10410,
+      "sha256": "8dd02e379f6df6ab3765b6533ec71fed0d540cc0a79d995af56cbef81fafd11b"
+    },
+    "coa_client_spell_icons.jsonl": {
+      "byte_length": 45208598,
+      "records": 208444,
+      "sha256": "9ee0eda87ffa5d1703fc8113f5bf32c8b8de00c3ac8835598a6856cf064eb451"
+    },
+    "coa_client_spell_projection.manifest.json": {
+      "byte_length": 507,
+      "records": 1,
+      "sha256": "971aa67c23bd35a7a93aed98e3f23e958b5239271e9b6f92ac10814e35091e99"
+    },
+    "coa_client_tab_types.jsonl": {
+      "byte_length": 7966,
+      "records": 94,
+      "sha256": "91d159afb3a734179e5b2eb5ee523439757cb94d7e5b87fb5fcbd3bb965402a9"
+    },
+    "spell_layout_v2.json": {
+      "byte_length": 13053,
+      "records": 1,
+      "sha256": "2ef8c282095bc78b7921e90328bd086251f59862b951ca48a4be3a4f19dc9e0f"
+    }
+  },
+  "client_build": "3.3.5a+patch-CZZ",
+  "extractor_commit": "941846d7b7ded1496d6274d2e730b226178222b2",
+  "generated_at": "2026-07-20",
+  "generation_id": "682b8c09758740cfbbfb9b8c63ee753c",
+  "manifest_sha256": "c20dedc3870a3395f447480583755704d1e16a53a4a76dbfc4b557501e7c6412",
+  "policy_sha256": "88b26343a6b6b31ce0b1b95d3c0f7a6aea5e24bdfc41b7588c319a8f4fbcdcc3",
+  "recon_status": "verified",
+  "schema_version": "coa-e0r-acceptance-summary-v1"
+}
