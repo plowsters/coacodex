@@ -462,11 +462,9 @@ def _action_icon(action: CatalogAction | None) -> str | None:
     return None
 
 
-def _db_url(action: CatalogAction | None, apl_action: APLAction | None) -> str | None:
-    spell_id = action.spell_id if action else apl_action.spell_id if apl_action else None
-    if not spell_id:
-        return None
-    return f"https://db.ascension.gg/?spell={spell_id}"
+def _db_url(action: CatalogAction | None, apl_action: APLAction | None) -> None:
+    # E0R AscensionDB sunset: rotation actions no longer link out to db.ascension.gg.
+    return None
 
 
 def _uptime_pct(action: CatalogAction | None, count: int, duration_ms: int) -> float | None:

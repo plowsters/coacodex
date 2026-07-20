@@ -2,11 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-export const DEFAULT_ICON_URL_TEMPLATES = [
-  "https://db.ascension.gg/static/images/wow/icons/large/{icon}.jpg",
-  "https://db.ascension.gg/static/images/wow/icons/medium/{icon}.jpg",
-  "https://db.ascension.gg/static/images/wow/icons/small/{icon}.jpg"
-];
+// E0R AscensionDB sunset: the db.ascension.gg icon URL templates are removed. With no default templates,
+// resolveIconAsset yields a placeholder/missing record unless a caller explicitly injects templates (the
+// opt-in image-download utility, download-spell-icons.mjs, carries its own). No canonical build emits a
+// db.ascension.gg URL.
+export const DEFAULT_ICON_URL_TEMPLATES = [];
 
 export function sanitizeIconToken(iconToken) {
   const raw = String(iconToken || "")

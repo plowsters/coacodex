@@ -89,42 +89,26 @@ def test_guide_nodes_include_links_tooltips_and_icons():
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)
 
-    assert node.db_url == "https://db.ascension.gg/?spell=2001"
+    assert node.db_url is None                          # no remote AscensionDB link (E0R)
     assert node.tooltip_id == "spell:2001"
     assert node.asset.asset_id.startswith("icon:")
+    assert node.asset.source == "placeholder"           # no client icon catalog supplied -> placeholder
 
 
-def test_guide_builder_prefers_db_icon_asset_path(tmp_path: Path):
-    db_path = tmp_path / "db_tooltips.jsonl"
-    db_path.write_text(
-        json.dumps(
-            {
-                "kind": "spell",
-                "id": 2001,
-                "status": "matched",
-                "name": "Damage Talent",
-                "icon": "spell_nature_poison",
-                "icon_asset_path": "dist/assets/icons/spell_nature_poison.png",
-                "tooltip_html": "<table><tr><td>Deals bonus Nature damage.</td></tr></table>",
-                "tooltip_text": "Deals bonus Nature damage.",
-                "linked_spell_ids": [],
-                "linked_item_ids": [],
-                "name_match": True,
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+def test_guide_builder_uses_client_icon_catalog(tmp_path: Path):
+    # E0R client-native icons: a converted client-icon row renders from the client catalog by spell_id;
+    # no AscensionDB icon name / cached path is consulted.
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=db_path,
+        icon_catalog={2001: {"client_path": "Interface/Icons/Spell_Nature_Poison.blp",
+                             "asset_status": "converted", "converted_ref": "icons.tar#spell_nature_poison.png"}},
     )
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)
 
-    assert node.asset.href == "icons/spell_nature_poison.png"
-    assert node.asset.source == "ascension_db_asset"
+    assert node.asset.source == "client_icon"
+    assert node.asset.href == "icons.tar#spell_nature_poison.png"
     assert node.asset.missing is False
 
 

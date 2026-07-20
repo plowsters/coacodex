@@ -24,7 +24,12 @@ def _site():
             require_budget_fraction=0.0,
         )
     ).run()
-    return build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl")
+    # Client-native icons: supply a converted client-icon catalog so nodes/spec icons render an <img>.
+    icon_catalog = {sid: {"client_path": f"Interface/Icons/Icon_{sid}.blp",
+                          "asset_status": "converted", "converted_ref": f"icons.tar#icon_{sid}.png"}
+                    for sid in (1000, 1001, 1002, 2001, 2002, 3001)}
+    return build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl",
+                            icon_catalog=icon_catalog)
 
 
 def _hybrid_site():
@@ -161,7 +166,8 @@ def test_render_spec_html_links_spell_and_tooltip_ids():
 
     html = render_spec_html(site, spec)
 
-    assert "https://db.ascension.gg/?spell=2001" in html
+    # E0R: no remote AscensionDB link is rendered; the client-side tooltip id still anchors the node.
+    assert "db.ascension.gg" not in html
     assert 'data-tooltip-id="spell:2001"' in html
 
 

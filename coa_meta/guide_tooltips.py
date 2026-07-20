@@ -9,7 +9,6 @@ from typing import Any
 from .domain import TalentNode
 from .guide_models import GuideTooltip
 
-DB_HOST = "https://db.ascension.gg"
 _ALLOWED_TAGS = {
     "b",
     "br",
@@ -30,10 +29,10 @@ _ALLOWED_TAGS = {
 }
 
 
-def ascension_spell_url(spell_id: int | None) -> str | None:
-    if spell_id is None:
-        return None
-    return f"{DB_HOST}/?spell={int(spell_id)}"
+def ascension_spell_url(spell_id: int | None) -> None:
+    # E0R AscensionDB sunset: guide nodes no longer link out to db.ascension.gg. Kept as a no-op returning
+    # None so callers (guide_tree, build_node_tooltip) keep a stable signature and produce no remote URL.
+    return None
 
 
 def load_db_tooltip_rows(path: Path | str | None) -> dict[int, dict[str, Any]]:

@@ -14,8 +14,9 @@ from coa_meta.repository import TalentRepository
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_ascension_spell_url_uses_public_spell_page():
-    assert ascension_spell_url(2001) == "https://db.ascension.gg/?spell=2001"
+def test_ascension_spell_url_is_removed_no_remote_link():
+    # E0R AscensionDB sunset: guide nodes no longer link out to db.ascension.gg.
+    assert ascension_spell_url(2001) is None
 
 
 def test_load_db_tooltip_rows_indexes_matched_spells():
@@ -33,7 +34,7 @@ def test_build_node_tooltip_prefers_db_tooltip_html():
     tooltip = build_node_tooltip(node, rows)
 
     assert tooltip.tooltip_id == "spell:2001"
-    assert tooltip.db_url == "https://db.ascension.gg/?spell=2001"
+    assert tooltip.db_url is None                       # no remote AscensionDB link (E0R)
     assert "Deals bonus Nature damage." in tooltip.text
     assert tooltip.source == "ascension_db"
 

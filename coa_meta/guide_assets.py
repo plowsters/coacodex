@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from .guide_models import GuideAsset
 
-ASCENSIONDB_ICON_URL_TEMPLATE = "https://db.ascension.gg/static/images/wow/icons/large/{icon}.jpg"
-
 
 class GuideAssetCatalog:
-    def __init__(self, asset_root: Path | str | None = None):
+    """Resolves spell icons ONLY from the client-native coa-client-spell-icons-v1 catalog (keyed by
+    spell_id). A `converted` row — a client BLP converted to a browser-renderable bundle asset — renders
+    that asset (`source="client_icon"`); a `source_only`/`missing`/absent row renders a placeholder. It
+    NEVER constructs a db.ascension.gg URL and NEVER falls through to a generic asset_root search that
+    could resurrect a cached AscensionDB image (E0R AscensionDB sunset)."""
+
+    def __init__(self, icon_catalog: dict | None = None, asset_root: Path | str | None = None):
+        self.icon_catalog = {int(k): v for k, v in (icon_catalog or {}).items()}
         self.asset_root = Path(asset_root) if asset_root else None
         self._assets: dict[str, GuideAsset] = {}
 
@@ -17,101 +21,30 @@ class GuideAssetCatalog:
     def assets(self) -> dict[str, GuideAsset]:
         return dict(self._assets)
 
-    def icon_for(self, icon: str | None, label: str, *, local_path: str | None = None) -> GuideAsset:
-        if local_path:
-            return self._asset_from_local_path(icon, label, local_path)
-
-        slug = _asset_slug((icon or label).split("\\")[-1])
+    def icon_for(self, icon: str | None = None, label: str = "", *, spell_id: int | None = None,
+                 local_path: str | None = None) -> GuideAsset:
+        row = self.icon_catalog.get(int(spell_id)) if spell_id is not None else None
+        slug = _asset_slug((icon or label or "").split("\\")[-1])
         asset_id = f"icon:{slug or _asset_slug(label) or 'missing'}"
         if asset_id in self._assets:
             return self._assets[asset_id]
 
-        path = self._find_local_icon(slug)
-        if path is not None:
+        if row and row.get("asset_status") == "converted" and row.get("converted_ref"):
             asset = GuideAsset(
-                asset_id=asset_id,
-                kind="icon",
-                label=label,
-                href=path.name,
-                source="asset_root",
-                missing=False,
-                source_path=str(path),
+                asset_id=asset_id, kind="icon", label=label,
+                href=row["converted_ref"], source="client_icon", missing=False,
+                source_path=row.get("client_path"),
             )
         else:
-            url_slug = _icon_url_slug(icon or "")
-            if url_slug:
-                asset = GuideAsset(
-                    asset_id=asset_id,
-                    kind="icon",
-                    label=label,
-                    href=ASCENSIONDB_ICON_URL_TEMPLATE.format(icon=url_slug),
-                    source="ascension_db_remote",
-                    missing=False,
-                )
-            else:
-                asset = GuideAsset(
-                    asset_id=asset_id,
-                    kind="icon",
-                    label=label,
-                    href=None,
-                    source="placeholder",
-                    missing=True,
-                )
+            # source_only (a verified client BLP that is not itself browser-renderable), missing, or no
+            # client row at all -> a placeholder, NEVER a remote/cached-DB image.
+            asset = GuideAsset(
+                asset_id=asset_id, kind="icon", label=label,
+                href=None, source="placeholder", missing=True,
+            )
         self._assets[asset_id] = asset
         return asset
-
-    def _asset_from_local_path(self, icon: str | None, label: str, local_path: str) -> GuideAsset:
-        href = _asset_href(local_path, self.asset_root)
-        slug = _asset_slug(Path(href).stem or (icon or label).split("\\")[-1])
-        asset_id = f"icon:{slug or _asset_slug(label) or 'missing'}"
-        if asset_id in self._assets:
-            return self._assets[asset_id]
-
-        asset = GuideAsset(
-            asset_id=asset_id,
-            kind="icon",
-            label=label,
-            href=href,
-            source="ascension_db_asset",
-            missing=False,
-            source_path=str(local_path),
-        )
-        self._assets[asset_id] = asset
-        return asset
-
-    def _find_local_icon(self, slug: str) -> Path | None:
-        if not slug or self.asset_root is None or not self.asset_root.exists():
-            return None
-        for path in self.asset_root.rglob("*"):
-            if not path.is_file():
-                continue
-            if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-                continue
-            if slug in _asset_slug(path.stem):
-                return path
-        return None
 
 
 def _asset_slug(value: str) -> str:
     return "".join(char for char in value.lower() if char.isalnum())
-
-
-def _icon_url_slug(value: str) -> str:
-    stem = value.replace("\\", "/").split("/")[-1]
-    stem = re.sub(r"\.(blp|png|jpg|jpeg|webp)$", "", stem, flags=re.IGNORECASE)
-    stem = re.sub(r"[^a-z0-9]+", "_", stem.lower())
-    return stem.strip("_")
-
-
-def _asset_href(local_path: str, asset_root: Path | None) -> str:
-    path = Path(local_path)
-    if asset_root:
-        try:
-            return path.relative_to(asset_root).as_posix()
-        except ValueError:
-            pass
-    parts = path.as_posix().split("/")
-    if "assets" in parts:
-        index = len(parts) - 1 - parts[::-1].index("assets")
-        return "/".join(parts[index + 1 :])
-    return path.name
