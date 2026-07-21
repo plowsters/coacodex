@@ -44,3 +44,22 @@ def test_real_recon_budget_within_ceiling(recon_report):
     b = recon_report["budget"]
     assert {"serialized_mb", "peak_rss_mb", "elapsed_s"} <= set(b)
     assert b["within_budget"] is True, b.get("breach")
+
+
+def test_real_recon_adjudicates_all_four_joins(recon_report):
+    # E0R.1 T1.2: every required join carries a verdict. The icon join is ADOPTED at the cell the Builder
+    # icon anchors uniquely pin (133); the three numeric joins are reviewed_ambiguous (recorded, null cell).
+    jp = recon_report["join_pairs"]
+    assert set(recon_report["required_joins"]) == {
+        "casting_time_index", "duration_index", "range_index", "spell_icon_id"}
+    assert list(jp["spell_icon_id"]["pair"]) == [133, 0]   # discovered + adopted (tuple in-memory / list via JSON)
+    for f in ("casting_time_index", "duration_index", "range_index"):
+        assert jp[f]["pair"] is None
+        assert jp[f]["adjudication"] == "reviewed_ambiguous"
+
+
+def test_real_recon_icon_join_not_blocked_by_ambiguous_bare_fk(recon_report):
+    # The bare SpellIcon FK-validity scan is deliberately ambiguous (dozens of candidate columns); the
+    # adjudicated cell 133 must NOT raise a no_unique_index_cell block.
+    assert not any(f.get("field") == "spell_icon_id" and f.get("reason") == "no_unique_index_cell"
+                   for f in recon_report["blocking_findings"])

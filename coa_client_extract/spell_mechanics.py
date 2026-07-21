@@ -127,6 +127,40 @@ def discover_join_pair(view, id_to_rec, side_view, *, side_id_cell, side_value_c
     return (winners[0] if len(winners) == 1 else None), winners
 
 
+def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors) -> dict:
+    """Probe every join carrying authored value-anchors and record the outcome per index field.
+
+    A join the human review adjudicated as un-disambiguable — `adjudication: "reviewed_ambiguous"`, i.e.
+    no admissible independent evidence pins its index cell — is recorded PROBED-but-ambiguous (pair=None)
+    WITHOUT a scan and WITHOUT reading its side table. The recon state machine accepts a recorded-ambiguous
+    join as raw_only, so this keeps the join honestly documented (not silently unprobed) while the cell
+    stays null. A join with real state-bearing anchors is discovered as a jointly-unique (index_cell,
+    value_cell) pair; a non-unique / no-match result also yields pair=None (recorded-ambiguous)."""
+    join_pairs: dict[str, dict] = {}
+    if not join_value_anchors:
+        return join_pairs
+    field_to_side = {j.index_field: j.side_table for j in getattr(spell_policy, "joins", {}).values()}
+    for field, spec in join_value_anchors.items():
+        side_name = spec.get("side_table") or field_to_side.get(field)
+        if not side_name:
+            continue
+        if spec.get("adjudication") == "reviewed_ambiguous":
+            join_pairs[field] = {"table": side_name, "pair": None, "winners": [],
+                                 "adjudication": "reviewed_ambiguous", "evidence": spec.get("evidence")}
+            continue
+        try:
+            sm = backend.read_effective_file(root, attach, f"DBFilesClient\\{side_name}.dbc")
+            side_view = open_view(sm.data)
+        except (ArchiveError, DbcDriftError):
+            continue
+        pair, winners = discover_join_pair(
+            view, id_to_rec, side_view, side_id_cell=spec.get("side_id_cell", 0),
+            side_value_cells=spec["side_value_cells"], anchors=spec["anchors"],
+            side_value_kind=spec.get("side_value_kind", "int32"))
+        join_pairs[field] = {"table": side_name, "pair": pair, "winners": winners}
+    return join_pairs
+
+
 def discover_power_type_signedness(view, id_to_rec, *, cell, anchors) -> bool:
     """The signed int32 reading of power_type is admissible only when a STATIC health-cost anchor
     (expected_signed == -2) reads 0xFFFFFFFE at `cell`. No anchor -> stay raw_only (return False)."""
@@ -219,9 +253,14 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
             blocking.append({"field": field, "reason": "anchor_not_uniquely_discoverable",
                              "matching_cells": matches, "coverage": proof["coverage"]})
 
-    # index-column FK discovery
+    # index-column FK discovery. A join adjudicated by value-anchors (present in join_value_anchors) is
+    # SKIPPED here: its bare FK-validity scan is provably ambiguous (dozens of small-int columns fall in a
+    # side id range — empirically 75 for SpellIcon on the real client), so the weaker scan must not raise a
+    # no_unique_index_cell block against a cell the stronger joined-pair discovery has already resolved.
     index_fk: dict[str, dict] = {}
     for field, side_name in spell_policy.index_fields.items():
+        if join_value_anchors and field in join_value_anchors:
+            continue
         try:
             sm = backend.read_effective_file(root, attach, f"DBFilesClient\\{side_name}.dbc")
             dbc_sha[side_name] = hashlib.sha256(sm.data).hexdigest()
@@ -262,28 +301,10 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
     for tname, tspec in topology["tables"].items():
         dbc_sha.setdefault(tname, tspec["sha256"])
 
-    # optional joined-pair value-anchor discovery (design A5/A6): 8b supplies state-bearing anchors to
-    # break the FK ambiguity; power_type_anchors admit the signed int32 reading only via a static negative.
-    join_pairs: dict[str, dict] = {}
-    if join_value_anchors:
-        # Iterate the SUPPLIED anchors (not index_fields, which pre-filters to already-adjudicated joins)
-        # — the whole point is to discover the cell of an un-adjudicated join. side_table comes from the
-        # anchor spec, falling back to the policy's join map.
-        field_to_side = {j.index_field: j.side_table for j in getattr(spell_policy, "joins", {}).values()}
-        for field, spec in join_value_anchors.items():
-            side_name = spec.get("side_table") or field_to_side.get(field)
-            if not side_name:
-                continue
-            try:
-                sm = backend.read_effective_file(root, attach, f"DBFilesClient\\{side_name}.dbc")
-                side_view = open_view(sm.data)
-            except (ArchiveError, DbcDriftError):
-                continue
-            pair, winners = discover_join_pair(
-                view, id_to_rec, side_view, side_id_cell=spec.get("side_id_cell", 0),
-                side_value_cells=spec["side_value_cells"], anchors=spec["anchors"],
-                side_value_kind=spec.get("side_value_kind", "int32"))
-            join_pairs[field] = {"table": side_name, "pair": pair, "winners": winners}
+    # joined-pair value-anchor discovery (design A5/A6): value anchors break the bare-FK ambiguity and a
+    # reviewed_ambiguous marker records a join the review could not disambiguate; power_type_anchors admit
+    # the signed int32 reading only via a static negative. Delegated to probe_joins so it is unit-testable.
+    join_pairs = probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors)
     power_type_signed = None
     if power_type_anchors is not None:
         pt_cell_probe = layout_proof["power_type"]["discovered_cell"]
