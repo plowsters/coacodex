@@ -23,9 +23,17 @@ def recon_report(tmp_path_factory):
 
 
 def test_real_recon_produces_e0r_report(recon_report):
-    # The reviewed v2 default policy is not yet bound (Task 8b authors the bound), so recon is not verified.
-    assert recon_report["status"] in ("review_required", "blocked")
+    # E0R.1: with all four joins adjudicated (T1.2) and power_type demoted so the policy no longer claims a
+    # verified interpretation (T1.3), the reviewed + bound policy earns `verified` on the live client.
+    assert recon_report["status"] == "verified", recon_report["blocking_findings"]
     assert recon_report["schema_version"] == "coa-spell-mechanics-recon-v1"
+
+
+def test_real_recon_power_type_decode_is_withheld(recon_report):
+    # power_type is not authorized: no static negative anchor was supplied, so the recon records
+    # no_static_anchor and never claims a verified reading (value 7 stays withheld per-value).
+    assert recon_report["no_static_anchor"] is True
+    assert 7 in recon_report["enum_domains"]["unknown_power_types"]
 
 
 def test_real_recon_topology_is_from_shared_verifier(recon_report):

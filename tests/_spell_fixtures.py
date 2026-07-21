@@ -71,11 +71,14 @@ def _base(tables, joins):
     return load_spell_policy(p)
 
 
-def v2_policy(raw_only_cast=False):
+def v2_policy(raw_only_cast=False, raw_only_power_type=False):
     cast_promo = "raw_only" if raw_only_cast else "normalized"
+    # E0R.1 T1.3: a demoted power_type is raw_only with a non-verified interpretation, so the streaming
+    # producer withholds the decode (decoded_reason='proof_withheld') and emits no normalized value.
+    pt = _f(1, "int32", promo="raw_only", interp="reference") if raw_only_power_type else _f(1, "int32")
     tables = {
         "Spell": {"expected_field_count": _SPELL_FC, "key_cell": 0, "unique": True, "fields": {
-            "id": _f(0, "uint32"), "power_type": _f(1, "int32"), "school_mask": _f(2, "uint32"),
+            "id": _f(0, "uint32"), "power_type": pt, "school_mask": _f(2, "uint32"),
             "name": _f(3, "string"), "casting_time_index": _f(4, "uint32", promo=cast_promo)}},
         "SpellCastTimes": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": _f(0, "uint32", promo=cast_promo), "base_ms": _f(1, "int32", promo=cast_promo)}},
