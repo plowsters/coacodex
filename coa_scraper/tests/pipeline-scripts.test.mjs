@@ -42,7 +42,8 @@ import { normalizeSchoolMask, normalizePowerType } from "../scripts/lib/mechanic
 import { reconcileField, REASON } from "../scripts/lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "../scripts/lib/mechanics-candidates.mjs";
 import { loadAndValidateProjection, MechanicsBuildError } from "../scripts/lib/mechanics-projection.mjs";
-import { resolveGeneration, GenerationResolveError } from "../scripts/lib/generation.mjs";
+import { resolveGeneration, GenerationResolveError, REQUIRED_CHILDREN } from "../scripts/lib/generation.mjs";
+import { candidateTrustSha256FromText } from "../scripts/lib/canonical.mjs";
 
 function tempProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "coa-pipeline-test-"));
@@ -1110,31 +1111,50 @@ test("acceptance: kind_disagreements counts a real Builder kind disagreement (Ab
 });
 
 // --- M1.14E0 Task 7: transactional generation resolver (Node parity with the Python resolver) ---
+// A complete v3 PUBLISHED generation the strict resolver accepts (all REQUIRED_CHILDREN, validation both-true,
+// within budget, a covering trust digest). The projection child keeps the legacy v2 records so the v2 build
+// path (loadAndValidateProjection, policyPath=null) is still exercised; the resolver validates structure only.
 function writeGenerationFixture(root, projRecords) {
   const genId = "aabbccddeeff00112233445566778899";
   const genDir = path.join(root, `gen-${genId}`);
   fs.mkdirSync(genDir, { recursive: true });
-  const projBody = projRecords.map((r) => JSON.stringify(r)).join("\n") + (projRecords.length ? "\n" : "");
-  const projSha = crypto.createHash("sha256").update(projBody).digest("hex");
-  fs.writeFileSync(path.join(genDir, "coa_client_spell_coa.jsonl"), projBody);
+  const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
+  const jsonl = (rows) => Buffer.from(rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
+  const projBody = jsonl(projRecords);
   const projManifest = {
     schema_version: "coa-client-spell-projection-v2",
-    projection: { path: "coa_client_spell_coa.jsonl", sha256: projSha, byte_length: Buffer.byteLength(projBody) },
+    projection: { path: "coa_client_spell_coa.jsonl", sha256: sha(projBody), byte_length: projBody.length },
     counts: { projected_records: projRecords.length, unique_spell_ids: new Set(projRecords.map((r) => r.spell_id)).size, source_records: projRecords.length },
     client_build: "3.3.5a+patch-CZZ",
   };
-  const pmBody = JSON.stringify(projManifest, null, 2) + "\n";
-  const pmSha = crypto.createHash("sha256").update(pmBody).digest("hex");
-  fs.writeFileSync(path.join(genDir, "coa_client_spell_projection.manifest.json"), pmBody);
-  const children = {
-    "coa_client_spell_coa.jsonl": { sha256: projSha, byte_length: Buffer.byteLength(projBody), records: projRecords.length, schema_version: "coa-client-spell-v2" },
-    "coa_client_spell_projection.manifest.json": { sha256: pmSha, byte_length: Buffer.byteLength(pmBody), records: 1, schema_version: "coa-client-spell-projection-v2" },
+  const contents = {
+    "coa_client_spell.jsonl": jsonl([]),
+    "coa_client_spell_coa.jsonl": projBody,
+    "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify(projManifest, null, 2) + "\n"),
+    "coa_client_spell_icons.jsonl": jsonl([]),
+    "coa_client_content.jsonl": jsonl([]),
+    "coa_client_archive_plan.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-archive-plan-v1" })),
+    "coa_client_advancement.jsonl": jsonl([]),
+    "coa_client_class_types.jsonl": jsonl([]),
+    "coa_client_tab_types.jsonl": jsonl([]),
+    "coa_client_essence.jsonl": jsonl([]),
+    "spell_layout_v2.json": Buffer.from(JSON.stringify({ schema_version: "coa-spell-layout-v2" })),
   };
-  const manifest = { schema_version: "coa-client-extract-manifest-v2", generation_id: genId, published_at: 1, predecessor_generation_id: null, children, outputs: {}, unknown_symbol_inventory: { power_type: [], school_bits: [] }, binding: {} };
-  const mBody = JSON.stringify(manifest, null, 2) + "\n";
-  const mSha = crypto.createHash("sha256").update(mBody).digest("hex");
+  const children = {};
+  for (const [name, body] of Object.entries(contents)) {
+    fs.writeFileSync(path.join(genDir, name), body);
+    const records = name.endsWith(".jsonl") ? body.toString("utf8").split("\n").filter((l) => l.trim()).length : 1;
+    children[name] = { sha256: sha(body), byte_length: body.length, records, schema_version: "x" };
+  }
+  const manifest = {
+    schema_version: "coa-client-extract-manifest-v3", generation_id: genId, published_at: 1,
+    predecessor_generation_id: null, children, outputs: {}, unknown_symbol_inventory: { power_type: [], school_bits: [] },
+    binding: {}, publication_state: "published", validation: { python: true, node: true }, budget: { within_budget: true },
+  };
+  manifest.candidate_trust_sha256 = candidateTrustSha256FromText(JSON.stringify(manifest));
+  const mBody = Buffer.from(JSON.stringify(manifest, null, 2) + "\n");
   fs.writeFileSync(path.join(genDir, "manifest.json"), mBody);
-  const pointer = { schema_version: "coa-client-extract-pointer-v1", generation_id: genId, manifest_path: `gen-${genId}/manifest.json`, manifest_sha256: mSha };
+  const pointer = { schema_version: "coa-client-extract-pointer-v1", generation_id: genId, manifest_path: `gen-${genId}/manifest.json`, manifest_sha256: sha(mBody) };
   fs.writeFileSync(path.join(root, "coa_client_extract.pointer.json"), JSON.stringify(pointer, null, 2) + "\n");
   return { genDir, genId };
 }

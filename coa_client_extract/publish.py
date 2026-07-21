@@ -352,9 +352,7 @@ def resolve_active_generation(root: Path) -> dict:
     manifest = json.loads(manifest_body)
     if manifest.get("generation_id") != gen_id:
         raise ResolveError("manifest generation_id disagrees with the pointer")
-    # A candidate manifest is never pointer-resolvable (an interrupted publish leaves no half-live gen).
-    if manifest.get("publication_state") == "candidate":
-        raise ResolveError("pointer resolves a candidate manifest (never publishable)")
+    _assert_published_manifest(manifest)
 
     children = manifest.get("children", {})
     resolved: dict[str, Path] = {}
@@ -380,7 +378,30 @@ def resolve_active_generation(root: Path) -> dict:
         if not meta.get("schema_version"):
             raise ResolveError(f"child {name!r} missing schema_version")
         resolved[name] = child_path
+    for name in REQUIRED_CHILDREN:
+        if name not in resolved:
+            raise ResolveError(f"required child {name!r} missing from the published generation")
     return {"generation_id": gen_id, "gen_dir": gen_dir, "manifest": manifest, "children": resolved}
+
+
+def _assert_published_manifest(manifest: dict) -> None:
+    """A pointer may resolve ONLY a fully-published E0R generation. Fails closed on: a non-v3 (pre-E0R)
+    manifest; a publication_state other than 'published' (a candidate is never half-live); a
+    candidate_trust_sha256 that does not cover the manifest; a `validation` that is not BOTH python and node
+    true (both trust boundaries must have run); or a budget that is not within its ceilings. The trust digest
+    excludes the mutable validation/budget, so those are re-checked here independently."""
+    if manifest.get("schema_version") != "coa-client-extract-manifest-v3":
+        raise ResolveError(f"unsupported manifest schema_version {manifest.get('schema_version')!r} (E0R requires v3)")
+    if manifest.get("publication_state") != "published":
+        raise ResolveError(f"generation not published (publication_state={manifest.get('publication_state')!r})")
+    if manifest.get("candidate_trust_sha256") != candidate_trust_sha256(manifest):
+        raise ResolveError("candidate_trust_sha256 does not cover the published manifest")
+    validation = manifest.get("validation") or {}
+    if validation.get("python") is not True or validation.get("node") is not True:
+        raise ResolveError(f"generation not validated by both trust boundaries (validation={validation})")
+    budget = manifest.get("budget") or {}
+    if budget.get("within_budget") is not True:
+        raise ResolveError(f"generation exceeded its budget (within_budget={budget.get('within_budget')!r})")
 
 
 def _safe_name_resolve(name: str) -> None:

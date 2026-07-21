@@ -39,9 +39,10 @@ test("Node rejects a pre-E0R (unsupported) manifest schema_version", () => {
     /unsupported manifest schema_version/);
 });
 
-test("Node resolves a published v3 generation", () => {
-  const r = resolveGeneration(stage("published"));
-  assert.equal(r.generationId, "abc123");
+test("Node resolves a complete published v3 generation", () => {
+  const { root } = buildCandidate({ publish: true });
+  const r = resolveGeneration(root);
+  assert.equal(r.generationId, "c1");
   assert.ok(r.children["coa_client_spell.jsonl"]);
 });
 

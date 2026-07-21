@@ -108,62 +108,9 @@ def test_migration_completeness_pointer_is_wired():
     assert "GenerationWriter" in cli_py and "coa_client_extract.pointer.json" in cli_py
 
 
-# --- end-to-end: Python publishes a generation -> node resolves it -> node build via the pointer ---
-def _v2_rec(spell_id):
-    proof = {"integrity": "verified", "layout": "verified", "interpretation": "verified"}
-    env = lambda v, k: {"state": "present", "raw_u32": v, "decoded": {"kind": k, "value": v},
-                        "decoded_reason": "decoded", "proof": proof, "evidence_ref": "fx"}
-    return {"schema_version": "coa-client-spell-v2", "spell_id": spell_id, "name": f"S{spell_id}",
-            "mechanics": {"school_mask": 8, "power_type": 3},
-            "field_observations": {"school_mask": env(8, "uint32"), "power_type": env(3, "int32")},
-            "coa_attribution": {"is_coa": True, "confidence": "high"}}
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not available")
-def test_e2e_publish_then_node_resolves_and_builds(tmp_path):
-    root = tmp_path / "ce"
-    records = [_v2_rec(92117)]
-    body = "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in records).encode()
-    proj_manifest = {
-        "schema_version": "coa-client-spell-projection-v2",
-        "inclusion_rule": {"predicate": "coa_attribution.is_coa == true", "version": "m1.14e-1"},
-        "projection": {"path": "coa_client_spell_coa.jsonl", "sha256": hashlib.sha256(body).hexdigest(),
-                       "byte_length": len(body)},
-        "client_build": "3.3.5a+patch-CZZ",
-        "counts": {"source_records": 1, "projected_records": 1, "unique_spell_ids": 1, "by_confidence": {"high": 1}},
-    }
-    gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell_coa.jsonl", records, schema_version="coa-client-spell-v2")
-    gw.add_json("coa_client_spell_projection.manifest.json", proj_manifest,
-                schema_version="coa-client-spell-projection-v2")
-    from coa_client_extract.manifest import build_manifest
-    base = build_manifest(backend_name="fake", backend_version="v1", stormlib_version=None,
-                          client_root="/x", client_build="3.3.5a+patch-CZZ", outputs={},
-                          archive_plan={"schema_version": "coa-client-archive-plan-v1"})
-    gw.publish(base_manifest=base, binding={"policy_sha256": "p", "anchor_set_sha256": "a", "enum_policy_sha256": "e", "source_dbc": {}},
-               unknown_symbol_inventory={"power_type": [], "school_bits": []})
-
-    # sanity: the Python resolver accepts it
-    assert set(resolve_active_generation(root)["children"]) == {
-        "coa_client_spell_coa.jsonl", "coa_client_spell_projection.manifest.json"}
-
-    pointer = root / "coa_client_extract.pointer.json"
-    cwd = REPO / "coa_scraper"
-    # node resolver CLI validates the pointer
-    r = subprocess.run(["node", "scripts/lib/generation.mjs", str(pointer)], cwd=cwd,
-                       capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-
-    entries = tmp_path / "entries.jsonl"
-    entries.write_text(json.dumps({"spell_id": 92117, "entry_id": 1, "entry_type": "Ability",
-                                   "name": "S92117", "damage_schools": [], "resources": []}) + "\n")
-    dist = tmp_path / "dist"
-    b = subprocess.run(["node", "scripts/build-mechanics-artifacts.mjs",
-                        "--builder-entries", str(entries), "--client-extract-pointer", str(pointer),
-                        "--out", str(dist)], cwd=cwd, capture_output=True, text=True)
-    assert b.returncode == 0, b.stderr
-    rows = [json.loads(l) for l in (dist / "coa_mechanics.jsonl").read_text().splitlines() if l.strip()]
-    assert any(row.get("spell_id") == 92117 for row in rows)
+# The end-to-end "Python publishes -> Node resolves -> Node build via the pointer" flow is covered in the v3
+# transaction by tests/test_e0r_end_to_end.py::test_build_mechanics_consumes_the_v3_generation_through_the_pointer.
+# The former v2 variant here was superseded: E0R.1 forbids resolving a pre-v3 (v2) generation (T3.2).
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not available")

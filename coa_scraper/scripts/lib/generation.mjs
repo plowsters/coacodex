@@ -140,8 +140,6 @@ function countJsonlRecords(body) {
   return count;
 }
 
-const MANIFEST_SCHEMAS = new Set(["coa-client-extract-manifest-v3", "coa-client-extract-manifest-v2"]);
-
 // Validate every registered child by path (name safety, containment, sha256, byte_length, record count,
 // schema) without materializing a row array. Shared by the pointer resolver and the candidate validator.
 function validateChildrenByPath(genDir, manifest) {
@@ -246,17 +244,41 @@ export function resolveGeneration(rootOrPointer) {
 
   const manifestBytes = fs.readFileSync(manifestPath);
   if (sha256(manifestBytes) !== pointer.manifest_sha256) throw new GenerationResolveError("manifest sha256 does not match the pointer");
-  const manifest = JSON.parse(manifestBytes.toString("utf8"));
+  const manifestText = manifestBytes.toString("utf8");
+  const manifest = JSON.parse(manifestText);
   if (manifest.generation_id !== genId) throw new GenerationResolveError("manifest generation_id disagrees with the pointer");
-  // A candidate manifest is never consumable (an interrupted publish leaves no half-live generation).
-  if (manifest.publication_state === "candidate") throw new GenerationResolveError("pointer resolves a candidate manifest (never publishable)");
-  // Pre-E0R generations are rejected: E0R consumers require the manifest-v3 transaction.
-  if (manifest.schema_version && !MANIFEST_SCHEMAS.has(manifest.schema_version)) {
-    throw new GenerationResolveError(`unsupported manifest schema_version ${manifest.schema_version}`);
-  }
+  assertPublishedManifest(manifest, manifestText);
 
   const resolved = validateChildrenByPath(genDir, manifest);
+  for (const name of REQUIRED_CHILDREN) {
+    if (!(name in resolved)) throw new GenerationResolveError(`required child ${name} missing from the published generation`);
+  }
   return { generationId: genId, genDir, manifest, children: resolved };
+}
+
+// A pointer may resolve ONLY a fully-published E0R generation. Mirrors Python publish._assert_published_manifest:
+// a v3 manifest, publication_state 'published', a candidate_trust_sha256 that covers it (recomputed bigint-safe),
+// `validation` BOTH python+node true, and a within-budget report. validation/budget are mutable (excluded from
+// the trust digest), so they are re-checked independently here.
+function assertPublishedManifest(manifest, manifestText) {
+  if (manifest.schema_version !== "coa-client-extract-manifest-v3") {
+    throw new GenerationResolveError(`unsupported manifest schema_version ${manifest.schema_version} (E0R requires v3)`);
+  }
+  if (manifest.publication_state !== "published") {
+    throw new GenerationResolveError(`generation not published (publication_state=${manifest.publication_state})`);
+  }
+  const recomputedTrust = candidateTrustSha256FromText(manifestText);
+  if (manifest.candidate_trust_sha256 !== recomputedTrust) {
+    throw new GenerationResolveError(`candidate_trust_sha256 does not cover the published manifest (recomputed ${recomputedTrust})`);
+  }
+  const validation = manifest.validation || {};
+  if (validation.python !== true || validation.node !== true) {
+    throw new GenerationResolveError(`generation not validated by both trust boundaries (validation=${JSON.stringify(validation)})`);
+  }
+  const budget = manifest.budget || {};
+  if (budget.within_budget !== true) {
+    throw new GenerationResolveError(`generation exceeded its budget (within_budget=${budget.within_budget})`);
+  }
 }
 
 // CLI: `node lib/generation.mjs <pointer-or-root>` prints the resolved child paths (exit 0) or the

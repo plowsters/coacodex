@@ -50,7 +50,7 @@ def test_transactional_v3_generation_resolves_in_python_and_node(tmp_path):
     candidate = gw.publish_candidate(base_manifest={}, binding={})
     validate_candidate_generation(gw.gen_dir)                       # Python candidate validation by path
     final = gw.finalize_and_publish(candidate_manifest=candidate,
-                                    validation={"ok": True}, budget={"within_budget": True})
+                                    validation={"python": True, "node": True}, budget={"within_budget": True})
     assert final["publication_state"] == "published"
 
     active = resolve_active_generation(dist)                        # Python resolver
@@ -80,7 +80,7 @@ def test_build_mechanics_consumes_the_v3_generation_through_the_pointer(tmp_path
     gw = _stage_full_generation(dist)
     candidate = gw.publish_candidate(base_manifest={}, binding={})
     validate_candidate_generation(gw.gen_dir)
-    gw.finalize_and_publish(candidate_manifest=candidate, validation={"ok": True},
+    gw.finalize_and_publish(candidate_manifest=candidate, validation={"python": True, "node": True},
                             budget={"within_budget": True})
 
     entries = tmp_path / "coa_entries.jsonl"                       # builder domain must ⊆ the projection

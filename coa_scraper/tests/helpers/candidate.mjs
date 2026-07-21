@@ -92,10 +92,27 @@ export function buildCandidate(opts = {}) {
   };
   if (opts.mutateManifest) manifest = opts.mutateManifest(manifest) || manifest;
   manifest.candidate_trust_sha256 = opts.trustOverride || candidateTrustSha256FromText(JSON.stringify(manifest));
-  fs.writeFileSync(path.join(genDir, "manifest.json"), Buffer.from(JSON.stringify(manifest, null, 2)));
 
   const lock = opts.lock || { schema_version: "coa-spell-layout-lock-v1", sha256: policy.sha256 };
   const lockPath = path.join(root, "spell_layout.lock.json");
   fs.writeFileSync(lockPath, JSON.stringify(lock));
+
+  if (opts.publish) {
+    // Finalize to PUBLISHED: publication_state/validation/budget are mutable (excluded from the trust digest),
+    // so the digest still covers the manifest. Write the pointer so resolveGeneration can resolve it.
+    const published = {
+      ...manifest, publication_state: "published",
+      validation: opts.validation || { python: true, node: true },
+      budget: opts.budget || { within_budget: true },
+    };
+    if (opts.mutatePublished) opts.mutatePublished(published);
+    const body = Buffer.from(JSON.stringify(published, null, 2));
+    fs.writeFileSync(path.join(genDir, "manifest.json"), body);
+    const pointer = { schema_version: "coa-client-extract-pointer-v1", generation_id: "c1",
+                      manifest_sha256: sha(body) };
+    fs.writeFileSync(path.join(root, "coa_client_extract.pointer.json"), Buffer.from(JSON.stringify(pointer, null, 2)));
+    return { root, genDir, lockPath, manifest: published, corpus, REQUIRED_CHILDREN };
+  }
+  fs.writeFileSync(path.join(genDir, "manifest.json"), Buffer.from(JSON.stringify(manifest, null, 2)));
   return { root, genDir, lockPath, manifest, corpus, REQUIRED_CHILDREN };
 }

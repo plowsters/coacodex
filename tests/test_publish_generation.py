@@ -8,8 +8,8 @@ import pytest
 import coa_client_extract.publish as pub
 from coa_client_extract.manifest import build_manifest
 from coa_client_extract.publish import (
-    GenerationWriter, POINTER_NAME, PublishError, ResolveError,
-    prune_generations, resolve_active_generation,
+    GenerationWriter, POINTER_NAME, PublishError, REQUIRED_CHILDREN, ResolveError,
+    candidate_trust_sha256, prune_generations, resolve_active_generation,
 )
 
 
@@ -25,25 +25,41 @@ def _binding():
             "policy_sha256": "p" * 64, "anchor_set_sha256": "an" * 32, "enum_policy_sha256": "en" * 32}
 
 
+# A minimal-but-COMPLETE v3 published generation: every REQUIRED_CHILDREN present, finalized with both trust
+# boundaries validated and a within-budget report, so resolve_active_generation's strict published gate is
+# satisfied and its child-integrity checks (what the reject tests exercise) are actually reached.
 def _publish(root, *, spell_id=1, inv=None):
     w = GenerationWriter(root)
-    w.add_jsonl("coa_client_spell_coa.jsonl",
-                [{"schema_version": "coa-client-spell-v2", "spell_id": spell_id}],
-                schema_version="coa-client-spell-v2")
+    w.add_jsonl("coa_client_spell.jsonl",
+                [{"schema_version": "coa-client-spell-v3", "spell_id": spell_id, "raw": {}, "mechanics": {},
+                  "coa_attribution": {"is_coa": False}}], schema_version="coa-client-spell-v3")
+    w.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
     w.add_json("coa_client_spell_projection.manifest.json",
-               {"schema_version": "coa-client-spell-projection-v2"},
-               schema_version="coa-client-spell-projection-v2")
-    m = w.publish(base_manifest=_base(), binding=_binding(),
-                  unknown_symbol_inventory=inv or {"power_type": [7], "school_bits": []})
+               {"schema_version": "coa-client-spell-projection-manifest-v3"},
+               schema_version="coa-client-spell-projection-manifest-v3")
+    w.add_jsonl("coa_client_spell_icons.jsonl", [], schema_version="coa-client-spell-icons-v1")
+    for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
+                 "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
+        w.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+    w.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
+               schema_version="coa-client-archive-plan-v1")
+    w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
+               schema_version="coa-spell-layout-v2")
+    candidate = w.publish_candidate(base_manifest=_base(), binding=_binding(),
+                                    unknown_symbol_inventory=inv or {"power_type": [7], "school_bits": []})
+    m = w.finalize_and_publish(candidate_manifest=candidate,
+                               validation={"python": True, "node": True}, budget={"within_budget": True})
     return w, m
 
 
 def _repoint(root, gen_id, mutate):
-    """Mutate a published manifest and re-sign the pointer, so child-level validation (not the manifest
-    hash) is what a negative test exercises."""
+    """Mutate a published manifest, RE-COMPUTE its trust digest (so the mutation is covered rather than
+    tripping the trust check first), and re-sign the pointer — so a child-level validation reject (not the
+    manifest hash or the trust digest) is what a negative test exercises."""
     gen_dir = root / f"gen-{gen_id}"
     m = json.loads((gen_dir / "manifest.json").read_text())
     mutate(m)
+    m["candidate_trust_sha256"] = candidate_trust_sha256(m)
     body = (json.dumps(m, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
     (gen_dir / "manifest.json").write_bytes(body)
     ptr = json.loads((root / POINTER_NAME).read_text())
@@ -53,7 +69,8 @@ def _repoint(root, gen_id, mutate):
 
 def test_publish_and_resolve_roundtrip(tmp_path):
     _w, m = _publish(tmp_path)
-    assert m["schema_version"] == "coa-client-extract-manifest-v2"
+    assert m["schema_version"] == "coa-client-extract-manifest-v3"
+    assert m["publication_state"] == "published"
     assert m["predecessor_generation_id"] is None
     assert isinstance(m["published_at"], int)
     assert m["unknown_symbol_inventory"] == {"power_type": [7], "school_bits": []}
@@ -63,7 +80,7 @@ def test_publish_and_resolve_roundtrip(tmp_path):
 
     resolved = resolve_active_generation(tmp_path)
     assert resolved["generation_id"] == m["generation_id"]
-    assert set(resolved["children"]) == {"coa_client_spell_coa.jsonl", "coa_client_spell_projection.manifest.json"}
+    assert set(resolved["children"]) == set(REQUIRED_CHILDREN)
     assert resolved["children"]["coa_client_spell_coa.jsonl"].is_file()
 
 
