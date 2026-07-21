@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
-import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy } from "./mechanics-projection.mjs";
+import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact } from "./mechanics-projection.mjs";
 
 export class GenerationResolveError extends Error {}
+
+const ICON_ASSET_STATUSES = new Set(["converted", "source_only", "missing", "placeholder"]);
 
 const POINTER_SCHEMA = "coa-client-extract-pointer-v1";
 const POINTER_NAME = "coa_client_extract.pointer.json";
@@ -25,6 +28,101 @@ const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.
 
 function readJsonlRows(childPath) {
   return fs.readFileSync(childPath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+
+function assertSortedUnique(rows, label) {
+  let prev = null;
+  for (const r of rows) {
+    const sid = r.spell_id;
+    if (prev !== null && sid <= prev) {
+      throw new GenerationResolveError(`sorted_unique_ids: ${label} duplicate/out-of-order spell_id ${sid}`);
+    }
+    prev = sid;
+  }
+}
+
+function identityAgrees(frow, prow) {
+  if (frow.name !== prow.name) {
+    throw new GenerationResolveError(`identity_agrees: spell ${frow.spell_id} name differs full vs projection`);
+  }
+  if (!isDeepStrictEqual(frow.mechanics, prow.mechanics)) {
+    throw new GenerationResolveError(`identity_agrees: spell ${frow.spell_id} mechanics differ full vs projection`);
+  }
+  if (!isDeepStrictEqual(frow.coa_attribution, prow.coa_attribution)) {
+    throw new GenerationResolveError(`identity_agrees: spell ${frow.spell_id} attribution differs full vs projection`);
+  }
+}
+
+// Icon id/path agreement + bundle consistency (mirrors Python publish._icon_bundle): a valid asset_status,
+// a placeholder (unresolved join) has a null client_path while a resolved status carries one, and only a
+// `converted` row may reference a bundle asset.
+function verifyIconRow(r) {
+  if (!ICON_ASSET_STATUSES.has(r.asset_status)) {
+    throw new GenerationResolveError(`icon asset_status ${JSON.stringify(r.asset_status)} not in ${[...ICON_ASSET_STATUSES]}`);
+  }
+  if (r.asset_status !== "converted" && r.converted_ref) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: non-converted row carries a converted_ref`);
+  }
+  if (r.asset_status === "converted" && !r.converted_ref) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: converted row missing converted_ref`);
+  }
+  if (r.asset_status === "placeholder" && r.client_path != null) {
+    throw new GenerationResolveError(`icon id/path: placeholder spell ${r.spell_id} carries a client_path`);
+  }
+  if ((r.asset_status === "source_only" || r.asset_status === "converted") && r.client_path == null) {
+    throw new GenerationResolveError(`icon id/path: ${r.asset_status} spell ${r.spell_id} missing client_path`);
+  }
+}
+
+// Streaming cross-child merge-join over ascending spell_id (mirrors Python publish._cross_child + _icon_bundle):
+// per-child sorted uniqueness, the icon catalog is exactly the full domain (catching missing/extra/trailing
+// icons), projection ⊆ is_coa within domain, the disjoint v3 dialects, identity/mechanics/attribution
+// agreement, and compact_raw_expands_to_envelope (expand(full.raw) deep-equals projection.field_observations).
+export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
+  assertSortedUnique(fullRows, "full");
+  assertSortedUnique(projRows, "projection");
+  assertSortedUnique(iconRows, "icons");
+  if (iconRows.length !== fullRows.length) {
+    throw new GenerationResolveError(`icons_agree: icon catalog has ${iconRows.length} rows but the full table has ${fullRows.length} (missing/extra/trailing)`);
+  }
+  for (const r of iconRows) verifyIconRow(r);
+
+  let pi = 0;
+  for (let i = 0; i < fullRows.length; i++) {
+    const frow = fullRows[i];
+    const sid = frow.spell_id;
+    if (iconRows[i].spell_id !== sid) {
+      throw new GenerationResolveError(`icons_agree: icon row ${i} spell_id ${iconRows[i].spell_id} != full ${sid}`);
+    }
+    if (pi < projRows.length && projRows[pi].spell_id < sid) {
+      throw new GenerationResolveError(`projection_within_domain: ${projRows[pi].spell_id} outside is_coa domain`);
+    }
+    if (!("raw" in frow)) throw new GenerationResolveError(`full_is_compact: spell ${sid} missing compact raw`);
+    if ("field_observations" in frow) throw new GenerationResolveError(`full_is_compact: spell ${sid} carries field_observations`);
+    const expanded = {};
+    for (const [f, cell] of Object.entries(frow.raw)) expanded[f] = expandCompact(cell, policyDoc);
+    const isCoa = frow.coa_attribution && frow.coa_attribution.is_coa === true;
+    if (isCoa) {
+      if (pi >= projRows.length || projRows[pi].spell_id !== sid) {
+        throw new GenerationResolveError(`projection_is_coa_subset: ${sid} missing from projection`);
+      }
+      const prow = projRows[pi];
+      if ("raw" in prow) throw new GenerationResolveError(`projection_is_rich: spell ${sid} carries compact raw`);
+      if (!("field_observations" in prow)) throw new GenerationResolveError(`projection_is_rich: spell ${sid} missing field_observations`);
+      identityAgrees(frow, prow);
+      if (!isDeepStrictEqual(expanded, prow.field_observations)) {
+        throw new GenerationResolveError(`compact_raw_expands_to_envelope: spell ${sid} full.raw expansion != projection.field_observations`);
+      }
+      pi++;
+    }
+  }
+  if (pi < projRows.length) {
+    throw new GenerationResolveError(`projection_within_domain: ${projRows[pi].spell_id} outside is_coa domain`);
+  }
+  const anyConverted = iconRows.some((r) => r.asset_status === "converted");
+  if (anyConverted && !("coa_client_spell_icons.bundle.tar" in (manifest.children || {}))) {
+    throw new GenerationResolveError("icon bundle required: a converted row exists but no bundle child is registered");
+  }
 }
 
 function sha256(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
@@ -99,14 +197,19 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH }
   catch (e) { throw new GenerationResolveError(`policy child not matched by the lock: ${e.message}`); }
   // Row semantics over the full required domain: every full row's required scalars are present (not just in
   // row.raw), and every projection row's claims + biconditional + value agreement re-derive from the policy.
-  for (const row of readJsonlRows(children["coa_client_spell.jsonl"])) {
+  const fullRows = readJsonlRows(children["coa_client_spell.jsonl"]);
+  const projRows = readJsonlRows(children["coa_client_spell_coa.jsonl"]);
+  const iconRows = readJsonlRows(children["coa_client_spell_icons.jsonl"]);
+  for (const row of fullRows) {
     try { verifyFullRowAgainstPolicy(row, policyDoc); }
     catch (e) { throw new GenerationResolveError(e.message); }
   }
-  for (const row of readJsonlRows(children["coa_client_spell_coa.jsonl"])) {
+  for (const row of projRows) {
     try { verifyRowAgainstPolicy(row, policyDoc); }
     catch (e) { throw new GenerationResolveError(e.message); }
   }
+  // Streaming cross-child + bundle: dialects, identity/attribution, compact-raw expansion, icon domain/agreement.
+  crossChild(fullRows, projRows, iconRows, policyDoc, manifest);
   return { genDir: dir, manifest, children };
 }
 

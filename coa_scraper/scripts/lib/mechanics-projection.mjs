@@ -251,6 +251,66 @@ export function verifyRowAgainstPolicy(row, policyDoc) {
   }
 }
 
+// Proof lattice (verified > reference > unproven > contradicted). composeProof takes the WEAKEST facet
+// across contributing components — the exact mirror of Python spell_proof.compose_proof.
+const PROOF_ORDER = { verified: 3, reference: 2, unproven: 1, contradicted: 0 };
+const PROOF_INV = { 3: "verified", 2: "reference", 1: "unproven", 0: "contradicted" };
+export function composeProof(proofs) {
+  const facet = (k) => PROOF_INV[Math.min(...proofs.map((p) => PROOF_ORDER[p[k]]))];
+  return { integrity: facet("integrity"), layout: facet("layout"), interpretation: facet("interpretation") };
+}
+
+// Expand ONE compact scalar cell into its canonical rich observation — the exact inverse of the Python
+// producer's _expand_scalar_cell: re-derive proof/promotion from the policy and re-decode from raw.
+function expandScalarCell(cell, policyDoc) {
+  const fp = resolvePolicyRef(policyDoc, cell.policy_ref);
+  const out = {
+    state: cell.state, decoded_reason: cell.decoded_reason,
+    proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
+    promotion: fp.promotion, policy_ref: cell.policy_ref,
+  };
+  if ("raw_offset" in cell) {                             // string substrate
+    out.raw_offset = cell.raw_offset;
+    out.resolved = cell.resolved ?? null;
+  } else {                                                // numeric substrate
+    const rawU32 = cell.raw_u32 ?? null;
+    out.raw_u32 = rawU32;
+    out.decoded = (cell.decoded_reason === "decoded" && rawU32 !== null)
+      ? { kind: fp.kind, value: redecode(rawU32, fp.kind) } : null;
+  }
+  return out;
+}
+
+// Expand a compact raw cell (scalar OR join) into its canonical rich field observation — the contract-
+// critical inverse mirroring Python spell_record._expand_compact, so expandCompact(full.raw[f]) MUST
+// deep-equal the projection's field_observations[f].
+export function expandCompact(cell, policyDoc) {
+  if (!("join_name" in cell)) return expandScalarCell(cell, policyDoc);
+  if (!("components" in cell)) {                          // absent join (null index cell)
+    const fp = resolvePolicyRef(policyDoc, cell.policy_ref);
+    return {
+      join_name: cell.join_name, state: cell.state, decoded_reason: cell.decoded_reason,
+      policy_ref: cell.policy_ref,
+      proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
+      promotion: fp.promotion,
+    };
+  }
+  const components = {};
+  for (const [k, v] of Object.entries(cell.components)) components[k] = expandScalarCell(v, policyDoc);
+  const composed = composeProof(Object.values(components).map((c) => c.proof));
+  const join = (policyDoc.joins || {})[cell.join_name];
+  let decoded = null;
+  if (cell.decoded_reason === "decoded" && "side_value" in components) {
+    const sv = components.side_value;
+    decoded = sv.decoded ? sv.decoded.value : (sv.resolved ?? null);
+  }
+  return {
+    join_name: cell.join_name, state: cell.state, decoded_reason: cell.decoded_reason,
+    components, composed_proof: composed, decoded,
+    promotion: join ? join.promotion : "raw_only",
+  };
+}
+
 // A FULL row is the COMPACT dialect: it carries `raw`, never `field_observations`. Row validation iterates
 // the policy-required scalar domain ∪ mechanics ∪ raw (NOT just `row.raw`), so a required field omitted from
 // BOTH mechanics and raw is still visited and rejected — a bypass a raw-only iteration would miss.
