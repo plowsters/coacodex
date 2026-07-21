@@ -88,6 +88,21 @@ def v2_policy(raw_only_cast=False, raw_only_power_type=False):
     return _base(tables, joins)
 
 
+def spell_dbc_desc():
+    # id@0, power_type@1, school_mask@2, name@3, description@4 (five 4-byte cells)
+    block, off = _strings("Fireball", "Hurls a fiery ball that causes Fire damage.")
+    rows = [(133, 3, 4, off["Fireball"], off["Hurls a fiery ball that causes Fire damage."])]
+    return open_view(_wdbc(rows, 5, block))
+
+
+def v2_desc_policy():
+    tables = {"Spell": {"expected_field_count": 5, "key_cell": 0, "unique": True, "fields": {
+        "id": _f(0, "uint32"), "power_type": _f(1, "int32"), "school_mask": _f(2, "uint32"),
+        "name": _f(3, "string"),
+        "description": _f(4, "string", promo="raw_only", interp="reference")}}}
+    return _base(tables, {})
+
+
 def v2_icon_policy():
     tables = {
         "Spell": {"expected_field_count": _SPELL_FC, "key_cell": 0, "unique": True, "fields": {

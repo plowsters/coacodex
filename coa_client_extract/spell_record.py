@@ -304,6 +304,18 @@ def iter_spell_records(spell_view, side_views, *, policy, provenance, coa_spell_
             raw["name"] = _compact(sob.to_dict(), policy_ref_str=policy_ref("Spell", "name"))
             name_val = sob.resolved if name_fp.promotion == "normalized" else None
 
+        # description (client tooltip @170): a real extracted string, but raw_only — its $s1 macros are
+        # unresolved templates, so it is emitted into `raw` and NEVER into mechanics. The raw block is
+        # LOSSLESS: unlike a numeric raw_u32, a string cannot be reconstructed from an offset, so the actual
+        # tooltip TEXT is retained (the raw_only-ness is a promotion property, not a decode failure).
+        desc_fp = sf.get("description")
+        if desc_fp is not None and desc_fp.cell is not None:
+            doff = rec.u32(desc_fp.cell)
+            raw["description"] = _compact(
+                {"state": "present", "raw_offset": doff, "resolved": spell_view.read_string(doff),
+                 "decoded_reason": "decoded"},
+                policy_ref_str=policy_ref("Spell", "description"))
+
         for nm, refine in (("power_type", lambda v: refine_enum(v, allowed_pt)),
                            ("school_mask", lambda v: refine_mask(v, allowed_bits))):
             fp = sf[nm]
