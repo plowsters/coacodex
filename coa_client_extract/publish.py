@@ -11,6 +11,8 @@ from pathlib import Path
 
 from .contracts import CANDIDATE_MUTABLE_KEYS, ICON_ASSET_STATUSES
 from .manifest import build_manifest_v2, build_manifest_v3
+from .spell_layout import load_spell_policy
+from .spell_record import _expand_compact as _expand_cell
 
 POINTER_SCHEMA = "coa-client-extract-pointer-v1"
 POINTER_NAME = "coa_client_extract.pointer.json"
@@ -190,30 +192,33 @@ class _Cursor:
         return self.row
 
 
-def _expand_compact(sid, field, cell) -> None:
-    """compact_raw_expands_to_envelope: a compact raw cell must re-expand to a well-formed envelope — a
-    resolvable state, a policy_ref (or join components), and enough raw to reconstruct the value when the
-    cell is present/resolved (raw_u32 for numeric, raw_offset for string, components for a join)."""
-    if "state" not in cell or ("policy_ref" not in cell and "components" not in cell):
-        raise ResolveError(f"compact_raw_expands_to_envelope: {sid}:{field} missing state/policy_ref")
-    if cell["state"] in ("present", "resolved") and not (
-            "raw_u32" in cell or "raw_offset" in cell or "components" in cell):
-        raise ResolveError(f"compact_raw_expands_to_envelope: {sid}:{field} carries no raw to reconstruct")
+def _expand_full_raw(sid, raw, policy):
+    """Expand a full child's compact `raw` block into canonical field observations (the SAME expansion the
+    projection is built from), failing closed on a tampered/unresolvable cell."""
+    try:
+        return {f: _expand_cell(cell, policy) for f, cell in raw.items()}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ResolveError(f"compact_raw_expands_to_envelope: {sid} unresolvable compact cell ({exc})")
 
 
 def _identity_agrees(frow, prow) -> None:
     """identity_agrees: the full-table row and its projection must agree on identity + normalized
-    mechanics (the projection is a re-view of the same spell, never a divergent one)."""
+    mechanics + attribution (the projection is a re-view of the same spell, never a divergent one)."""
     if frow.get("name") != prow.get("name"):
         raise ResolveError(f"identity_agrees: spell {frow['spell_id']} name differs full vs projection")
     if frow.get("mechanics") != prow.get("mechanics"):
         raise ResolveError(f"identity_agrees: spell {frow['spell_id']} mechanics differ full vs projection")
+    if frow.get("coa_attribution") != prow.get("coa_attribution"):
+        raise ResolveError(f"identity_agrees: spell {frow['spell_id']} attribution differs full vs projection")
 
 
 def _cross_child(gen_dir: Path) -> None:
     """Streaming merge-join over ascending spell_id across the three spell children (design A5) — cursors
-    only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain,
-    identity_agrees, compact_raw_expands_to_envelope, icon coverage, and sorted-unique ids."""
+    only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain, the disjoint
+    v3 dialects (full=compact `raw`, projection=rich `field_observations`), identity/mechanics/attribution
+    agreement, the compact_raw_expands_to_envelope EQUALITY (expand(full.raw) == projection.field_observations),
+    icon coverage, and sorted-unique ids."""
+    policy = load_spell_policy(json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
     full = _Cursor(_read_jsonl(gen_dir / "coa_client_spell.jsonl"), "full")
     proj = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_coa.jsonl"), "projection")
     icons = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"), "icons")
@@ -225,16 +230,26 @@ def _cross_child(gen_dir: Path) -> None:
             raise ResolveError(f"icons_agree: spell {sid} lacks an icon-catalog row")
         if proj.row is not None and proj.row["spell_id"] < sid:
             raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
+        # The full child is the COMPACT dialect: it carries `raw`, never `field_observations`.
+        if "raw" not in full.row:
+            raise ResolveError(f"full_is_compact: spell {sid} full row missing compact raw")
+        if "field_observations" in full.row:
+            raise ResolveError(f"full_is_compact: spell {sid} full row carries field_observations (rich dialect)")
+        expanded = _expand_full_raw(sid, full.row["raw"], policy)
         is_coa = full.row.get("coa_attribution", {}).get("is_coa") is True
         if is_coa:
             if proj.row is None or proj.row["spell_id"] != sid:
                 raise ResolveError(f"projection_is_coa_subset: {sid} missing from projection")
+            # The projection is the RICH dialect: it carries `field_observations`, never compact `raw`.
+            if "raw" in proj.row:
+                raise ResolveError(f"projection_is_rich: spell {sid} projection carries compact raw")
+            if "field_observations" not in proj.row:
+                raise ResolveError(f"projection_is_rich: spell {sid} projection missing field_observations")
             _identity_agrees(full.row, proj.row)
-            for field, cell in (proj.row.get("raw") or {}).items():
-                _expand_compact(sid, field, cell)
+            if expanded != proj.row["field_observations"]:
+                raise ResolveError(
+                    f"compact_raw_expands_to_envelope: spell {sid} full.raw expansion != projection.field_observations")
             proj.advance()
-        for field, cell in (full.row.get("raw") or {}).items():
-            _expand_compact(sid, field, cell)
         full.advance()
     if proj.row is not None:
         raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")

@@ -186,11 +186,45 @@ export function eligibleFromPolicy(field, obs, policyDoc) {
     && (obs.state === "present" || obs.state === "resolved") && obs.decoded_reason === "decoded";
 }
 
-// For EVERY field: eligible <=> populated (both halves of the biconditional), and a populated value must
-// agree with a re-decode of raw_u32 (numeric) or the resolved string.
+// The rich field observation is SELF-DESCRIBING but never TRUSTED: Node re-derives proof/promotion from the
+// staged policy and re-decodes the value from the raw substrate, then verifies the observation's claims
+// (proof, promotion, decoded) match. A scalar carries {policy_ref, proof, promotion, raw_u32|raw_offset+
+// resolved, decoded?}; a join carries per-component scalars under `components`.
+function verifyScalarClaims(spellId, field, obs, policyDoc) {
+  const pol = resolvePolicyRef(policyDoc, obs.policy_ref);
+  const wantProof = { integrity: "verified", layout: pol.layout, interpretation: pol.interpretation };
+  if (JSON.stringify(sortDeep(obs.proof)) !== JSON.stringify(sortDeep(wantProof))) {
+    throw new MechanicsBuildError(`projection ${spellId}: ${field} proof claim disagrees with policy`);
+  }
+  if (obs.promotion !== pol.promotion) {
+    throw new MechanicsBuildError(`projection ${spellId}: ${field} promotion claim disagrees with policy`);
+  }
+  if ("raw_offset" in obs) return;                    // string substrate: `resolved` is the value, no decoded dict
+  const want = (obs.decoded_reason === "decoded" && obs.raw_u32 !== null && obs.raw_u32 !== undefined)
+    ? { kind: pol.kind, value: redecode(obs.raw_u32, pol.kind) } : null;
+  if (JSON.stringify(sortDeep(obs.decoded ?? null)) !== JSON.stringify(sortDeep(want))) {
+    throw new MechanicsBuildError(`projection ${spellId}: ${field} decoded claim disagrees with re-decode`);
+  }
+}
+
+// A projection row is the RICH dialect: it carries `field_observations`, never compact `raw`. For EVERY
+// field: verify the self-describing claims, then eligible <=> populated (both halves of the biconditional),
+// and a populated value agrees with a re-decode of raw_u32 (numeric) or the resolved string.
 export function verifyRowAgainstPolicy(row, policyDoc) {
   const mech = row.mechanics || {};
-  for (const [field, obs] of Object.entries(row.raw || {})) {
+  if (row.raw !== undefined) {
+    throw new MechanicsBuildError(`projection ${row.spell_id}: carries compact raw (v3 projection is rich field_observations)`);
+  }
+  const fobs = row.field_observations;
+  if (!fobs || typeof fobs !== "object") {
+    throw new MechanicsBuildError(`projection ${row.spell_id}: missing field_observations`);
+  }
+  for (const [field, obs] of Object.entries(fobs)) {
+    if (obs.components) {
+      for (const [, c] of Object.entries(obs.components)) verifyScalarClaims(row.spell_id, field, c, policyDoc);
+    } else {
+      verifyScalarClaims(row.spell_id, field, obs, policyDoc);
+    }
     // Identity fields live at the row level (id -> spell_id, name -> name); mechanics fields in `mechanics`.
     const value = field === "id" ? row.spell_id
       : (field in mech) ? mech[field]

@@ -174,9 +174,20 @@ for how canonical vs. fallback builds are recorded.
 
 ## M1.14E0R — `coa-client-spell-v3`
 
-The full-table child is now the **compact** `coa-client-spell-v3` row: identity + normalized `mechanics`
-+ `coa_attribution` + a compact `raw` block (scalar `raw_u32`/string `raw_offset`+`resolved`, join
-components, and `state`), with proof/promotion/evidence **inferred from the pinned policy via a
-`policy_ref`** rather than repeated per row. The CoA projection (`coa-client-spell-projection-v3`) is the
-`is_coa` subset; a consumer re-derives eligibility independently from the staged policy child. Graph
-attribution (class memberships) lives in `coa_client_advancement.jsonl`, not on the spell row.
+The two v3 spell children carry **deliberately disjoint dialects** (E0R.1 T2.2):
+
+- The full-table child `coa-client-spell-v3` is the **compact** row: identity + normalized `mechanics` +
+  `coa_attribution` + a compact `raw` block (scalar `raw_u32`/string `raw_offset`+`resolved`, join
+  components, and `state`), with proof/promotion/evidence **inferred from the pinned policy via a
+  `policy_ref`** rather than repeated per row. It carries `raw`, never `field_observations`.
+- The CoA projection `coa-client-spell-projection-v3` is the `is_coa` subset in the **rich** form: identity
+  + normalized `mechanics` + `coa_attribution` + a `field_observations` block where each compact cell is
+  EXPANDED into a canonical, self-describing observation (raw substrate + re-derived `decoded` + `proof`/
+  `promotion` **claims**). It carries `field_observations`, never `raw`.
+
+`_expand_compact(full.raw[f], staged_policy)` MUST equal `projection.field_observations[f]` for every field
+— a real cross-child equality guarantee (`compact_raw_expands_to_envelope`), so the compact full child is
+provably lossless. A consumer never TRUSTS the rich observation: Node/Python re-derive proof/promotion from
+the staged policy (`policy_ref`) and re-decode the value from the raw substrate, then verify the claims
+match; a projection row that carries `raw` or lacks `field_observations` is rejected (no two v3 dialects).
+Graph attribution (class memberships) lives in `coa_client_advancement.jsonl`, not on the spell row.

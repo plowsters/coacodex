@@ -46,7 +46,7 @@ def regenerate(
     import time as _time
     from .recordview import open_view
     from .spell_layout import load_default_policy
-    from .spell_record import iter_spell_records
+    from .spell_record import iter_spell_records, project_v3_row
     from .spell_icons import iter_icon_catalog
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
@@ -188,7 +188,9 @@ def regenerate(
     full_rows = sorted(iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance,
                                           coa_spell_ids=coa_attributed_ids),
                        key=lambda r: r["spell_id"])
-    projection_rows = [{**r, "schema_version": "coa-client-spell-projection-v3"}
+    # The projection is the RICH form: each compact `raw` cell expands into a canonical field observation
+    # (project_v3_row), and the row carries NO compact `raw` — full=compact, projection=rich, disjoint.
+    projection_rows = [project_v3_row(r, policy)
                        for r in full_rows if r["coa_attribution"].get("is_coa") is True]
     icon_rows = sorted(iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver),
                        key=lambda r: r["spell_id"])

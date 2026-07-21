@@ -7,7 +7,7 @@ from .contracts import policy_ref, policy_ref_component, resolve_policy_ref
 from .recordview import DbcView
 from .spell_layout import FieldPolicy, SpellPolicy
 from .spell_proof import (
-    FieldProof, absent_envelope, make_domain_gated_envelope, make_envelope, make_join,
+    FieldProof, absent_envelope, compose_proof, make_domain_gated_envelope, make_envelope, make_join,
     make_string_observation, refine_enum, refine_mask, semantic_promotion_eligible,
 )
 
@@ -257,6 +257,65 @@ def _compact_join(jname, join, jo_dict) -> dict:
                            for k, v in jo_dict["components"].items()}}
 
 
+PROJECTION_SCHEMA_V3 = "coa-client-spell-projection-v3"
+
+
+def _expand_scalar_cell(cell: dict, policy: SpellPolicy) -> dict:
+    """Expand ONE compact scalar cell into a canonical rich observation: re-derive `decoded` from the raw
+    substrate + the policy kind, and attach the policy field's proof/promotion (CLAIMS a consumer
+    re-verifies, never trusts). The exact inverse of `_compact`, so the compact child expands losslessly."""
+    fp = resolve_policy_ref(policy.doc, cell["policy_ref"])
+    proof = {"integrity": "verified", "layout": fp["layout"], "interpretation": fp["interpretation"]}
+    out = {"state": cell["state"], "decoded_reason": cell["decoded_reason"],
+           "proof": proof, "promotion": fp["promotion"], "policy_ref": cell["policy_ref"]}
+    if "raw_offset" in cell:                                   # StringObservation substrate
+        out["raw_offset"] = cell["raw_offset"]
+        out["resolved"] = cell.get("resolved")
+    else:                                                      # numeric Envelope substrate
+        raw_u32 = cell.get("raw_u32")
+        out["raw_u32"] = raw_u32
+        out["decoded"] = ({"kind": fp["kind"], "value": _redecode(raw_u32, fp["kind"])}
+                          if cell["decoded_reason"] == "decoded" and raw_u32 is not None else None)
+    return out
+
+
+def _expand_compact(cell: dict, policy: SpellPolicy) -> dict:
+    """Expand a compact raw cell (scalar OR join) into its canonical rich field observation. This is the
+    contract-critical inverse of the compact producer: `_expand_compact(full.raw[f], policy)` MUST equal
+    the projection's `field_observations[f]`, so the compact full child is provably lossless."""
+    if "join_name" not in cell:
+        return _expand_scalar_cell(cell, policy)
+    if "components" not in cell:                              # absent join (null index cell)
+        fp = resolve_policy_ref(policy.doc, cell["policy_ref"])
+        return {"join_name": cell["join_name"], "state": cell["state"],
+                "decoded_reason": cell["decoded_reason"], "policy_ref": cell["policy_ref"],
+                "proof": {"integrity": "verified", "layout": fp["layout"],
+                          "interpretation": fp["interpretation"]}, "promotion": fp["promotion"]}
+    components = {k: _expand_scalar_cell(v, policy) for k, v in cell["components"].items()}
+    composed = compose_proof(*(FieldProof(c["proof"]["integrity"], c["proof"]["layout"],
+                                          c["proof"]["interpretation"]) for c in components.values()))
+    join = policy.joins.get(cell["join_name"])
+    decoded = None
+    if cell["decoded_reason"] == "decoded" and "side_value" in components:
+        sv = components["side_value"]
+        decoded = sv["decoded"]["value"] if sv.get("decoded") else sv.get("resolved")
+    return {"join_name": cell["join_name"], "state": cell["state"],
+            "decoded_reason": cell["decoded_reason"], "components": components,
+            "composed_proof": composed.to_dict(), "decoded": decoded,
+            "promotion": join.promotion if join is not None else "raw_only"}
+
+
+def project_v3_row(compact_row: dict, policy: SpellPolicy) -> dict:
+    """Build a coa-client-spell-projection-v3 row from a compact full child row: identity + normalized
+    mechanics + attribution, and the compact `raw` EXPANDED into rich `field_observations`. The projection
+    carries NO compact `raw` (the two v3 dialects are deliberately disjoint — full=compact, projection=rich)."""
+    return {"schema_version": PROJECTION_SCHEMA_V3,
+            "spell_id": compact_row["spell_id"], "name": compact_row.get("name"),
+            "mechanics": compact_row["mechanics"], "coa_attribution": compact_row["coa_attribution"],
+            "field_observations": {f: _expand_compact(cell, policy)
+                                   for f, cell in compact_row["raw"].items()}}
+
+
 def _side_maps(side_views: dict) -> dict:
     out: dict[str, dict] = {}
     for name, view in side_views.items():
@@ -373,17 +432,53 @@ def _redecode(raw_u32: int, kind: str):
     return struct.unpack("<I", b)[0]
 
 
+def _verify_scalar_claims(spell_id, field, obs: dict, policy_doc: dict) -> None:
+    """A rich field observation is self-describing but NEVER trusted: re-derive proof/promotion from the
+    policy and re-decode the value from the raw substrate, then verify the observation's claims match."""
+    pol = resolve_policy_ref(policy_doc, obs["policy_ref"])
+    want_proof = {"integrity": "verified", "layout": pol["layout"], "interpretation": pol["interpretation"]}
+    if obs.get("proof") != want_proof:
+        raise ValueError(f"{spell_id}:{field} proof claim disagrees with policy")
+    if obs.get("promotion") != pol.get("promotion"):
+        raise ValueError(f"{spell_id}:{field} promotion claim disagrees with policy")
+    if "raw_offset" in obs:                                    # string substrate: resolved is the value
+        return
+    raw_u32 = obs.get("raw_u32")
+    want = ({"kind": pol["kind"], "value": _redecode(raw_u32, pol["kind"])}
+            if obs.get("decoded_reason") == "decoded" and raw_u32 is not None else None)
+    if obs.get("decoded") != want:
+        raise ValueError(f"{spell_id}:{field} decoded claim disagrees with re-decode")
+
+
 def verify_row_against_policy(row: dict, policy_doc: dict) -> None:
-    """Independent Python mirror of Node's verifyRowAgainstPolicy: for every field the biconditional
-    (eligible iff populated) must hold, and a populated value must agree with a re-decode of raw_u32
-    (numeric) or the resolved string (string). Raises ValueError on any mismatch. Exercised against the
-    same golden fixtures as the Node verifier, so the two can never silently diverge on the rule."""
+    """Independent Python mirror of Node's verifyRowAgainstPolicy over the RICH projection dialect: reject a
+    row that carries compact `raw` or lacks `field_observations`; verify each observation's self-describing
+    claims; then the biconditional (eligible iff populated) must hold and a populated value must agree with a
+    re-decode of raw_u32 (numeric) or the resolved string. Raises ValueError on any mismatch. Exercised
+    against the SAME golden fixtures as the Node verifier, so the two can never silently diverge."""
     mech = row.get("mechanics", {})
-    for field, obs in (row.get("raw") or {}).items():
+    if "raw" in row:
+        raise ValueError(f"{row.get('spell_id')}: carries compact raw (v3 projection is rich field_observations)")
+    fobs = row.get("field_observations")
+    if not isinstance(fobs, dict):
+        raise ValueError(f"{row.get('spell_id')}: missing field_observations")
+    for field, obs in fobs.items():
+        if obs.get("components"):
+            for _, c in obs["components"].items():
+                _verify_scalar_claims(row.get("spell_id"), field, c, policy_doc)
+        else:
+            _verify_scalar_claims(row.get("spell_id"), field, obs, policy_doc)
         pol = (resolve_policy_ref(policy_doc, obs["components"]["side_value"]["policy_ref"])
                if obs.get("components") else resolve_policy_ref(policy_doc, obs["policy_ref"]))
         eligible = eligible_from_row(obs, pol, policy_doc)
-        value = mech.get(field)
+        if field == "id":
+            value = row.get("spell_id")
+        elif field in mech:
+            value = mech[field]
+        elif field in row:
+            value = row[field]
+        else:
+            value = None
         populated = value is not None
         if eligible != populated:
             raise ValueError(f"{row.get('spell_id')}:{field} eligible={eligible} populated={populated}")

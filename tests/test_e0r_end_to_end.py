@@ -10,7 +10,7 @@ import pytest
 from coa_client_extract.publish import (
     GenerationWriter, validate_candidate_generation, resolve_active_generation, ResolveError,
 )
-from coa_client_extract.spell_record import iter_spell_records
+from coa_client_extract.spell_record import iter_spell_records, project_v3_row
 from coa_client_extract.spell_icons import iter_icon_catalog
 from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_views, icon_side_views
 
@@ -25,8 +25,7 @@ def _stage_full_generation(root: Path) -> GenerationWriter:
     full = sorted(iter_spell_records(spell_dbc(), side_views(), policy=v2_policy(), provenance=prov,
                                      coa_spell_ids={805775}),
                   key=lambda r: r["spell_id"])
-    proj = [{**r, "schema_version": "coa-client-spell-projection-v3"}
-            for r in full if r["coa_attribution"]["is_coa"] is True]
+    proj = [project_v3_row(r, v2_policy()) for r in full if r["coa_attribution"]["is_coa"] is True]
     icons = sorted(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy(),
                                      asset_resolver=_resolver), key=lambda r: r["spell_id"])
     gw = GenerationWriter(root)
