@@ -1,0 +1,205 @@
+{
+  "schema_version": "coa-spell-layout-v2",
+  "reviewed": true,
+  "bound": null,
+  "required_tables": [
+    "Spell",
+    "SpellCastTimes",
+    "SpellDuration",
+    "SpellIcon"
+  ],
+  "expected_absent": [],
+  "enum_policy": {
+    "power_types": [
+      -2,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "school_bits": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
+  },
+  "anchor_set": {
+    "spells": [
+      {
+        "id": 1,
+        "name": "Alpha",
+        "power_type": 3,
+        "school_mask": 4
+      }
+    ],
+    "sha256": "f265890134e888d3e2f8e43b988ea3b4ab3d26a9a0542ca196800fd3b17d241a"
+  },
+  "tables": {
+    "Spell": {
+      "expected_field_count": 6,
+      "key_cell": 0,
+      "unique": true,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "name": {
+          "cell": 1,
+          "kind": "string",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "power_type": {
+          "cell": 2,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "school_mask": {
+          "cell": 3,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "corpus"
+        },
+        "casting_time_index": {
+          "cell": 4,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "spell_icon_id": {
+          "cell": 5,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "duration_index": {
+          "cell": null,
+          "kind": "uint32",
+          "layout": "unproven",
+          "interpretation": "reference",
+          "promotion": "raw_only",
+          "evidence": "corpus: reviewed_ambiguous (null cell)"
+        }
+      }
+    },
+    "SpellCastTimes": {
+      "expected_field_count": 2,
+      "key_cell": 0,
+      "unique": true,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "base_ms": {
+          "cell": 1,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        }
+      }
+    },
+    "SpellDuration": {
+      "expected_field_count": 2,
+      "key_cell": 0,
+      "unique": true,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "corpus"
+        },
+        "base_ms": {
+          "cell": 1,
+          "kind": "int32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "raw_only",
+          "evidence": "corpus"
+        }
+      }
+    },
+    "SpellIcon": {
+      "expected_field_count": 2,
+      "key_cell": 0,
+      "unique": true,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "kind": "uint32",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        },
+        "path": {
+          "cell": 1,
+          "kind": "string",
+          "layout": "verified",
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "corpus"
+        }
+      }
+    }
+  },
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms",
+      "promotion": "normalized"
+    },
+    "duration_ms": {
+      "index_field": "duration_index",
+      "side_table": "SpellDuration",
+      "side_value_field": "base_ms",
+      "promotion": "raw_only"
+    },
+    "spell_icon_id": {
+      "index_field": "spell_icon_id",
+      "side_table": "SpellIcon",
+      "side_value_field": "path",
+      "promotion": "normalized"
+    }
+  },
+  "required_scalar_fields": [
+    "id",
+    "name",
+    "power_type"
+  ],
+  "sha256": "a2598464892f3bc8464d20b27e9d756c28be73a7dcbc26fd9a7c7dc97abd359d"
+}
