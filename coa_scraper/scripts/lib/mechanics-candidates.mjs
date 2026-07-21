@@ -59,10 +59,17 @@ export function fieldCandidates({ field, clientRec, builderNodes }) {
   for (const node of builderNodes || []) {
     const { raw, value } = builderNormalized(node, field);
     if (value === null) continue;
+    // E0R.1 T1.4: power_type is a proof-gated client field. Its Builder `resources` inference is a
+    // heuristic hint and must NEVER backfill a withheld client value — record it INELIGIBLE and
+    // heuristic-tagged so it survives only as a diagnostic candidate, never as the canonical value.
+    const inferredPowerType = field === "power_type";
     out.push({
       source: "builder", precedence_tier: "inferred", source_id: `builder_node:${node.entry_id}`,
       source_field: field === "schools" ? "damage_schools" : "resources",
-      raw_value: raw, normalized_value: value, confidence: "medium", eligible: true, eligibility_reasons: [],
+      raw_value: raw, normalized_value: value, confidence: "medium",
+      eligible: !inferredPowerType,
+      eligibility_reasons: inferredPowerType ? [REASON.INFERRED_POWER_TYPE_WITHHELD] : [],
+      ...(inferredPowerType ? { heuristic: true } : {}),
     });
   }
   return out;

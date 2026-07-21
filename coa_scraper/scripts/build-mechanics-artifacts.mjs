@@ -89,6 +89,15 @@ export function buildCanonicalMechanics({ entries, spellRows = [], projection = 
     const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: null, schools, durationMs: selected.duration_ms ?? null });
     fieldProvenance.effects = effectsProvenance({ effects, tooltip: tooltipMeta });
 
+    // power_type is null-honest: the client decode is withheld (T1.3) and the Builder resources inference
+    // never backfills it (T1.4), so a missing power_type is null with an unavailable/no_static_anchor
+    // readiness — never "" and never the heuristic value.
+    const powerType = selected.power_type ?? null;
+    const readiness = pendingReadiness();
+    if (powerType === null) {
+      readiness.power_type = { status: "unavailable", reason_code: "no_static_anchor" };
+    }
+
     rows.push({
       schema_version: MECHANICS_SCHEMA_VERSION,
       spell_id: sid,
@@ -98,14 +107,14 @@ export function buildCanonicalMechanics({ entries, spellRows = [], projection = 
       source_urls: [],
       school: schools.length === 1 ? schools[0] : "",
       schools,
-      power_type: selected.power_type || "",
+      power_type: powerType,
       cast_time_ms: selected.cast_time_ms ?? null,
       duration_ms: selected.duration_ms ?? null,
       range_yards: selected.range_yards ?? null,
       cooldown_ms: null,               // no canonical source after AscensionDB removal (null + readiness)
       gcd_ms: null,
       costs: null,
-      field_readiness: pendingReadiness(),
+      field_readiness: readiness,
       generates: {},
       spends: {},
       effects,

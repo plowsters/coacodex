@@ -18,6 +18,9 @@ export const REASON = Object.freeze({
   UNKNOWN_ENUM: "unknown_enum",
   UNKNOWN_MASK_BIT: "unknown_mask_bit",
   ABSENT: "absent",
+  // E0R.1 T1.4: an inferred power_type (Builder `resources`) can never authoritatively fill the proof-gated
+  // client power_type; it is recorded ineligible + heuristic so it stays diagnostic-only.
+  INFERRED_POWER_TYPE_WITHHELD: "inferred_power_type_withheld",
 });
 
 // Note: the conditions that FATALLY fail a canonical build — per-table drift on a populated field,
