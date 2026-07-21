@@ -24,7 +24,12 @@ coa_scraper/data/raw/
 
 # Usually do not commit generated archives
 *.zip
-reports/meta/assets/guide-site-manifest.json
+
+# M1.14E0R.1 T2.5: the generated guide site + the scraped DB tooltip catalog carry db.ascension.gg
+# hotlinks and are build OUTPUTS, not authority — regenerate them (client-native) locally, never commit.
+# The generator, templates, and source fonts stay tracked under coa_meta/.
+reports/meta/
+coa_scraper/dist/coa_db_spell_tooltips.jsonl
 
 # Claude Design reference materials (local design product, not part of the repo)
 design/
