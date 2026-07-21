@@ -251,6 +251,27 @@ export function verifyRowAgainstPolicy(row, policyDoc) {
   }
 }
 
+// A FULL row is the COMPACT dialect: it carries `raw`, never `field_observations`. Row validation iterates
+// the policy-required scalar domain ∪ mechanics ∪ raw (NOT just `row.raw`), so a required field omitted from
+// BOTH mechanics and raw is still visited and rejected — a bypass a raw-only iteration would miss.
+export function verifyFullRowAgainstPolicy(row, policyDoc) {
+  if (row.field_observations !== undefined) {
+    throw new MechanicsBuildError(`full ${row.spell_id}: carries field_observations (full is the compact raw dialect)`);
+  }
+  const raw = row.raw;
+  if (!raw || typeof raw !== "object") {
+    throw new MechanicsBuildError(`full ${row.spell_id}: missing compact raw`);
+  }
+  const mech = row.mechanics || {};
+  const required = policyDoc.required_scalar_fields || [];
+  const domain = new Set([...required, ...Object.keys(mech), ...Object.keys(raw)]);
+  for (const field of domain) {
+    if (required.includes(field) && !(field in raw) && !(field in mech)) {
+      throw new MechanicsBuildError(`full ${row.spell_id}: required field ${field} omitted from both mechanics and raw`);
+    }
+  }
+}
+
 // E0R: validate a coa-client-spell-projection-v3 projection (compact rows) against the pinned policy
 // child. Per-row: v3 schema, is_coa, positive unique spell_id, and an independent numeric/string
 // re-derivation via verifyRowAgainstPolicy. Child-byte integrity was already enforced by the generation

@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { candidateTrustSha256FromText } from "./canonical.mjs";
+import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy } from "./mechanics-projection.mjs";
 
 export class GenerationResolveError extends Error {}
 
@@ -8,6 +10,22 @@ const POINTER_SCHEMA = "coa-client-extract-pointer-v1";
 const POINTER_NAME = "coa_client_extract.pointer.json";
 const MANIFEST_NAME = "manifest.json";
 const RESERVED = new Set([MANIFEST_NAME, POINTER_NAME]);
+
+// The E0R required-child registry (mirrors coa_client_extract.publish.REQUIRED_CHILDREN): a candidate is
+// only trustworthy if EVERY one of these is registered + valid, so an empty or partial generation is caught.
+export const REQUIRED_CHILDREN = [
+  "coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
+  "coa_client_spell_projection.manifest.json", "coa_client_spell_icons.jsonl",
+  "coa_client_content.jsonl", "coa_client_archive_plan.json",
+  "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
+  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl", "spell_layout_v2.json",
+];
+
+const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
+
+function readJsonlRows(childPath) {
+  return fs.readFileSync(childPath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
 
 function sha256(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
 
@@ -53,16 +71,42 @@ function validateChildrenByPath(genDir, manifest) {
 // Validate a staged CANDIDATE generation by path (no pointer), so the Node trust boundary runs BEFORE the
 // pointer flips (design A5). Mirrors the Python validate_candidate_generation's structural checks; the
 // cross-child merge-join stays authoritative in Python.
-export function validateCandidateByPath(genDir) {
+export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH } = {}) {
   const dir = path.resolve(genDir);
   const manifestPath = path.join(dir, MANIFEST_NAME);
   if (!fs.existsSync(manifestPath)) throw new GenerationResolveError("candidate manifest missing");
+  const manifestText = fs.readFileSync(manifestPath, "utf8");
   let manifest;
-  try { manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")); }
+  try { manifest = JSON.parse(manifestText); }
   catch (e) { throw new GenerationResolveError(`candidate manifest invalid JSON: ${e.message}`); }
   if (manifest.publication_state !== "candidate") throw new GenerationResolveError(`not a candidate generation (publication_state=${manifest.publication_state})`);
   if (manifest.schema_version !== "coa-client-extract-manifest-v3") throw new GenerationResolveError(`unsupported manifest schema_version ${manifest.schema_version}`);
+  // The trust digest must cover the manifest (recomputed independently, bigint-safe) BEFORE trusting any field.
+  const recomputedTrust = candidateTrustSha256FromText(manifestText);
+  if (manifest.candidate_trust_sha256 !== recomputedTrust) {
+    throw new GenerationResolveError(`candidate_trust_sha256 does not cover the manifest (recomputed ${recomputedTrust})`);
+  }
   const children = validateChildrenByPath(dir, manifest);
+  for (const name of REQUIRED_CHILDREN) {
+    if (!(name in children)) throw new GenerationResolveError(`required child ${name} missing from the candidate generation`);
+  }
+  // The staged policy child must match the committed lock (recomputed, never self-trusted).
+  const policyDoc = JSON.parse(fs.readFileSync(children["spell_layout_v2.json"], "utf8"));
+  let lock;
+  try { lock = JSON.parse(fs.readFileSync(lockPath, "utf8")); }
+  catch (e) { throw new GenerationResolveError(`policy lock unreadable: ${e.message}`); }
+  try { assertPolicyLock(policyDoc, lock); }
+  catch (e) { throw new GenerationResolveError(`policy child not matched by the lock: ${e.message}`); }
+  // Row semantics over the full required domain: every full row's required scalars are present (not just in
+  // row.raw), and every projection row's claims + biconditional + value agreement re-derive from the policy.
+  for (const row of readJsonlRows(children["coa_client_spell.jsonl"])) {
+    try { verifyFullRowAgainstPolicy(row, policyDoc); }
+    catch (e) { throw new GenerationResolveError(e.message); }
+  }
+  for (const row of readJsonlRows(children["coa_client_spell_coa.jsonl"])) {
+    try { verifyRowAgainstPolicy(row, policyDoc); }
+    catch (e) { throw new GenerationResolveError(e.message); }
+  }
   return { genDir: dir, manifest, children };
 }
 
@@ -121,9 +165,11 @@ if (isCliEntryPoint()) {
   const args = process.argv.slice(2);
   if (args[0] === "--candidate") {
     const genDir = args[1];
-    if (!genDir) { console.error("usage: generation.mjs --candidate <gen-dir>"); process.exit(2); }
+    if (!genDir) { console.error("usage: generation.mjs --candidate <gen-dir> [--lock <lock-path>]"); process.exit(2); }
+    const lockIdx = args.indexOf("--lock");
+    const opts = lockIdx >= 0 && args[lockIdx + 1] ? { lockPath: args[lockIdx + 1] } : {};
     try {
-      const r = validateCandidateByPath(genDir);
+      const r = validateCandidateByPath(genDir, opts);
       console.log(JSON.stringify({ candidate: true, children: Object.keys(r.children) }, null, 2));
     } catch (e) { console.error(`error: ${e.message}`); process.exit(3); }
   } else {

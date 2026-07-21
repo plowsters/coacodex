@@ -184,8 +184,12 @@ def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
     client_root = _client(tmp_path)
     out = tmp_path / "out"
     policy = _bound_spell_policy(_fake_backend(), client_root)
+    # The Node trust boundary checks the staged policy child against a lock; this test uses a SYNTHETIC
+    # policy, so point Node at a lock matching it (production uses the committed lock for the real policy).
+    lock = tmp_path / "spell_layout.lock.json"
+    lock.write_text(json.dumps({"schema_version": "coa-spell-layout-lock-v1", "sha256": policy.sha256}))
     manifest = regenerate(client_root, out, backend=_fake_backend(),
-                          layouts=_synthetic_layouts(), spell_policy=policy)
+                          layouts=_synthetic_layouts(), spell_policy=policy, node_lock_path=lock)
     # Noncanonical fixed-path compatibility summary (published; carries the generation id + budget).
     assert manifest["schema_version"] == "coa-client-extract-manifest-v1"
     assert manifest["publication_state"] == "published"

@@ -36,6 +36,7 @@ def regenerate(
     client_only_adjudication_path: str | None = None,
     budget: dict | None = None,
     validate_with_node: bool = True,
+    node_lock_path: Path | None = None,
 ) -> dict:
     """Stream a full transactional generation (design A2/A4/A5): the shared topology verifier hard-holds
     the reviewed policy's `bound` against the opened client, every required child is streamed record-by-
@@ -262,7 +263,7 @@ def regenerate(
     # === validate the candidate BY PATH in BOTH Python and Node, before the pointer flips (design A5) ===
     validate_candidate_generation(gw.gen_dir)                 # per-child + streaming cross-child merge-join
     if validate_with_node:
-        _node_validate_candidate(gw.gen_dir)                 # independent Node trust boundary
+        _node_validate_candidate(gw.gen_dir, node_lock_path)  # independent Node trust boundary
 
     # === three-part budget over the ACTUAL serialized generation (bytes + peak RSS + elapsed) (A4) ===
     serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
@@ -467,15 +468,18 @@ def _unknown_symbol_inventory(spell_view, policy) -> dict:
     return {"power_type": sorted(unknown_pt), "school_bits": sorted(unknown_bits)}
 
 
-def _node_validate_candidate(gen_dir: Path) -> None:
+def _node_validate_candidate(gen_dir: Path, lock_path: Path | None = None) -> None:
     """Run the independent Node trust boundary against the staged CANDIDATE generation by path, before the
-    pointer flips (design A5). A non-zero exit fails the canonical publish closed."""
+    pointer flips (design A5). A non-zero exit fails the canonical publish closed. `lock_path` overrides the
+    committed policy lock the staged policy child is checked against (production uses the committed lock)."""
     import subprocess
     from .publish import PublishError
     script = Path(__file__).resolve().parents[1] / "coa_scraper" / "scripts" / "lib" / "generation.mjs"
+    cmd = ["node", str(script), "--candidate", str(gen_dir)]
+    if lock_path is not None:
+        cmd += ["--lock", str(lock_path)]
     try:
-        proc = subprocess.run(["node", str(script), "--candidate", str(gen_dir)],
-                              capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError as exc:
         raise PublishError(f"node is required to validate a canonical generation: {exc}") from exc
     if proc.returncode != 0:
