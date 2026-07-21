@@ -440,9 +440,9 @@
           "cell": 133,
           "kind": "uint32",
           "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "FK into SpellIcon, adjudicated to cell 133 by joined-pair value-anchor discovery against the real client (3.3.5a+patch-CZZ). Expected icon ids come from admissible independent evidence only: Builder-payload (coa_scraper/dist/coa_entries.jsonl) icon paths (precedence #2) mapped through the hash-bound client SpellIcon.dbc to a UNIQUE icon id (non-unique paths excluded); no AscensionDB, remembered, runtime, or candidate-column-derived value is used. Cell 133 is the unique cell resolving all 13 anchors; a blind plurality of 293 unique-path Builder-icon spells resolves at 133 vs 1 at the next-best cell (bare FK-validity alone yields 75 candidate columns). layout is verified (column identity proven); interpretation reference; the emitted icon value stays raw_only pending the string-join promotion (T2.3)."
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "FK into SpellIcon, adjudicated to cell 133 by joined-pair value-anchor discovery against the real client (3.3.5a+patch-CZZ). Expected icon ids come from admissible independent evidence only: Builder-payload (coa_scraper/dist/coa_entries.jsonl) icon paths (precedence #2) mapped through the hash-bound client SpellIcon.dbc to a UNIQUE icon id (non-unique paths excluded); no AscensionDB, remembered, runtime, or candidate-column-derived value is used. Cell 133 is the unique cell resolving all 13 anchors; a blind plurality of 293 unique-path Builder-icon spells resolves at 133 vs 1 at the next-best cell (bare FK-validity alone yields 75 candidate columns). layout+interpretation are verified and the string-join is promoted (T2.3): the FK resolves deterministically through the hash-bound client SpellIcon.dbc to the client icon path, so the join is normalized (like Spell.name). The resolved path feeds the coa-client-spell-icons-v1 catalog, not spell mechanics."
         }
       },
       "key_cell": 0,
@@ -533,16 +533,16 @@
           "kind": "uint32",
           "layout": "verified",
           "interpretation": "verified",
-          "promotion": "raw_only",
+          "promotion": "normalized",
           "evidence": "WDBC row id (icon id), column 0."
         },
         "path": {
           "cell": 1,
           "kind": "string",
           "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "SpellIcon path string @1 (2-column WDBC: id, path). The Spell->SpellIcon join index is unproven until value-anchor recon (M1.14E0R Task 8b), so raw_only."
+          "interpretation": "verified",
+          "promotion": "normalized",
+          "evidence": "SpellIcon path string @1 (2-column WDBC: id, path). A hash-bound client string at a proven column; with the Spell->SpellIcon FK adjudicated to cell 133 (T1.2), the icon string-join is promoted (T2.3): normalized/verified, resolved via make_string_join into the coa-client-spell-icons-v1 catalog."
         }
       },
       "key_cell": 0,
@@ -578,8 +578,8 @@
       "index_field": "spell_icon_id",
       "side_table": "SpellIcon",
       "side_value_field": "path",
-      "promotion": "raw_only"
+      "promotion": "normalized"
     }
   },
-  "sha256": "bb56df35905f44b0abbae701105227c49a8fd8a8e8f55c64639bb42aad01e65f"
+  "sha256": "3e76457c598b5dc77a312283d587e93d829b8f3064da76f2e482a5e57b098611"
 }

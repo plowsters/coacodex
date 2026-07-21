@@ -70,7 +70,8 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
             "id": f(0, "uint32", "normalized"), "name": f(1, "string", "normalized"),
             "power_type": f(2, "int32", "normalized"), "school_mask": f(3, "uint32", "normalized"),
             "casting_time_index": f(4, "uint32", "raw_only"), "duration_index": f(5, "uint32", "raw_only"),
-            "range_index": f(6, "uint32", "raw_only"), "spell_icon_id": f(7, "uint32", "raw_only")}},
+            "range_index": f(6, "uint32", "raw_only"),
+            "spell_icon_id": f(7, "uint32", "normalized")}},   # T2.3: adjudicated icon string-join promoted
         "SpellCastTimes": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": f(0, "uint32", "raw_only"), "base_ms": f(1, "int32", "raw_only")}},
         "SpellDuration": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
@@ -79,7 +80,7 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
             "id": f(0, "uint32", "raw_only"), "min_yd": f(1, "int32", "raw_only"),
             "max_yd": f(2, "int32", "raw_only")}},
         "SpellIcon": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
-            "id": f(0, "uint32", "raw_only"), "path": f(1, "string", "raw_only", interp="reference")}},
+            "id": f(0, "uint32", "normalized"), "path": f(1, "string", "normalized")}},
     }
     joins = {
         "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
@@ -91,7 +92,7 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
         "range_max_yd": {"index_field": "range_index", "side_table": "SpellRange",
                          "side_value_field": "max_yd", "promotion": "raw_only"},
         "spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon",
-                          "side_value_field": "path", "promotion": "raw_only"},
+                          "side_value_field": "path", "promotion": "normalized"},
     }
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
@@ -224,6 +225,10 @@ def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
     assert set(icons) == {805775}
     assert icons[805775]["asset_status"] == "source_only"
     assert icons[805775]["source_asset_sha256"] == __import__("hashlib").sha256(_ICON_BLP).hexdigest()
+    # honest resolved-icon coverage rides in the authoritative generation manifest
+    cov = resolved["manifest"]["icon_coverage"]
+    assert cov["resolved_paths"] == 1 and cov["assets_present"] == 1
+    assert cov["placeholders"] == 0 and cov["spells"] == 1
 
     # --- the advancement children are still produced from the CA graph (805775 -> Venomancer) ---
     adv = [json.loads(l) for l in (gen_dir / "coa_client_advancement.jsonl").read_text().splitlines()]

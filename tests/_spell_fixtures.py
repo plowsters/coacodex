@@ -104,9 +104,28 @@ def v2_desc_policy():
 
 
 def v2_icon_policy():
+    # E0R.1 T2.3: the icon string-join is PROMOTED — WS1 (T1.2) adjudicated the FK cell, so the join and
+    # every component are normalized/verified and make_string_join resolves real client paths. A resolved
+    # path with no client asset is `missing`; an unresolved join (fk 0 / no side row) is a `placeholder`.
     tables = {
         "Spell": {"expected_field_count": _SPELL_FC, "key_cell": 0, "unique": True, "fields": {
-            "id": _f(0, "uint32"), "spell_icon_id": _f(5, "uint32", promo="raw_only")}},
+            "id": _f(0, "uint32"), "spell_icon_id": _f(5, "uint32")}},
+        "SpellIcon": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
+            "id": _f(0, "uint32"), "path": _f(1, "string")}},
+    }
+    joins = {"spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon",
+                              "side_value_field": "path", "promotion": "normalized"}}
+    return _base(tables, joins)
+
+
+def v2_icon_policy_ambiguous():
+    # The counterfactual where WS1 did NOT adjudicate the icon index: the FK cell is null, so the join stays
+    # raw_only/reference and the catalog can only emit placeholders (zero resolved-path coverage).
+    null_fk = {"cell": None, "kind": "uint32", "layout": "unproven", "interpretation": "reference",
+               "promotion": "raw_only", "evidence": "fixture: icon index unadjudicated"}
+    tables = {
+        "Spell": {"expected_field_count": _SPELL_FC, "key_cell": 0, "unique": True, "fields": {
+            "id": _f(0, "uint32"), "spell_icon_id": null_fk}},
         "SpellIcon": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": _f(0, "uint32", promo="raw_only"),
             "path": _f(1, "string", promo="raw_only", interp="reference")}},
@@ -114,3 +133,13 @@ def v2_icon_policy():
     joins = {"spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon",
                               "side_value_field": "path", "promotion": "raw_only"}}
     return _base(tables, joins)
+
+
+def spell_dbc_icon_edges():
+    # Icon join edge cases at spell_icon_id@5: a resolved path (100), an index_zero FK (0), a nonzero FK with
+    # no SpellIcon side row (999 -> side_row_missing), and a second resolved path (200). Reuse icon_side_views().
+    rows = [(133, 0, 0, 0, 0, 100),      # resolves -> Ability_Fireball.blp
+            (300, 0, 0, 0, 0, 0),        # index_zero -> placeholder
+            (400, 0, 0, 0, 0, 999),      # side_row_missing -> placeholder
+            (500, 0, 0, 0, 0, 200)]      # resolves -> Spell_Frost_Frostbolt.blp
+    return open_view(_wdbc(rows, _SPELL_FC, b"\x00"))

@@ -157,11 +157,16 @@ def _builder_icon_spells():
 
 
 def test_policy_adopts_icon_join_at_cell_133():
-    fields = _policy_doc()["tables"]["Spell"]["fields"]
+    doc = _policy_doc()
+    fields = doc["tables"]["Spell"]["fields"]
     icon = fields["spell_icon_id"]
     assert icon["cell"] == 133                       # uniquely discovered via Builder icon anchors
     assert icon["layout"] == "verified"              # the column identity is proven
-    assert icon["promotion"] == "raw_only"           # the emitted icon value stays raw until T2.3
+    # T2.3 PROMOTED the adjudicated icon string-join: verified interpretation + normalized, like Spell.name.
+    assert icon["interpretation"] == "verified"
+    assert icon["promotion"] == "normalized"
+    assert doc["joins"]["spell_icon_id"]["promotion"] == "normalized"
+    assert doc["tables"]["SpellIcon"]["fields"]["path"]["promotion"] == "normalized"
 
 
 def test_policy_records_numeric_joins_reviewed_ambiguous():

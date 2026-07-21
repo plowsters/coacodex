@@ -47,7 +47,7 @@ def regenerate(
     from .recordview import open_view
     from .spell_layout import load_default_policy
     from .spell_record import iter_spell_records, project_v3_row
-    from .spell_icons import iter_icon_catalog
+    from .spell_icons import iter_icon_catalog, icon_coverage
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
     from .spell_mechanics import three_part_budget, DEFAULT_BUDGET
@@ -194,6 +194,9 @@ def regenerate(
                        for r in full_rows if r["coa_attribution"].get("is_coa") is True]
     icon_rows = sorted(iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver),
                        key=lambda r: r["spell_id"])
+    # Honest resolved-icon coverage: how many icon joins resolved to a real client path vs stayed placeholders
+    # (fk 0 / no side row / unadjudicated), and how many resolved paths had a present vs absent client asset.
+    icon_cov = icon_coverage(icon_rows)
     unknown_symbol_inventory = _unknown_symbol_inventory(spell_view, policy)
 
     adv_provenance = {
@@ -236,6 +239,7 @@ def regenerate(
         stormlib_version=getattr(backend, "stormlib_version", None),
         client_root=str(client_root), client_build=client_build, outputs={},
         archive_plan=plan.to_dict())
+    base_manifest["icon_coverage"] = icon_cov          # rides in the authoritative generation manifest-v3
     gw = GenerationWriter(out_dir)
     gw.add_jsonl("coa_client_spell.jsonl", full_rows, schema_version="coa-client-spell-v3")
     gw.add_jsonl("coa_client_spell_coa.jsonl", projection_rows, schema_version="coa-client-spell-projection-v3")
@@ -337,6 +341,7 @@ def regenerate(
     # (raw retained). An empty inventory means every value fell inside the policy domain.
     manifest["unknown_symbol_inventory"] = unknown_symbol_inventory
     manifest["spell_policy_sha256"] = policy.sha256
+    manifest["icon_coverage"] = icon_cov
     write_json(manifest, out_dir / "coa_client_extract_manifest.json")
     return manifest
 
