@@ -17,6 +17,7 @@ def render_guide_index_html(
     db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
 ) -> str:
     site = build_guide_site(
         report,
@@ -24,6 +25,7 @@ def render_guide_index_html(
         db_tooltips_path=db_tooltips_path,
         asset_root=asset_root,
         builder_layout_root=builder_layout_root,
+        icon_catalog=icon_catalog,
     )
     return render_index_html(site)
 
@@ -36,6 +38,7 @@ def write_guide_site(
     db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
 ) -> tuple[Path, ...]:
     output_dir = Path(out_dir)
     site = build_guide_site(
@@ -44,6 +47,7 @@ def write_guide_site(
         db_tooltips_path=db_tooltips_path,
         asset_root=asset_root,
         builder_layout_root=builder_layout_root,
+        icon_catalog=icon_catalog,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     asset_dir = output_dir / "assets"

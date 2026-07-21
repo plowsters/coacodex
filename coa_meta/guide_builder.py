@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .builder_tree_layout import load_builder_tree_layouts
@@ -31,6 +32,22 @@ GUIDE_SECTIONS = (
     "Warnings",
     "Data Notes",
 )
+
+
+def load_client_icon_catalog(path: Path | str | None) -> dict[int, dict] | None:
+    """Load the client-native coa-client-spell-icons-v1 catalog (one JSONL row per spell) into a
+    {spell_id: row} map for GuideAssetCatalog. `None` path -> `None` (the guide then renders placeholders,
+    never a DB hotlink). This is the ONLY icon source the production guide may consult."""
+    if path is None:
+        return None
+    catalog: dict[int, dict] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        catalog[int(row["spell_id"])] = row
+    return catalog
 
 
 def build_guide_site(

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .guide_builder import load_client_icon_catalog
 from .report_assets import AssetResolver
 from .reporting import SUPPORTED_META_ROLES, MetaReportRunner, MetaRunConfig, write_report_outputs
 
@@ -40,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--asset-root", type=Path, default=None)
     meta.add_argument("--db-tooltips", type=Path, default=None, help="Optional AscensionDB tooltip JSONL for static guide tooltips")
     meta.add_argument("--builder-layout-root", type=Path, default=None, help="Optional CoA Builder tree layout artifact directory")
+    meta.add_argument("--icon-catalog", type=Path, default=None,
+                      help="Optional client-native coa-client-spell-icons-v1 JSONL; guide icons resolve ONLY from it")
     meta.add_argument("--write-backend-trust", action="store_true")
     meta.add_argument("--backend-trust-out", type=Path, default=None)
     meta.set_defaults(handler=run_meta)
@@ -108,6 +111,7 @@ def run_meta(args: argparse.Namespace) -> int:
         entries_path=args.entries,
         db_tooltips_path=args.db_tooltips,
         builder_layout_root=args.builder_layout_root,
+        icon_catalog=load_client_icon_catalog(args.icon_catalog),
         **writer_kwargs,
     )
     _log_progress(f"Complete: wrote {len(outputs)} file(s) to {args.out}")

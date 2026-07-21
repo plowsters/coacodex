@@ -31,6 +31,7 @@ def test_meta_cli_dispatches_to_runner_and_writers(monkeypatch, tmp_path):
         entries_path=None,
         db_tooltips_path=None,
         builder_layout_root=None,
+        icon_catalog=None,
     ):
         written["report"] = report
         written["out_dir"] = Path(out_dir)
@@ -119,6 +120,7 @@ def test_meta_cli_logs_progress_stages(monkeypatch, tmp_path, capsys):
         entries_path=None,
         db_tooltips_path=None,
         builder_layout_root=None,
+        icon_catalog=None,
     ):
         return (Path(out_dir) / "meta-report.json",)
 
@@ -160,11 +162,13 @@ def test_meta_cli_passes_guide_context_to_writer(monkeypatch, tmp_path):
         entries_path=None,
         db_tooltips_path=None,
         builder_layout_root=None,
+        icon_catalog=None,
     ):
         written["entries_path"] = entries_path
         written["db_tooltips_path"] = db_tooltips_path
         written["builder_layout_root"] = builder_layout_root
         written["asset_resolver"] = asset_resolver
+        written["icon_catalog"] = icon_catalog
         return (Path(out_dir) / "index.html",)
 
     monkeypatch.setattr(cli, "MetaReportRunner", DummyRunner)
@@ -195,6 +199,7 @@ def test_meta_cli_passes_guide_context_to_writer(monkeypatch, tmp_path):
     assert written["db_tooltips_path"] == Path("coa_scraper/dist/coa_db_spell_tooltips.jsonl")
     assert written["builder_layout_root"] == Path("coa_scraper/reports/tree_layout")
     assert written["asset_resolver"] is not None
+    assert written["icon_catalog"] is None            # no --icon-catalog -> guide renders placeholders
 
 
 def test_meta_cli_accepts_new_guide_role_values(monkeypatch, tmp_path):

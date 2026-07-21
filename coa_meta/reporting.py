@@ -921,6 +921,7 @@ def render_html_report(
     entries_path: Path | str | None = None,
     db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
 ) -> str:
     if entries_path is not None:
         from .guide_writer import render_guide_index_html
@@ -931,6 +932,7 @@ def render_html_report(
             db_tooltips_path=db_tooltips_path,
             asset_root=getattr(asset_resolver, "asset_root", None),
             builder_layout_root=builder_layout_root,
+            icon_catalog=icon_catalog,
         )
 
     data = report.to_dict()
@@ -1103,6 +1105,7 @@ def write_report_outputs(
     entries_path: Path | str | None = None,
     db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
     write_backend_trust: bool = False,
     backend_trust_out: Path | str | None = None,
 ) -> tuple[Path, ...]:
@@ -1128,6 +1131,7 @@ def write_report_outputs(
                         db_tooltips_path=db_tooltips_path,
                         asset_root=getattr(asset_resolver, "asset_root", None),
                         builder_layout_root=builder_layout_root,
+                        icon_catalog=icon_catalog,
                     )
                 )
                 continue
