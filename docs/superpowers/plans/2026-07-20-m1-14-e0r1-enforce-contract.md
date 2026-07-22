@@ -15,8 +15,9 @@
 | T3.0, T3.1, T3.1b | done | `c65acaf`, `55ac22a`, `ab50866` |
 | T3.2, T3.3, T3.4 | done | `adb942a`, `372efa3`, `cef2a32` |
 | T4.1 | done | `d83a91f` |
-| **T4.2** | **in progress** | Node streaming (survey done; probe next) |
-| T4.3, T5.1–T5.4, T6.1–T6.3 | open | — |
+| T4.2 | done | `9ce7d9e` |
+| **T4.3** | **next** | policy-bound ceilings + benchmark_env |
+| T5.1–T5.4, T6.1–T6.3 | open | — |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
@@ -129,8 +130,8 @@
 
 ### Task 4.2: Stream Node validation → projection consumption → mechanics serialization
 **Files:** Modify `coa_scraper/scripts/lib/generation.mjs`, `mechanics-projection.mjs`, `build-mechanics-artifacts.mjs` (stream the mechanics OUTPUT serialization too); Test: `coa_scraper/tests/e0r1-streaming-node.test.mjs`.
-- [ ] Probe: line-by-line child validation + projection consumption + **mechanics output serialization** with incremental hashing; subprocess RSS bounded as record count scales; no whole-child `readFileSync`+split retained array, no whole-output array.
-- [ ] Fix + green + commit.
+- [x] Probe: line-by-line child validation + projection consumption + **mechanics output serialization** with incremental hashing; subprocess RSS bounded as record count scales; no whole-child `readFileSync`+split retained array, no whole-output array.
+- [x] Fix + green + commit.
 
 ### Task 4.3: Separate, unambiguous policy-bound ceilings + pinned env
 **Files:** Modify `coa_client_extract/data/spell_layout_v2.json` (a `budget` block), `coa_client_extract/spell_mechanics.py`/`publish.py` (read ceilings from policy; enforce per-child AND whole-generation), `coa_client_extract/manifest.py` (record `benchmark_env`); Test: `tests/test_e0r1_budget_policy_bound.py`.
