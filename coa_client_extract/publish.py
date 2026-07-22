@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from .contracts import CANDIDATE_MUTABLE_KEYS, ICON_ASSET_STATUSES
-from .manifest import build_manifest_v2, build_manifest_v3
+from .manifest import build_manifest_v3
 from .spell_layout import load_spell_policy
 from .spell_record import _expand_compact as _expand_cell
 
@@ -72,6 +72,7 @@ class GenerationWriter:
         self.gen_dir = self.root / f"gen-{self.generation_id}"
         self.gen_dir.mkdir(exist_ok=False)          # collision-safe; a reused id raises FileExistsError
         self._children: dict[str, dict] = {}
+        self._lock_fh = None                        # publish lock: predecessor read -> pointer replace
 
     def _stage(self, name: str, body: bytes, records: int, schema_version: str) -> None:
         _safe_child_name(name)
@@ -102,68 +103,80 @@ class GenerationWriter:
         except (ValueError, OSError):
             return None
 
-    def publish(self, *, base_manifest: dict, binding: dict, unknown_symbol_inventory: dict) -> dict:
-        manifest = build_manifest_v2(
-            base=base_manifest, generation_id=self.generation_id, published_at=time.time_ns(),
-            predecessor_generation_id=self._predecessor(), children=dict(self._children),
-            unknown_symbol_inventory=unknown_symbol_inventory, binding=binding)
-        manifest_body = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        # manifest is generation-local + immutable; write it inside the (unique) gen dir.
-        (self.gen_dir / MANIFEST_NAME).write_bytes(manifest_body)
-
-        pointer = {"schema_version": POINTER_SCHEMA, "generation_id": self.generation_id,
-                   "manifest_path": f"gen-{self.generation_id}/{MANIFEST_NAME}",
-                   "manifest_sha256": _sha256(manifest_body)}
-        pointer_body = (json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        tmp = self.root / f".{POINTER_NAME}.tmp-{os.getpid()}"
-        tmp.write_bytes(pointer_body)
-        os.replace(tmp, self.root / POINTER_NAME)    # atomic publish of the pointer, LAST
-        return manifest
-
     # --- E0R transactional candidate -> pointer publication (design A5) ---
+
+    def _acquire_publish_lock(self) -> None:
+        if self._lock_fh is None:
+            fh = open(self.root / LOCK_NAME, "w")
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            self._lock_fh = fh
+
+    def _release_publish_lock(self) -> None:
+        if self._lock_fh is not None:
+            fcntl.flock(self._lock_fh, fcntl.LOCK_UN)
+            self._lock_fh.close()
+            self._lock_fh = None
+
+    def abort_publication(self) -> None:
+        """Release the publish lock WITHOUT touching the pointer (idempotent; a no-op after a successful
+        finalize). The staged candidate stays on disk, never pointer-resolvable, awaiting retention."""
+        self._release_publish_lock()
 
     def publish_candidate(self, *, base_manifest: dict, binding: dict,
                           unknown_symbol_inventory: dict | None = None) -> dict:
         """Write the CANDIDATE manifest (publication_state='candidate', candidate_trust_sha256) into the
-        generation dir WITHOUT touching the pointer. A candidate is never pointer-resolvable, so an
-        interrupted publish leaves no half-live generation to be collected."""
-        manifest = build_manifest_v3(
-            base=base_manifest, generation_id=self.generation_id, published_at=time.time_ns(),
-            predecessor_generation_id=self._predecessor(), children=dict(self._children),
-            unknown_symbol_inventory=unknown_symbol_inventory or {}, binding=binding,
-            publication_state="candidate")
-        manifest["candidate_trust_sha256"] = candidate_trust_sha256(manifest)
-        body = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        (self.gen_dir / MANIFEST_NAME).write_bytes(body)
+        generation dir WITHOUT touching the pointer. Acquires the publish lock BEFORE the predecessor read
+        and holds it through finalize_and_publish (or abort_publication), so a concurrent publisher can
+        never stage against a predecessor that is about to be replaced. A candidate is never
+        pointer-resolvable, so an interrupted publish leaves no half-live generation to be collected."""
+        self._acquire_publish_lock()
+        try:
+            manifest = build_manifest_v3(
+                base=base_manifest, generation_id=self.generation_id, published_at=time.time_ns(),
+                predecessor_generation_id=self._predecessor(), children=dict(self._children),
+                unknown_symbol_inventory=unknown_symbol_inventory or {}, binding=binding,
+                publication_state="candidate")
+            manifest["candidate_trust_sha256"] = candidate_trust_sha256(manifest)
+            body = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            (self.gen_dir / MANIFEST_NAME).write_bytes(body)
+        except BaseException:
+            self._release_publish_lock()
+            raise
         return manifest
 
     def finalize_and_publish(self, *, candidate_manifest: dict, validation: dict, budget: dict) -> dict:
         """Produce the FINAL manifest (differs from the candidate ONLY in the CANDIDATE_MUTABLE_KEYS:
         publication_state->published, plus /validation and /budget) reproducing the identical
-        candidate_trust_sha256, then publish the pointer LAST under a process file lock held from the
-        predecessor read through the pointer replace."""
-        final = dict(candidate_manifest)
-        final["publication_state"] = "published"
-        final["validation"] = validation
-        final["budget"] = budget
-        if candidate_trust_sha256(final) != candidate_manifest.get("candidate_trust_sha256"):
-            raise PublishError("finalize changed a trust-critical field (candidate_trust_sha256 differs)")
-        body = (json.dumps(final, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        candidate_trust_sha256, then publish the pointer LAST. Runs under the publish lock held since
+        publish_candidate's predecessor read, and REVALIDATES the predecessor under that lock before the
+        replace — a candidate staged against a superseded predecessor fails instead of last-writer-winning
+        the generation chain. The lock is released on every exit path."""
+        try:
+            final = dict(candidate_manifest)
+            final["publication_state"] = "published"
+            final["validation"] = validation
+            final["budget"] = budget
+            if candidate_trust_sha256(final) != candidate_manifest.get("candidate_trust_sha256"):
+                raise PublishError("finalize changed a trust-critical field (candidate_trust_sha256 differs)")
+            body = (json.dumps(final, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
-        lock_path = self.root / LOCK_NAME
-        with open(lock_path, "w") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                (self.gen_dir / MANIFEST_NAME).write_bytes(body)   # overwrite candidate with final
-                pointer = {"schema_version": POINTER_SCHEMA, "generation_id": self.generation_id,
-                           "manifest_path": f"gen-{self.generation_id}/{MANIFEST_NAME}",
-                           "manifest_sha256": _sha256(body)}
-                ptr_body = (json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
-                tmp = self.root / f".{POINTER_NAME}.tmp-{os.getpid()}"
-                tmp.write_bytes(ptr_body)
-                os.replace(tmp, self.root / POINTER_NAME)          # atomic pointer publish, LAST
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+            self._acquire_publish_lock()               # no-op when held since publish_candidate
+            current = self._predecessor()
+            if current != candidate_manifest.get("predecessor_generation_id"):
+                raise PublishError(
+                    f"active generation changed since the candidate was staged "
+                    f"(pointer now {current!r}, candidate predecessor "
+                    f"{candidate_manifest.get('predecessor_generation_id')!r})")
+            (self.gen_dir / MANIFEST_NAME).write_bytes(body)   # overwrite candidate with final
+            pointer = {"schema_version": POINTER_SCHEMA, "generation_id": self.generation_id,
+                       "manifest_path": f"gen-{self.generation_id}/{MANIFEST_NAME}",
+                       "manifest_sha256": _sha256(body)}
+            ptr_body = (json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            tmp = self.root / f".{POINTER_NAME}.tmp-{os.getpid()}"
+            tmp.write_bytes(ptr_body)
+            os.replace(tmp, self.root / POINTER_NAME)          # atomic pointer publish, LAST
+        finally:
+            self._release_publish_lock()
         return final
 
 

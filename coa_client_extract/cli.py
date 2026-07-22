@@ -257,75 +257,55 @@ def regenerate(
 
     binding = {"topology": topology, "provenance": provenance, "policy_sha256": policy.sha256,
                "anchor_set_sha256": policy.anchor_sha256, "enum_policy_sha256": policy.enum_sha256}
+    # === the transaction window: candidate -> validation -> parity -> budget -> pointer flip. The publish
+    # lock is held from publish_candidate's predecessor read; ANY failure before the flip aborts (lock
+    # released, pointer untouched, the candidate left never-pointer-resolvable) (design A5, E0R.1 T3.4). ===
     candidate = gw.publish_candidate(base_manifest=base_manifest, binding=binding,
                                      unknown_symbol_inventory=unknown_symbol_inventory)
+    parity_sha = None
+    try:
+        # === validate the candidate BY PATH in BOTH Python and Node, before the pointer flips ===
+        validate_candidate_generation(gw.gen_dir)                 # per-child + streaming cross-child merge-join
+        if validate_with_node:
+            _node_validate_candidate(gw.gen_dir, node_lock_path)  # independent Node trust boundary
 
-    # === validate the candidate BY PATH in BOTH Python and Node, before the pointer flips (design A5) ===
-    validate_candidate_generation(gw.gen_dir)                 # per-child + streaming cross-child merge-join
-    if validate_with_node:
-        _node_validate_candidate(gw.gen_dir, node_lock_path)  # independent Node trust boundary
+        # === Builder parity is part of the candidate stage: a parity failure ABORTS publication ===
+        if builder_entries_path:
+            parity_sha = _write_parity_report(
+                out_dir, builder_entries_path, client_only_adjudication_path, coa_nodes=coa_nodes,
+                class_types=class_types, ca_layout=ca_layout, plan=plan, ca_member=ca_member,
+                ct_member=ct_member, tt_member=tt_member, ess_member=ess_member,
+                spell_member=spell_member, ca_decode_report=ca_decode_report)
 
-    # === three-part budget over the ACTUAL serialized generation (bytes + peak RSS + elapsed) (A4) ===
-    serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
-    elapsed_s = round(_time.monotonic() - started, 4)
-    peak_rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux ru_maxrss is KiB
-    budget_report = three_part_budget(serialized_bytes=serialized_bytes, peak_rss_mb=peak_rss_mb,
-                                      elapsed_s=elapsed_s, ceilings=ceilings)
-    if not budget_report["within_budget"]:
-        raise PublishError(f"regenerate exceeded the three-part budget: {budget_report['breach']}")
+        # === three-part budget over the ACTUAL serialized generation (bytes + peak RSS + elapsed) (A4) ===
+        serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
+        elapsed_s = round(_time.monotonic() - started, 4)
+        peak_rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux ru_maxrss is KiB
+        budget_report = three_part_budget(serialized_bytes=serialized_bytes, peak_rss_mb=peak_rss_mb,
+                                          elapsed_s=elapsed_s, ceilings=ceilings)
+        if not budget_report["within_budget"]:
+            raise PublishError(f"regenerate exceeded the three-part budget: {budget_report['breach']}")
 
-    # === publish the pointer LAST (candidate -> published; the trust digest is reproduced identically) ===
-    gw.finalize_and_publish(candidate_manifest=candidate,
-                            validation={"python": True, "node": bool(validate_with_node)},
-                            budget=budget_report)
+        # === publish the pointer LAST (candidate -> published; the trust digest reproduced identically) ===
+        gw.finalize_and_publish(candidate_manifest=candidate,
+                                validation={"python": True, "node": bool(validate_with_node)},
+                                budget=budget_report)
+    finally:
+        gw.abort_publication()      # idempotent: releases the publish lock on failure; no-op after finalize
 
     outputs = {name: meta["sha256"] for name, meta in gw._children.items()}
-    outputs["coa_client_extract.pointer.json"] = _sha256_bytes(
-        (out_dir / "coa_client_extract.pointer.json").read_bytes())
-
-    if builder_entries_path:
-        from .parity import build_parity_report, flip_gate_inputs, EXPECTED_BUILDER_RECORDS
-        builder_path = Path(builder_entries_path)
-        builder_entries = [json.loads(l) for l in builder_path.read_text().splitlines()]
-        low_conf, unresolved_cols = flip_gate_inputs(ca_layout)          # 2-tuple; adjacency folded in
-        pins = {
-            "client_build": _client_build(plan),
-            "extractor_commit": _extractor_commit(),                    # git HEAD of this extractor tree
-            "source_dbc_sha256": {
-                "CharacterAdvancement": hashlib.sha256(ca_member.data).hexdigest(),
-                "CharacterAdvancementClassTypes": hashlib.sha256(ct_member.data).hexdigest(),
-                "CharacterAdvancementTabTypes": hashlib.sha256(tt_member.data).hexdigest(),
-                "CharacterAdvancementEssence": hashlib.sha256(ess_member.data).hexdigest(),
-                "Spell": hashlib.sha256(spell_member.data).hexdigest(),
-            },
-            "builder_entries_file": builder_path.name,
-            "builder_entries_sha256": hashlib.sha256(builder_path.read_bytes()).hexdigest(),
-            "builder_record_count": len(builder_entries),
-            "builder_build_slugs": sorted({e.get("build_slug") for e in builder_entries
-                                           if e.get("build_slug")}),
-            "decode_report_sha256": (hashlib.sha256(Path(ca_decode_report).read_bytes()).hexdigest()
-                                     if ca_decode_report and Path(ca_decode_report).is_file() else None),
-            "resolved_class_set": sorted(c.class_type_id for c in class_types.values()
-                                         if c.kind == "coa_class"),
-            "layout_version": "m1-14-b",
-            "extraction_date": date.today().isoformat(),
-        }
-        adjudication = None
-        if client_only_adjudication_path and Path(client_only_adjudication_path).is_file():
-            adjudication = {int(k): v for k, v in
-                            json.loads(Path(client_only_adjudication_path).read_text())["records"].items()}
-        report = build_parity_report(
-            coa_nodes, builder_entries, class_types=class_types,
-            low_confidence_fields=low_conf, unresolved_layout_columns=unresolved_cols,
-            expected_builder_records=EXPECTED_BUILDER_RECORDS,
-            client_only_adjudication=adjudication, provenance=pins,
-        )
-        outputs["coa_builder_parity_report.json"] = write_json(
-            report, out_dir / "coa_builder_parity_report.json")
+    if parity_sha is not None:
+        outputs["coa_builder_parity_report.json"] = parity_sha
+    try:
+        outputs["coa_client_extract.pointer.json"] = _sha256_bytes(
+            (out_dir / "coa_client_extract.pointer.json").read_bytes())
+    except OSError:
+        outputs["coa_client_extract.pointer.json"] = None    # summary detail; never fails a publication
 
     # Noncanonical fixed-path compatibility summary, produced AFTER publication — never a generation child
-    # and never able to make regenerate() fail once the pointer flipped (design A5). The authoritative
-    # manifest is gen-<uuid>/manifest.json (coa-client-extract-manifest-v3).
+    # and never able to make regenerate() fail once the pointer flipped (design A5, ENFORCED below: the
+    # write is best-effort and a failure is reported in-band). The authoritative manifest is
+    # gen-<uuid>/manifest.json (coa-client-extract-manifest-v3).
     manifest = build_manifest(
         backend_name=getattr(backend, "name", "unknown"),
         backend_version=getattr(backend, "version", "unknown"),
@@ -343,8 +323,56 @@ def regenerate(
     manifest["unknown_symbol_inventory"] = unknown_symbol_inventory
     manifest["spell_policy_sha256"] = policy.sha256
     manifest["icon_coverage"] = icon_cov
-    write_json(manifest, out_dir / "coa_client_extract_manifest.json")
+    try:
+        write_json(manifest, out_dir / "coa_client_extract_manifest.json")
+    except OSError as exc:
+        manifest["summary_write_error"] = str(exc)           # reported in-band; publication already complete
     return manifest
+
+
+def _write_parity_report(out_dir: Path, builder_entries_path, client_only_adjudication_path, *,
+                         coa_nodes, class_types, ca_layout, plan, ca_member, ct_member, tt_member,
+                         ess_member, spell_member, ca_decode_report) -> str:
+    """Build + write the Builder parity report DURING the candidate stage (E0R.1 T3.4): any failure here
+    (unreadable/malformed builder entries, a parity invariant, the report write itself) aborts publication
+    before the pointer flips. Returns the written report's sha256 for the fixed-path summary outputs."""
+    from .parity import build_parity_report, flip_gate_inputs, EXPECTED_BUILDER_RECORDS
+    builder_path = Path(builder_entries_path)
+    builder_entries = [json.loads(l) for l in builder_path.read_text().splitlines()]
+    low_conf, unresolved_cols = flip_gate_inputs(ca_layout)          # 2-tuple; adjacency folded in
+    pins = {
+        "client_build": _client_build(plan),
+        "extractor_commit": _extractor_commit(),                    # git HEAD of this extractor tree
+        "source_dbc_sha256": {
+            "CharacterAdvancement": hashlib.sha256(ca_member.data).hexdigest(),
+            "CharacterAdvancementClassTypes": hashlib.sha256(ct_member.data).hexdigest(),
+            "CharacterAdvancementTabTypes": hashlib.sha256(tt_member.data).hexdigest(),
+            "CharacterAdvancementEssence": hashlib.sha256(ess_member.data).hexdigest(),
+            "Spell": hashlib.sha256(spell_member.data).hexdigest(),
+        },
+        "builder_entries_file": builder_path.name,
+        "builder_entries_sha256": hashlib.sha256(builder_path.read_bytes()).hexdigest(),
+        "builder_record_count": len(builder_entries),
+        "builder_build_slugs": sorted({e.get("build_slug") for e in builder_entries
+                                       if e.get("build_slug")}),
+        "decode_report_sha256": (hashlib.sha256(Path(ca_decode_report).read_bytes()).hexdigest()
+                                 if ca_decode_report and Path(ca_decode_report).is_file() else None),
+        "resolved_class_set": sorted(c.class_type_id for c in class_types.values()
+                                     if c.kind == "coa_class"),
+        "layout_version": "m1-14-b",
+        "extraction_date": date.today().isoformat(),
+    }
+    adjudication = None
+    if client_only_adjudication_path and Path(client_only_adjudication_path).is_file():
+        adjudication = {int(k): v for k, v in
+                        json.loads(Path(client_only_adjudication_path).read_text())["records"].items()}
+    report = build_parity_report(
+        coa_nodes, builder_entries, class_types=class_types,
+        low_confidence_fields=low_conf, unresolved_layout_columns=unresolved_cols,
+        expected_builder_records=EXPECTED_BUILDER_RECORDS,
+        client_only_adjudication=adjudication, provenance=pins,
+    )
+    return write_json(report, out_dir / "coa_builder_parity_report.json")
 
 
 def _client_build(plan: ArchivePlan) -> str:
