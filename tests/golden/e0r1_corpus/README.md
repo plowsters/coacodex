@@ -28,6 +28,9 @@ raw_only join — the reviewed_ambiguous state), `spell_icon_id` (string join, n
 | `projection_carries_raw` | ❌ | wrong dialect (projection must be rich only) |
 | `missing_field_observations` | ❌ | projection lacks `field_observations` |
 | `unresolved_join_populated` | ❌ | absent join carries a mechanics value |
+| `index_zero_join_not_populated` | ✅ | fk==0 join (components WITHOUT `side_value`), not eligible, not populated — the verifier must not touch `components.side_value` (pre-T3.3 Python KeyErrored here) |
+| `side_row_missing_join_not_populated` | ✅ | nonzero fk with no side row, same no-`side_value` shape |
+| `index_zero_join_populated` | ❌ | unresolved (fk==0) join carries a mechanics value — must fail the biconditional as a ValueError, never crash |
 
 ## `full_rows.jsonl` — compact `raw` dialect (full-domain row semantics: Node T3.1)
 | case | accept | violates |

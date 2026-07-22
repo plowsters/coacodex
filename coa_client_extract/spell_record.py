@@ -468,9 +468,10 @@ def verify_row_against_policy(row: dict, policy_doc: dict) -> None:
                 _verify_scalar_claims(row.get("spell_id"), field, c, policy_doc)
         else:
             _verify_scalar_claims(row.get("spell_id"), field, obs, policy_doc)
-        pol = (resolve_policy_ref(policy_doc, obs["components"]["side_value"]["policy_ref"])
-               if obs.get("components") else resolve_policy_ref(policy_doc, obs["policy_ref"]))
-        eligible = eligible_from_row(obs, pol, policy_doc)
+        # eligible_from_row only reads `pol` on the scalar branch; a join's eligibility comes from
+        # policy_doc['joins'] + its components, so no side_value lookup happens here.
+        scalar_pol = None if obs.get("components") else resolve_policy_ref(policy_doc, obs["policy_ref"])
+        eligible = eligible_from_row(obs, scalar_pol, policy_doc)
         if field == "id":
             value = row.get("spell_id")
         elif field in mech:
@@ -484,6 +485,10 @@ def verify_row_against_policy(row: dict, policy_doc: dict) -> None:
             raise ValueError(f"{row.get('spell_id')}:{field} eligible={eligible} populated={populated}")
         if not populated:
             continue
+        # Resolve the value's policy node ONLY when populated: an unresolved join (index_zero/
+        # side_row_missing) has no side_value component, and a resolved join always does (Node's guard).
+        pol = (scalar_pol if scalar_pol is not None
+               else resolve_policy_ref(policy_doc, obs["components"]["side_value"]["policy_ref"]))
         if pol.get("kind") == "string":
             resolved = obs["components"]["side_value"]["resolved"] if obs.get("components") else obs.get("resolved")
             if value != resolved:

@@ -212,22 +212,46 @@ def _identity_agrees(frow, prow) -> None:
         raise ResolveError(f"identity_agrees: spell {frow['spell_id']} attribution differs full vs projection")
 
 
-def _cross_child(gen_dir: Path) -> None:
+def _verify_icon_row(r: dict) -> None:
+    """Icon id/path agreement (mirrors Node verifyIconRow): a valid asset_status, a placeholder
+    (unresolved join) has a null client_path while a resolved status carries one, and converted_ref
+    exists iff the row is `converted`."""
+    status = r.get("asset_status")
+    if status not in ICON_ASSET_STATUSES:
+        raise ResolveError(f"icon asset_status {status!r} not in {ICON_ASSET_STATUSES}")
+    if status != "converted" and r.get("converted_ref"):
+        raise ResolveError(f"icon {r.get('spell_id')}: non-converted row carries a converted_ref")
+    if status == "converted" and not r.get("converted_ref"):
+        raise ResolveError(f"icon {r.get('spell_id')}: converted row missing converted_ref")
+    if status == "placeholder" and r.get("client_path") is not None:
+        raise ResolveError(f"icon id/path: placeholder spell {r.get('spell_id')} carries a client_path")
+    if status in ("source_only", "converted") and r.get("client_path") is None:
+        raise ResolveError(f"icon id/path: {status} spell {r.get('spell_id')} missing client_path")
+
+
+def _cross_child(gen_dir: Path, children: dict) -> None:
     """Streaming merge-join over ascending spell_id across the three spell children (design A5) — cursors
     only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain, the disjoint
     v3 dialects (full=compact `raw`, projection=rich `field_observations`), identity/mechanics/attribution
     agreement, the compact_raw_expands_to_envelope EQUALITY (expand(full.raw) == projection.field_observations),
-    icon coverage, and sorted-unique ids."""
+    the icon catalog as EXACTLY the full domain (lockstep 1:1 — a missing, orphan, or trailing icon row
+    fails), per-row icon id/path agreement, converted->bundle-required, and sorted-unique ids."""
     policy = load_spell_policy(json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
     full = _Cursor(_read_jsonl(gen_dir / "coa_client_spell.jsonl"), "full")
     proj = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_coa.jsonl"), "projection")
     icons = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"), "icons")
+    any_converted = False
     while full.row is not None:
         sid = full.row["spell_id"]
-        while icons.row is not None and icons.row["spell_id"] < sid:
-            icons.advance()
-        if icons.row is None or icons.row["spell_id"] != sid:
+        # The icon catalog advances in LOCKSTEP with the full table: exactly one icon row per full row,
+        # so an orphan icon (below/between full ids) is a mismatch, never silently skipped.
+        if icons.row is None:
             raise ResolveError(f"icons_agree: spell {sid} lacks an icon-catalog row")
+        if icons.row["spell_id"] != sid:
+            raise ResolveError(f"icons_agree: icon row spell_id {icons.row['spell_id']} != full {sid}")
+        _verify_icon_row(icons.row)
+        any_converted = any_converted or icons.row.get("asset_status") == "converted"
+        icons.advance()
         if proj.row is not None and proj.row["spell_id"] < sid:
             raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
         # The full child is the COMPACT dialect: it carries `raw`, never `field_observations`.
@@ -253,17 +277,9 @@ def _cross_child(gen_dir: Path) -> None:
         full.advance()
     if proj.row is not None:
         raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
-
-
-def _icon_bundle(gen_dir: Path, children: dict) -> None:
-    for r in _read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"):
-        if r.get("asset_status") not in ICON_ASSET_STATUSES:
-            raise ResolveError(f"icon asset_status {r.get('asset_status')!r} not in {ICON_ASSET_STATUSES}")
-        if r.get("asset_status") != "converted" and r.get("converted_ref"):
-            raise ResolveError("non-converted icon row carries a converted_ref")
-    converted = any(r.get("asset_status") == "converted"
-                    for r in _read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"))
-    if converted and "coa_client_spell_icons.bundle.tar" not in children:
+    if icons.row is not None:
+        raise ResolveError(f"icons_agree: trailing icon row {icons.row['spell_id']} beyond the full domain")
+    if any_converted and "coa_client_spell_icons.bundle.tar" not in children:
         raise ResolveError("icon bundle required: a converted row exists but no bundle child is registered")
 
 
@@ -314,8 +330,7 @@ def validate_candidate_generation(gen_dir: Path) -> dict:
     for name in REQUIRED_CHILDREN:
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the candidate generation")
-    _cross_child(gen_dir)
-    _icon_bundle(gen_dir, manifest.get("children", {}))
+    _cross_child(gen_dir, manifest.get("children", {}))
     return {"gen_dir": gen_dir, "manifest": manifest, "children": resolved}
 
 

@@ -28,7 +28,8 @@ def _stage(root: Path, *, full=None, proj=None, icons=None):
     proj = proj if proj is not None else [_proj(1)]
     if icons is None:
         icons = [{"schema_version": "coa-client-spell-icons-v1", "spell_id": r["spell_id"],
-                  "asset_status": "source_only"} for r in full]
+                  "asset_status": "source_only",
+                  "client_path": f"Interface/Icons/S{r['spell_id']}.blp"} for r in full]
     gw = GenerationWriter(root)
     gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
@@ -112,7 +113,8 @@ def test_valid_candidate_passes_cross_child(tmp_path):
 
 def test_icon_bundle_required_when_any_converted(tmp_path):
     gw = _stage(tmp_path, icons=[{"schema_version": "coa-client-spell-icons-v1", "spell_id": 1,
-                                  "asset_status": "converted", "converted_ref": "icons.tar#a.png"}])
+                                  "asset_status": "converted", "converted_ref": "icons.tar#a.png",
+                                  "client_path": "Interface/Icons/S1.blp"}])
     with pytest.raises(ResolveError, match="icon bundle required"):
         validate_candidate_generation(gw.gen_dir)
 
