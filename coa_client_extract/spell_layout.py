@@ -153,6 +153,32 @@ def _validate_bound(bound: dict) -> dict:
     return bound
 
 
+_BUDGET_CEILINGS = ("max_serialized_bytes_per_child", "max_whole_generation_bytes",
+                    "python_peak_rss_mb", "python_elapsed_s", "node_peak_rss_mb", "node_elapsed_s")
+
+
+def _validate_budget(budget: dict) -> None:
+    """The policy-bound ceilings block (E0R.1 T4.3): six positive-int ceilings + optional per-child
+    overrides keyed by plain child filenames (no separators/traversal)."""
+    if not isinstance(budget, dict):
+        raise SpellPolicyError("budget must be a dict")
+    for key in _BUDGET_CEILINGS:
+        v = budget.get(key)
+        if type(v) is not int or isinstance(v, bool) or v <= 0:
+            raise SpellPolicyError(f"budget.{key} must be a positive int")
+    overrides = budget.get("per_child_overrides", {})
+    if not isinstance(overrides, dict):
+        raise SpellPolicyError("budget.per_child_overrides must be a dict")
+    for name, v in overrides.items():
+        if not name or "/" in name or "\\" in name or ".." in name:
+            raise SpellPolicyError(f"budget.per_child_overrides key {name!r} is not a plain child name")
+        if type(v) is not int or isinstance(v, bool) or v <= 0:
+            raise SpellPolicyError(f"budget.per_child_overrides[{name!r}] must be a positive int")
+    unknown = set(budget) - set(_BUDGET_CEILINGS) - {"per_child_overrides"}
+    if unknown:
+        raise SpellPolicyError(f"budget has unknown keys {sorted(unknown)}")
+
+
 def load_spell_policy(payload: dict) -> SpellPolicy:
     if payload.get("schema_version") != SCHEMA:
         raise SpellPolicyError(f"schema_version must be {SCHEMA!r} (coa-spell-layout-v2)")
@@ -232,6 +258,10 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
             raise SpellPolicyError("bound.tables must equal required_tables (every required table is bound)")
         if set(bound.get("expected_absent", [])) != set(expected_absent):
             raise SpellPolicyError("bound.expected_absent must equal the policy expected_absent set")
+
+    budget = payload.get("budget")
+    if budget is not None:
+        _validate_budget(budget)
 
     declared = payload.get("sha256")
     recomputed = _sha({k: v for k, v in payload.items() if k != "sha256"})

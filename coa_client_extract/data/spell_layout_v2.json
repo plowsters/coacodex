@@ -1,135 +1,192 @@
 {
-  "schema_version": "coa-spell-layout-v2",
-  "reviewed": true,
-  "provenance_note": "E0R structured bound authored from real-client recon (build 3.3.5a+patch-CZZ). Every required table byte-bound by sha256 + full WDBC header + logical member/effective-archive/patch-chain. M1.14E0R.1 T1.2 adjudicates all four side-table joins: spell_icon_id ADOPTED at cell 133 (joined-pair value-anchor discovery from Builder-payload icon paths, non-circular blind plurality 293:1); casting_time_index/duration_index/range_index reviewed_ambiguous (null cell, raw_only). T1.3 DEMOTES power_type to raw_only@41 with a withheld decode (no static signed anchor; value 7 unknown); power_type=7 stays withheld per-value. No field is normalized-authorized beyond id/name/school_mask.",
-  "bound": {
-    "client_build": "3.3.5a+patch-CZZ",
-    "expected_absent": [
-      "SpellEffect",
-      "SpellCooldowns"
-    ],
-    "tables": {
-      "Spell": {
-        "sha256": "7763bb517f8c77419a562d32d037cd4831f7853fbcf0add244c6e4b6c3949767",
-        "header": {
-          "field_count": 234,
-          "magic": "WDBC",
-          "record_count": 208444,
-          "record_size": 936,
-          "string_block_size": 13259628
-        },
-        "source": {
-          "member": "DBFilesClient\\Spell.dbc",
-          "effective_archive": "patch-T.MPQ",
-          "patch_chain": [
-            "patch-T.MPQ"
-          ]
-        }
-      },
-      "SpellCastTimes": {
-        "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981",
-        "header": {
-          "field_count": 4,
-          "magic": "WDBC",
-          "record_count": 71,
-          "record_size": 16,
-          "string_block_size": 0
-        },
-        "source": {
-          "member": "DBFilesClient\\SpellCastTimes.dbc",
-          "effective_archive": "patch-S.MPQ",
-          "patch_chain": [
-            "patch-S.MPQ"
-          ]
-        }
-      },
-      "SpellDuration": {
-        "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0",
-        "header": {
-          "field_count": 4,
-          "magic": "WDBC",
-          "record_count": 866,
-          "record_size": 16,
-          "string_block_size": 0
-        },
-        "source": {
-          "member": "DBFilesClient\\SpellDuration.dbc",
-          "effective_archive": "patch-S.MPQ",
-          "patch_chain": [
-            "patch-S.MPQ"
-          ]
-        }
-      },
-      "SpellRange": {
-        "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd",
-        "header": {
-          "field_count": 40,
-          "magic": "WDBC",
-          "record_count": 323,
-          "record_size": 160,
-          "string_block_size": 3707
-        },
-        "source": {
-          "member": "DBFilesClient\\SpellRange.dbc",
-          "effective_archive": "patch-S.MPQ",
-          "patch_chain": [
-            "patch-S.MPQ"
-          ]
-        }
-      },
-      "SpellIcon": {
-        "sha256": "14c60e7da6a536f5d31b89bf9861d56ce08bcdca7fde676ae727c5ae5a1f2977",
-        "header": {
-          "field_count": 2,
-          "magic": "WDBC",
-          "record_count": 16354,
-          "record_size": 8,
-          "string_block_size": 654241
-        },
-        "source": {
-          "member": "DBFilesClient\\SpellIcon.dbc",
-          "effective_archive": "patch-S.MPQ",
-          "patch_chain": [
-            "patch-S.MPQ"
-          ]
-        }
-      }
-    }
-  },
-  "required_tables": [
-    "Spell",
-    "SpellCastTimes",
-    "SpellDuration",
-    "SpellRange",
-    "SpellIcon"
-  ],
-  "expected_absent": [
-    "SpellEffect",
-    "SpellCooldowns"
-  ],
-  "enum_policy": {
-    "power_types": [
-      -2,
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6
-    ],
-    "school_bits": [
-      1,
-      2,
-      4,
-      8,
-      16,
-      32,
-      64
-    ],
-    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
-  },
   "anchor_set": {
+    "joins": {
+      "casting_time_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellCastTimes"
+      },
+      "duration_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellDuration"
+      },
+      "range_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellRange"
+      },
+      "spell_icon_id": {
+        "anchors": [
+          {
+            "expected_state": "resolved",
+            "expected_value": 28001,
+            "spell_id": 92081
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 27327,
+            "spell_id": 300695
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 27330,
+            "spell_id": 500715
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 7504,
+            "spell_id": 511109
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 4932,
+            "spell_id": 560057
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 2719,
+            "spell_id": 561215
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 140,
+            "spell_id": 680496
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 13612,
+            "spell_id": 704115
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 5944,
+            "spell_id": 704947
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 64337,
+            "spell_id": 705565
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 34438,
+            "spell_id": 707364
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 24445,
+            "spell_id": 804892
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 7685,
+            "spell_id": 806100
+          }
+        ],
+        "evidence": "Builder-payload icon paths mapped through the hash-bound client SpellIcon.dbc to unique icon ids; jointly-unique discovery adopts cell 133. Provenance below lists each anchor's Builder spell + scraped icon path.",
+        "provenance": [
+          {
+            "class_name": "Barbarian",
+            "icon": "Interface\\Icons\\_Orc_06",
+            "icon_id": 28001,
+            "name": "Excessive Power",
+            "spell_id": 92081
+          },
+          {
+            "class_name": "Primalist",
+            "icon": "Interface\\Icons\\_D3earthquake",
+            "icon_id": 27327,
+            "name": "Blessed by the Earth",
+            "spell_id": 300695
+          },
+          {
+            "class_name": "Cultist",
+            "icon": "Interface\\Icons\\_D3energyarmor",
+            "icon_id": 27330,
+            "name": "Void Shield",
+            "spell_id": 500715
+          },
+          {
+            "class_name": "Pyromancer",
+            "icon": "Interface\\Icons\\achievment_boss_madnessofdeathwing",
+            "icon_id": 7504,
+            "name": "Breath of Neltharion",
+            "spell_id": 511109
+          },
+          {
+            "class_name": "Felsworn",
+            "icon": "Interface\\Icons\\ability_demonhunter_felblade",
+            "icon_id": 4932,
+            "name": "Chaos Soldier",
+            "spell_id": 560057
+          },
+          {
+            "class_name": "Necromancer",
+            "icon": "Interface\\Icons\\Spell_DeathKnight_EmpowerRuneBlade",
+            "icon_id": 2719,
+            "name": "Forbidden Technique",
+            "spell_id": 561215
+          },
+          {
+            "class_name": "Witch Hunter",
+            "icon": "Interface\\Icons\\Spell_Shadow_SealOfKings",
+            "icon_id": 140,
+            "name": "Bulwark of Darkness",
+            "spell_id": 680496
+          },
+          {
+            "class_name": "Bloodmage",
+            "icon": "Interface\\Icons\\inv_hand_1h_pvpdraenors2_d_01",
+            "icon_id": 13612,
+            "name": "Clotting",
+            "spell_id": 704115
+          },
+          {
+            "class_name": "Sun Cleric",
+            "icon": "Interface\\Icons\\ability_skyreach_solar_burst",
+            "icon_id": 5944,
+            "name": "Radiant Marks",
+            "spell_id": 704947
+          },
+          {
+            "class_name": "Runemaster",
+            "icon": "Interface\\icons\\nhi_watersword_Border",
+            "icon_id": 64337,
+            "name": "Waveforged",
+            "spell_id": 705565
+          },
+          {
+            "class_name": "Templar",
+            "icon": "Interface\\Icons\\custom_23_Light_blow_Border",
+            "icon_id": 34438,
+            "name": "Guardian of the Light",
+            "spell_id": 707364
+          },
+          {
+            "class_name": "Guardian",
+            "icon": "Interface\\Icons\\sha_ability_rogue_sturdyrecuperate",
+            "icon_id": 24445,
+            "name": "Refuse To Die",
+            "spell_id": 804892
+          },
+          {
+            "class_name": "Stormbringer",
+            "icon": "Interface\\Icons\\5_shamanskill41nobg_Border",
+            "icon_id": 7685,
+            "name": "Fog",
+            "spell_id": 806100
+          }
+        ],
+        "side_id_cell": 0,
+        "side_table": "SpellIcon",
+        "side_value_cells": [
+          0
+        ],
+        "side_value_kind": "uint32"
+      }
+    },
+    "sha256": "7d8fbc798fba05d5ce5d81e56ecd002629f4b043025ed1f2e2cd08f79fe759f4",
     "spells": [
       {
         "id": 133,
@@ -179,270 +236,254 @@
         "power_type": 3,
         "school_mask": 1
       }
-    ],
-    "joins": {
-      "casting_time_index": {
-        "side_table": "SpellCastTimes",
-        "adjudication": "reviewed_ambiguous",
-        "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
-      },
-      "duration_index": {
-        "side_table": "SpellDuration",
-        "adjudication": "reviewed_ambiguous",
-        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
-      },
-      "range_index": {
-        "side_table": "SpellRange",
-        "adjudication": "reviewed_ambiguous",
-        "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
-      },
-      "spell_icon_id": {
-        "side_table": "SpellIcon",
-        "side_id_cell": 0,
-        "side_value_cells": [
-          0
-        ],
-        "side_value_kind": "uint32",
-        "evidence": "Builder-payload icon paths mapped through the hash-bound client SpellIcon.dbc to unique icon ids; jointly-unique discovery adopts cell 133. Provenance below lists each anchor's Builder spell + scraped icon path.",
-        "provenance": [
-          {
-            "spell_id": 92081,
-            "name": "Excessive Power",
-            "class_name": "Barbarian",
-            "icon": "Interface\\Icons\\_Orc_06",
-            "icon_id": 28001
-          },
-          {
-            "spell_id": 300695,
-            "name": "Blessed by the Earth",
-            "class_name": "Primalist",
-            "icon": "Interface\\Icons\\_D3earthquake",
-            "icon_id": 27327
-          },
-          {
-            "spell_id": 500715,
-            "name": "Void Shield",
-            "class_name": "Cultist",
-            "icon": "Interface\\Icons\\_D3energyarmor",
-            "icon_id": 27330
-          },
-          {
-            "spell_id": 511109,
-            "name": "Breath of Neltharion",
-            "class_name": "Pyromancer",
-            "icon": "Interface\\Icons\\achievment_boss_madnessofdeathwing",
-            "icon_id": 7504
-          },
-          {
-            "spell_id": 560057,
-            "name": "Chaos Soldier",
-            "class_name": "Felsworn",
-            "icon": "Interface\\Icons\\ability_demonhunter_felblade",
-            "icon_id": 4932
-          },
-          {
-            "spell_id": 561215,
-            "name": "Forbidden Technique",
-            "class_name": "Necromancer",
-            "icon": "Interface\\Icons\\Spell_DeathKnight_EmpowerRuneBlade",
-            "icon_id": 2719
-          },
-          {
-            "spell_id": 680496,
-            "name": "Bulwark of Darkness",
-            "class_name": "Witch Hunter",
-            "icon": "Interface\\Icons\\Spell_Shadow_SealOfKings",
-            "icon_id": 140
-          },
-          {
-            "spell_id": 704115,
-            "name": "Clotting",
-            "class_name": "Bloodmage",
-            "icon": "Interface\\Icons\\inv_hand_1h_pvpdraenors2_d_01",
-            "icon_id": 13612
-          },
-          {
-            "spell_id": 704947,
-            "name": "Radiant Marks",
-            "class_name": "Sun Cleric",
-            "icon": "Interface\\Icons\\ability_skyreach_solar_burst",
-            "icon_id": 5944
-          },
-          {
-            "spell_id": 705565,
-            "name": "Waveforged",
-            "class_name": "Runemaster",
-            "icon": "Interface\\icons\\nhi_watersword_Border",
-            "icon_id": 64337
-          },
-          {
-            "spell_id": 707364,
-            "name": "Guardian of the Light",
-            "class_name": "Templar",
-            "icon": "Interface\\Icons\\custom_23_Light_blow_Border",
-            "icon_id": 34438
-          },
-          {
-            "spell_id": 804892,
-            "name": "Refuse To Die",
-            "class_name": "Guardian",
-            "icon": "Interface\\Icons\\sha_ability_rogue_sturdyrecuperate",
-            "icon_id": 24445
-          },
-          {
-            "spell_id": 806100,
-            "name": "Fog",
-            "class_name": "Stormbringer",
-            "icon": "Interface\\Icons\\5_shamanskill41nobg_Border",
-            "icon_id": 7685
-          }
-        ],
-        "anchors": [
-          {
-            "spell_id": 92081,
-            "expected_state": "resolved",
-            "expected_value": 28001
-          },
-          {
-            "spell_id": 300695,
-            "expected_state": "resolved",
-            "expected_value": 27327
-          },
-          {
-            "spell_id": 500715,
-            "expected_state": "resolved",
-            "expected_value": 27330
-          },
-          {
-            "spell_id": 511109,
-            "expected_state": "resolved",
-            "expected_value": 7504
-          },
-          {
-            "spell_id": 560057,
-            "expected_state": "resolved",
-            "expected_value": 4932
-          },
-          {
-            "spell_id": 561215,
-            "expected_state": "resolved",
-            "expected_value": 2719
-          },
-          {
-            "spell_id": 680496,
-            "expected_state": "resolved",
-            "expected_value": 140
-          },
-          {
-            "spell_id": 704115,
-            "expected_state": "resolved",
-            "expected_value": 13612
-          },
-          {
-            "spell_id": 704947,
-            "expected_state": "resolved",
-            "expected_value": 5944
-          },
-          {
-            "spell_id": 705565,
-            "expected_state": "resolved",
-            "expected_value": 64337
-          },
-          {
-            "spell_id": 707364,
-            "expected_state": "resolved",
-            "expected_value": 34438
-          },
-          {
-            "spell_id": 804892,
-            "expected_state": "resolved",
-            "expected_value": 24445
-          },
-          {
-            "spell_id": 806100,
-            "expected_state": "resolved",
-            "expected_value": 7685
-          }
-        ]
-      }
-    },
-    "sha256": "7d8fbc798fba05d5ce5d81e56ecd002629f4b043025ed1f2e2cd08f79fe759f4"
+    ]
   },
+  "bound": {
+    "client_build": "3.3.5a+patch-CZZ",
+    "expected_absent": [
+      "SpellEffect",
+      "SpellCooldowns"
+    ],
+    "tables": {
+      "Spell": {
+        "header": {
+          "field_count": 234,
+          "magic": "WDBC",
+          "record_count": 208444,
+          "record_size": 936,
+          "string_block_size": 13259628
+        },
+        "sha256": "7763bb517f8c77419a562d32d037cd4831f7853fbcf0add244c6e4b6c3949767",
+        "source": {
+          "effective_archive": "patch-T.MPQ",
+          "member": "DBFilesClient\\Spell.dbc",
+          "patch_chain": [
+            "patch-T.MPQ"
+          ]
+        }
+      },
+      "SpellCastTimes": {
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 71,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellCastTimes.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellDuration": {
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 866,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellDuration.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellIcon": {
+        "header": {
+          "field_count": 2,
+          "magic": "WDBC",
+          "record_count": 16354,
+          "record_size": 8,
+          "string_block_size": 654241
+        },
+        "sha256": "14c60e7da6a536f5d31b89bf9861d56ce08bcdca7fde676ae727c5ae5a1f2977",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellIcon.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellRange": {
+        "header": {
+          "field_count": 40,
+          "magic": "WDBC",
+          "record_count": 323,
+          "record_size": 160,
+          "string_block_size": 3707
+        },
+        "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellRange.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      }
+    }
+  },
+  "budget": {
+    "max_serialized_bytes_per_child": 471859200,
+    "max_whole_generation_bytes": 536870912,
+    "node_elapsed_s": 1200,
+    "node_peak_rss_mb": 4096,
+    "python_elapsed_s": 1200,
+    "python_peak_rss_mb": 4096
+  },
+  "enum_policy": {
+    "power_types": [
+      -2,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "school_bits": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
+  },
+  "expected_absent": [
+    "SpellEffect",
+    "SpellCooldowns"
+  ],
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "promotion": "raw_only",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    },
+    "duration_ms": {
+      "index_field": "duration_index",
+      "promotion": "raw_only",
+      "side_table": "SpellDuration",
+      "side_value_field": "base_ms"
+    },
+    "range_max_yd": {
+      "index_field": "range_index",
+      "promotion": "raw_only",
+      "side_table": "SpellRange",
+      "side_value_field": "max_yd"
+    },
+    "range_min_yd": {
+      "index_field": "range_index",
+      "promotion": "raw_only",
+      "side_table": "SpellRange",
+      "side_value_field": "min_yd"
+    },
+    "spell_icon_id": {
+      "index_field": "spell_icon_id",
+      "promotion": "normalized",
+      "side_table": "SpellIcon",
+      "side_value_field": "path"
+    }
+  },
+  "provenance_note": "E0R structured bound authored from real-client recon (build 3.3.5a+patch-CZZ). Every required table byte-bound by sha256 + full WDBC header + logical member/effective-archive/patch-chain. M1.14E0R.1 T1.2 adjudicates all four side-table joins: spell_icon_id ADOPTED at cell 133 (joined-pair value-anchor discovery from Builder-payload icon paths, non-circular blind plurality 293:1); casting_time_index/duration_index/range_index reviewed_ambiguous (null cell, raw_only). T1.3 DEMOTES power_type to raw_only@41 with a withheld decode (no static signed anchor; value 7 unknown); power_type=7 stays withheld per-value. No field is normalized-authorized beyond id/name/school_mask.",
+  "required_tables": [
+    "Spell",
+    "SpellCastTimes",
+    "SpellDuration",
+    "SpellRange",
+    "SpellIcon"
+  ],
+  "reviewed": true,
+  "schema_version": "coa-spell-layout-v2",
+  "sha256": "e206fbb87361b484fb23f0cb1ce9653adf3a0977cebbd6d5cbe247396403a159",
   "tables": {
     "Spell": {
       "expected_field_count": 234,
       "fields": {
-        "id": {
-          "cell": 0,
+        "casting_time_index": {
+          "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
           "kind": "uint32",
-          "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "spell id; M1.14A/B id anchor, unique across 208431 rows."
-        },
-        "name": {
-          "cell": 136,
-          "kind": "string",
-          "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "localized enUS name @136; normalized-exact match on 8 stock spells (Fireball 133, Frostbolt 116, Smite 585, Heroic Strike 78, Shadow Bolt 686, Wrath 5176, Arcane Explosion 1449, Eviscerate 2098) vs real client 3.3.5a+patch-CZZ."
-        },
-        "power_type": {
-          "cell": 41,
-          "kind": "int32",
-          "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "power_type at cell 41 (the stock-3.3.5 @110 is wrong on this client), enum mapping evidenced by 8 anchors (rage=1 Heroic Strike, energy=3 Eviscerate, etc.). DEMOTED to raw_only in M1.14E0R.1 T1.3: the signed int32 reading has NO static health-cost anchor and value 7 is an unknown symbol, so the full semantic decode is WITHHELD (the streaming producer emits decoded_reason 'proof_withheld' and no normalized power_type, for every value including 7). layout stays verified (the cell is proven); interpretation is reference (documented enum, not authoritative). Re-promotion awaits a static negative anchor + resolution of value 7."
-        },
-        "school_mask": {
-          "cell": 225,
-          "kind": "uint32",
-          "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "confirmed @225 via 7 single-school anchors (Physical=1,Holy=2,Fire=4,Nature=8,Frost=16,Shadow=32,Arcane=64); stock 3.3.5a @139 is wrong on this client."
+          "layout": "unproven",
+          "promotion": "raw_only"
         },
         "description": {
           "cell": 170,
+          "evidence": "tooltip text @170 confirmed on anchors (Fireball/Smite/etc.); tooltip macros ($s1) are unresolved templates, so interpretation is reference, not verified.",
+          "interpretation": "reference",
           "kind": "string",
           "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "tooltip text @170 confirmed on anchors (Fireball/Smite/etc.); tooltip macros ($s1) are unresolved templates, so interpretation is reference, not verified."
-        },
-        "casting_time_index": {
-          "cell": null,
-          "kind": "uint32",
-          "layout": "unproven",
-          "interpretation": "unproven",
-          "promotion": "raw_only",
-          "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
+          "promotion": "raw_only"
         },
         "duration_index": {
           "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
           "kind": "uint32",
           "layout": "unproven",
-          "interpretation": "unproven",
-          "promotion": "raw_only",
-          "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "spell id; M1.14A/B id anchor, unique across 208431 rows.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "name": {
+          "cell": 136,
+          "evidence": "localized enUS name @136; normalized-exact match on 8 stock spells (Fireball 133, Frostbolt 116, Smite 585, Heroic Strike 78, Shadow Bolt 686, Wrath 5176, Arcane Explosion 1449, Eviscerate 2098) vs real client 3.3.5a+patch-CZZ.",
+          "interpretation": "verified",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "power_type": {
+          "cell": 41,
+          "evidence": "power_type at cell 41 (the stock-3.3.5 @110 is wrong on this client), enum mapping evidenced by 8 anchors (rage=1 Heroic Strike, energy=3 Eviscerate, etc.). DEMOTED to raw_only in M1.14E0R.1 T1.3: the signed int32 reading has NO static health-cost anchor and value 7 is an unknown symbol, so the full semantic decode is WITHHELD (the streaming producer emits decoded_reason 'proof_withheld' and no normalized power_type, for every value including 7). layout stays verified (the cell is proven); interpretation is reference (documented enum, not authoritative). Re-promotion awaits a static negative anchor + resolution of value 7.",
+          "interpretation": "reference",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "raw_only"
         },
         "range_index": {
           "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
           "kind": "uint32",
           "layout": "unproven",
-          "interpretation": "unproven",
-          "promotion": "raw_only",
-          "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1."
+          "promotion": "raw_only"
+        },
+        "school_mask": {
+          "cell": 225,
+          "evidence": "confirmed @225 via 7 single-school anchors (Physical=1,Holy=2,Fire=4,Nature=8,Frost=16,Shadow=32,Arcane=64); stock 3.3.5a @139 is wrong on this client.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
         },
         "spell_icon_id": {
           "cell": 133,
+          "evidence": "FK into SpellIcon, adjudicated to cell 133 by joined-pair value-anchor discovery against the real client (3.3.5a+patch-CZZ). Expected icon ids come from admissible independent evidence only: Builder-payload (coa_scraper/dist/coa_entries.jsonl) icon paths (precedence #2) mapped through the hash-bound client SpellIcon.dbc to a UNIQUE icon id (non-unique paths excluded); no AscensionDB, remembered, runtime, or candidate-column-derived value is used. Cell 133 is the unique cell resolving all 13 anchors; a blind plurality of 293 unique-path Builder-icon spells resolves at 133 vs 1 at the next-best cell (bare FK-validity alone yields 75 candidate columns). layout+interpretation are verified and the string-join is promoted (T2.3): the FK resolves deterministically through the hash-bound client SpellIcon.dbc to the client icon path, so the join is normalized (like Spell.name). The resolved path feeds the coa-client-spell-icons-v1 catalog, not spell mechanics.",
+          "interpretation": "verified",
           "kind": "uint32",
           "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "FK into SpellIcon, adjudicated to cell 133 by joined-pair value-anchor discovery against the real client (3.3.5a+patch-CZZ). Expected icon ids come from admissible independent evidence only: Builder-payload (coa_scraper/dist/coa_entries.jsonl) icon paths (precedence #2) mapped through the hash-bound client SpellIcon.dbc to a UNIQUE icon id (non-unique paths excluded); no AscensionDB, remembered, runtime, or candidate-column-derived value is used. Cell 133 is the unique cell resolving all 13 anchors; a blind plurality of 293 unique-path Builder-icon spells resolves at 133 vs 1 at the next-best cell (bare FK-validity alone yields 75 candidate columns). layout+interpretation are verified and the string-join is promoted (T2.3): the FK resolves deterministically through the hash-bound client SpellIcon.dbc to the client icon path, so the join is normalized (like Spell.name). The resolved path feeds the coa-client-spell-icons-v1 catalog, not spell mechanics."
+          "promotion": "normalized"
         }
       },
       "key_cell": 0,
@@ -451,21 +492,21 @@
     "SpellCastTimes": {
       "expected_field_count": 4,
       "fields": {
-        "id": {
-          "cell": 0,
-          "kind": "uint32",
-          "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "raw_only",
-          "evidence": "WDBC row id, column 0."
-        },
         "base_ms": {
           "cell": 1,
+          "evidence": "base cast time in ms @1 (sample: id2=250, id3=500, id4=1000, id5=2000). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
           "kind": "int32",
           "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "base cast time in ms @1 (sample: id2=250, id3=500, id4=1000, id5=2000). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id, column 0.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
         }
       },
       "key_cell": 0,
@@ -474,52 +515,21 @@
     "SpellDuration": {
       "expected_field_count": 4,
       "fields": {
-        "id": {
-          "cell": 0,
-          "kind": "uint32",
-          "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "raw_only",
-          "evidence": "WDBC row id, column 0."
-        },
         "base_ms": {
           "cell": 1,
+          "evidence": "base duration in ms @1. side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
           "kind": "int32",
           "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "base duration in ms @1. side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
-        }
-      },
-      "key_cell": 0,
-      "unique": true
-    },
-    "SpellRange": {
-      "expected_field_count": 40,
-      "fields": {
+          "promotion": "raw_only"
+        },
         "id": {
           "cell": 0,
+          "evidence": "WDBC row id, column 0.",
+          "interpretation": "verified",
           "kind": "uint32",
           "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "raw_only",
-          "evidence": "WDBC row id, column 0."
-        },
-        "min_yd": {
-          "cell": 1,
-          "kind": "float",
-          "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "min range (yards) @1 (sample rows show 0 for the min-hostile column). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
-        },
-        "max_yd": {
-          "cell": 3,
-          "kind": "float",
-          "layout": "verified",
-          "interpretation": "reference",
-          "promotion": "raw_only",
-          "evidence": "max range (yards) @3 (sample: id2=5, id3=20, id4=30). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only."
+          "promotion": "raw_only"
         }
       },
       "key_cell": 0,
@@ -530,56 +540,54 @@
       "fields": {
         "id": {
           "cell": 0,
+          "evidence": "WDBC row id (icon id), column 0.",
+          "interpretation": "verified",
           "kind": "uint32",
           "layout": "verified",
-          "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "WDBC row id (icon id), column 0."
+          "promotion": "normalized"
         },
         "path": {
           "cell": 1,
+          "evidence": "SpellIcon path string @1 (2-column WDBC: id, path). A hash-bound client string at a proven column; with the Spell->SpellIcon FK adjudicated to cell 133 (T1.2), the icon string-join is promoted (T2.3): normalized/verified, resolved via make_string_join into the coa-client-spell-icons-v1 catalog.",
+          "interpretation": "verified",
           "kind": "string",
           "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellRange": {
+      "expected_field_count": 40,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id, column 0.",
           "interpretation": "verified",
-          "promotion": "normalized",
-          "evidence": "SpellIcon path string @1 (2-column WDBC: id, path). A hash-bound client string at a proven column; with the Spell->SpellIcon FK adjudicated to cell 133 (T1.2), the icon string-join is promoted (T2.3): normalized/verified, resolved via make_string_join into the coa-client-spell-icons-v1 catalog."
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "max_yd": {
+          "cell": 3,
+          "evidence": "max range (yards) @3 (sample: id2=5, id3=20, id4=30). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "float",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "min_yd": {
+          "cell": 1,
+          "evidence": "min range (yards) @1 (sample rows show 0 for the min-hostile column). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "float",
+          "layout": "verified",
+          "promotion": "raw_only"
         }
       },
       "key_cell": 0,
       "unique": true
     }
-  },
-  "joins": {
-    "cast_time_ms": {
-      "index_field": "casting_time_index",
-      "side_table": "SpellCastTimes",
-      "side_value_field": "base_ms",
-      "promotion": "raw_only"
-    },
-    "duration_ms": {
-      "index_field": "duration_index",
-      "side_table": "SpellDuration",
-      "side_value_field": "base_ms",
-      "promotion": "raw_only"
-    },
-    "range_min_yd": {
-      "index_field": "range_index",
-      "side_table": "SpellRange",
-      "side_value_field": "min_yd",
-      "promotion": "raw_only"
-    },
-    "range_max_yd": {
-      "index_field": "range_index",
-      "side_table": "SpellRange",
-      "side_value_field": "max_yd",
-      "promotion": "raw_only"
-    },
-    "spell_icon_id": {
-      "index_field": "spell_icon_id",
-      "side_table": "SpellIcon",
-      "side_value_field": "path",
-      "promotion": "normalized"
-    }
-  },
-  "sha256": "3e76457c598b5dc77a312283d587e93d829b8f3064da76f2e482a5e57b098611"
+  }
 }

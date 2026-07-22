@@ -52,7 +52,7 @@ def regenerate(
     from .spell_icons import iter_icon_catalog, icon_coverage
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
-    from .spell_mechanics import three_part_budget, DEFAULT_BUDGET
+    from .spell_mechanics import benchmark_env, policy_budget_report, three_part_budget, DEFAULT_BUDGET
     from .errors import ClientBindingError
 
     started = _time.monotonic()
@@ -277,6 +277,7 @@ def regenerate(
         client_root=str(client_root), client_build=client_build, outputs={},
         archive_plan=plan.to_dict())
     base_manifest["icon_coverage"] = icon_cov          # rides in the authoritative generation manifest-v3
+    base_manifest["benchmark_env"] = benchmark_env()   # reproducible env pin for the budget (T4.3)
     gw = GenerationWriter(out_dir)
     gw.add_jsonl_lines("coa_client_spell.jsonl", _spool_lines(full_spool, full_index),
                        schema_version="coa-client-spell-v3")
@@ -307,8 +308,14 @@ def regenerate(
     try:
         # === validate the candidate BY PATH in BOTH Python and Node, before the pointer flips ===
         validate_candidate_generation(gw.gen_dir)                 # per-child + streaming cross-child merge-join
+        node_elapsed_s = node_peak_rss_mb = None
         if validate_with_node:
+            node_started = _time.monotonic()
             _node_validate_candidate(gw.gen_dir, node_lock_path)  # independent Node trust boundary
+            node_elapsed_s = round(_time.monotonic() - node_started, 4)
+            # Linux RUSAGE_CHILDREN ru_maxrss (KiB): the max over reaped children — the node validator
+            # dominates any earlier tiny subprocess (git rev-parse), so this pins the node boundary.
+            node_peak_rss_mb = round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024, 1)
 
         # === Builder parity is part of the candidate stage: a parity failure ABORTS publication ===
         if builder_entries_path:
@@ -318,14 +325,24 @@ def regenerate(
                 ct_member=ct_member, tt_member=tt_member, ess_member=ess_member,
                 spell_member=spell_member, ca_decode_report=ca_decode_report)
 
-        # === three-part budget over the ACTUAL serialized generation (bytes + peak RSS + elapsed) (A4) ===
-        serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
+        # === budget over the ACTUAL serialized generation. POLICY-BOUND ceilings when the reviewed policy
+        # declares them (E0R.1 T4.3: per-child + whole-generation bytes, separate python/node RSS+elapsed);
+        # the legacy three-part DEFAULT_BUDGET only for synthetic policies without a budget block. ===
         elapsed_s = round(_time.monotonic() - started, 4)
         peak_rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux ru_maxrss is KiB
-        budget_report = three_part_budget(serialized_bytes=serialized_bytes, peak_rss_mb=peak_rss_mb,
-                                          elapsed_s=elapsed_s, ceilings=ceilings)
+        policy_ceilings = policy.doc.get("budget")
+        if policy_ceilings is not None and budget is None:
+            budget_report = policy_budget_report(
+                children=gw._children,
+                measured={"python_peak_rss_mb": peak_rss_mb, "python_elapsed_s": elapsed_s,
+                          "node_peak_rss_mb": node_peak_rss_mb, "node_elapsed_s": node_elapsed_s},
+                budget=policy_ceilings)
+        else:
+            serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
+            budget_report = three_part_budget(serialized_bytes=serialized_bytes, peak_rss_mb=peak_rss_mb,
+                                              elapsed_s=elapsed_s, ceilings=ceilings)
         if not budget_report["within_budget"]:
-            raise PublishError(f"regenerate exceeded the three-part budget: {budget_report['breach']}")
+            raise PublishError(f"regenerate exceeded the budget: {budget_report['breach']}")
 
         # === publish the pointer LAST (candidate -> published; the trust digest reproduced identically) ===
         gw.finalize_and_publish(candidate_manifest=candidate,

@@ -217,6 +217,42 @@ def three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> 
             "ceilings": dict(ceilings), "within_budget": not breach, "breach": breach}
 
 
+def policy_budget_report(*, children: dict, measured: dict, budget: dict) -> dict:
+    """Enforce the POLICY-BOUND ceilings (E0R.1 T4.3): every child's serialized bytes against its
+    per-child ceiling (an explicit per_child_overrides entry wins over max_serialized_bytes_per_child),
+    the whole-generation byte total, and the SEPARATE python/node peak-RSS + elapsed ceilings. A single
+    child over its ceiling breaches even when the whole generation is under. `measured` carries
+    {python_peak_rss_mb, python_elapsed_s, node_peak_rss_mb, node_elapsed_s} (a node value may be None
+    when Node validation was skipped — nothing to enforce, and the strict resolver already rejects a
+    generation not validated by both boundaries)."""
+    overrides = budget.get("per_child_overrides") or {}
+    breach = []
+    total = 0
+    for name, meta in children.items():
+        size = meta["byte_length"]
+        total += size
+        ceiling = overrides.get(name, budget["max_serialized_bytes_per_child"])
+        if size > ceiling:
+            breach.append(f"child {name} bytes {size} > {ceiling}")
+    if total > budget["max_whole_generation_bytes"]:
+        breach.append(f"whole_generation bytes {total} > {budget['max_whole_generation_bytes']}")
+    for key in ("python_peak_rss_mb", "python_elapsed_s", "node_peak_rss_mb", "node_elapsed_s"):
+        value = measured.get(key)
+        if value is not None and value > budget[key]:
+            breach.append(f"{key} {value} > {budget[key]}")
+    return {"whole_generation_bytes": total, "measured": dict(measured), "ceilings": dict(budget),
+            "within_budget": not breach, "breach": breach}
+
+
+def benchmark_env() -> dict:
+    """A reproducible pin of the environment the budget was measured under — rides in the authoritative
+    generation manifest so a ceiling breach elsewhere is attributable to hardware, not regression."""
+    import os
+    import platform
+    return {"python_version": platform.python_version(), "platform": platform.platform(),
+            "machine": platform.machine(), "cpu_count": os.cpu_count() or 1}
+
+
 def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_policy, anchors,
                           budget=DEFAULT_BUDGET, extractor_commit: str, client_build: str,
                           join_value_anchors=None, power_type_anchors=None) -> dict:
