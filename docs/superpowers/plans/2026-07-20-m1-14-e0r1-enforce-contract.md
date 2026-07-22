@@ -6,6 +6,21 @@
 
 **Design:** [E0R.1 spec](../specs/2026-07-20-m1-14-e0r1-enforce-contract-design.md). Amends E0R; does not finish the mechanics model (E1) or merge to `main`.
 
+## Execution status (updated 2026-07-21; this file is the task tracker — the MCP tracker is offline)
+
+| Task | Status | Commit |
+|------|--------|--------|
+| T1.1–T1.4 | done | `47d7c14`, `0320ae3`, `2df6b58`, `488e4f6` |
+| T2.1–T2.5 | done | `5021d68`, `e62f480`, `ac4f95c`, `b7923bd`, `e53a64b` |
+| T3.0, T3.1, T3.1b | done | `c65acaf`, `55ac22a`, `ab50866` |
+| T3.2, T3.3, T3.4 | done | `adb942a`, `372efa3`, `cef2a32` |
+| T4.1 | done | `d83a91f` |
+| **T4.2** | **in progress** | Node streaming (survey done; probe next) |
+| T4.3, T5.1–T5.4, T6.1–T6.3 | open | — |
+
+- Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
+- Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
+
 ## Global Constraints
 
 - Probe-first TDD; small contract-focused commits; commit locally throughout; single push after full synthetic + real-client acceptance + green GitHub CI.
@@ -19,29 +34,29 @@
 
 ### Task 1.1: Mandatory probes + a self-consistent `verified` state machine
 **Files:** Modify `coa_client_extract/cli.py` (`mechanics_recon_command`), `coa_client_extract/spell_mechanics.py` (`recon_spell_mechanics` status logic + always-run probes); Test: `tests/test_e0r1_recon_mandatory.py`.
-- [ ] Probe A: every required join (`cast_time_ms`, `duration_ms`, `range_min_yd`, `range_max_yd`, `spell_icon_id`) AND the `power_type` anchors are probed on every recon run — the report records each attempt + its evidence (matches/coverage/candidates), never skipped.
-- [ ] Probe B: a **unique** join/anchor discovery that the policy has NOT adopted (cell/promotion) ⇒ `review_required`, NOT `verified`.
-- [ ] Probe C: `power_type` signedness is required for `verified` **only if** the policy claims a verified `power_type` interpretation; when the policy declares `power_type` interpretation `unproven`/`raw_only`, recon may be `verified` while recording `no_static_anchor` (no `power_type_signed is True` requirement).
-- [ ] Probe D: a genuinely ambiguous join may stay null/`raw_only`, but the report must carry its attempted-discovery evidence.
-- [ ] Fix: `mechanics_recon_command` loads the reviewed anchors/value-anchors and passes `join_value_anchors` + `power_type_anchors` for ALL four joins; `recon_spell_mechanics` runs every probe unconditionally and computes `status` from the state machine above.
-- [ ] Green: `pytest tests/test_e0r1_recon_mandatory.py -q`. Commit.
+- [x] Probe A: every required join (`cast_time_ms`, `duration_ms`, `range_min_yd`, `range_max_yd`, `spell_icon_id`) AND the `power_type` anchors are probed on every recon run — the report records each attempt + its evidence (matches/coverage/candidates), never skipped.
+- [x] Probe B: a **unique** join/anchor discovery that the policy has NOT adopted (cell/promotion) ⇒ `review_required`, NOT `verified`.
+- [x] Probe C: `power_type` signedness is required for `verified` **only if** the policy claims a verified `power_type` interpretation; when the policy declares `power_type` interpretation `unproven`/`raw_only`, recon may be `verified` while recording `no_static_anchor` (no `power_type_signed is True` requirement).
+- [x] Probe D: a genuinely ambiguous join may stay null/`raw_only`, but the report must carry its attempted-discovery evidence.
+- [x] Fix: `mechanics_recon_command` loads the reviewed anchors/value-anchors and passes `join_value_anchors` + `power_type_anchors` for ALL four joins; `recon_spell_mechanics` runs every probe unconditionally and computes `status` from the state machine above.
+- [x] Green: `pytest tests/test_e0r1_recon_mandatory.py -q`. Commit.
 
 ### Task 1.2: Adjudicate the four discovered join cells into the reviewed policy
 **Files:** Modify `coa_client_extract/data/spell_layout_v2.json` (author unique+matched join index cells; recompute sha), `coa_scraper/config/spell_layout.lock.json`; Test: `tests/test_e0r1_join_adjudication.py`, update `tests/test_e0r_client.py`.
-- [ ] Probe: after adjudication, recon `verified` requires every join to be either (a) adjudicated with the discovered unique cell + matching promotion, or (b) recorded ambiguous (null) with evidence; a unique-but-unadopted join ⇒ `review_required`.
-- [ ] Fix: run recon against the real client, author the uniquely-discovered join index cells into the policy (ambiguous stay null with recorded evidence), recompute policy sha256 + lock (mechanical re-bind pattern; Node lock cross-check). Update `test_e0r_client` to the corrected expectation.
-- [ ] Green + commit.
+- [x] Probe: after adjudication, recon `verified` requires every join to be either (a) adjudicated with the discovered unique cell + matching promotion, or (b) recorded ambiguous (null) with evidence; a unique-but-unadopted join ⇒ `review_required`.
+- [x] Fix: run recon against the real client, author the uniquely-discovered join index cells into the policy (ambiguous stay null with recorded evidence), recompute policy sha256 + lock (mechanical re-bind pattern; Node lock cross-check). Update `test_e0r_client` to the corrected expectation.
+- [x] Green + commit.
 
 ### Task 1.3: Demote `power_type` — promotion AND interpretation — with withheld decode
 **Files:** Modify `coa_client_extract/data/spell_layout_v2.json` (`power_type`: promotion `raw_only`, interpretation not `verified`; recompute sha), `coa_scraper/config/spell_layout.lock.json`, `coa_client_extract/spell_record.py` (emit `decoded_reason: "proof_withheld"`, no normalized value); Test: `tests/test_e0r1_power_type_rawonly.py`.
-- [ ] Probe: the policy's `power_type` promotion is `raw_only` AND interpretation is NOT `verified`; `iter_spell_records` retains the raw `u32`, withholds the decoded value with `decoded_reason: "proof_withheld"`, and emits no normalized `mechanics.power_type`.
-- [ ] Fix: flip both facets; withhold decode; recompute sha + lock.
-- [ ] Green + commit.
+- [x] Probe: the policy's `power_type` promotion is `raw_only` AND interpretation is NOT `verified`; `iter_spell_records` retains the raw `u32`, withholds the decoded value with `decoded_reason: "proof_withheld"`, and emits no normalized `mechanics.power_type`.
+- [x] Fix: flip both facets; withhold decode; recompute sha + lock.
+- [x] Green + commit.
 
 ### Task 1.4: Canonical mechanics never backfill a withheld power type from Builder inferred
 **Files:** Modify `coa_scraper/scripts/build-mechanics-artifacts.mjs` / `coa_scraper/scripts/lib/mechanics-candidates.mjs` (an `inferred`-tier `power_type` cannot become the canonical value; expose `null` + `unavailable`/`no_static_anchor`; any inferred power type is diagnostic/heuristic-tagged only); Test: `coa_scraper/tests/e0r1-power-type-not-backfilled.test.mjs`.
-- [ ] Probe: with a withheld client `power_type`, the canonical mechanics row's `power_type` is `null` (with readiness `no_static_anchor`/`unavailable`), NOT the Builder `resources`-derived value; any inferred value appears only in a diagnostic field tagged `heuristic`.
-- [ ] Fix + green + commit.
+- [x] Probe: with a withheld client `power_type`, the canonical mechanics row's `power_type` is `null` (with readiness `no_static_anchor`/`unavailable`), NOT the Builder `resources`-derived value; any inferred value appears only in a diagnostic field tagged `heuristic`.
+- [x] Fix + green + commit.
 
 ---
 
@@ -49,26 +64,26 @@
 
 ### Task 2.1: Emit `description` raw in v3
 **Files:** Modify `coa_client_extract/spell_record.py` (`iter_spell_records`); Test: `tests/test_e0r1_description_raw.py`.
-- [ ] Probe: a spell row's `raw` MUST contain a `description` entry with `raw_offset` + `resolved` (the client tooltip text), even though it is `raw_only`.
-- [ ] Fix: emit the `description` string observation (cell 170) into `raw` (never into `mechanics`). Green + commit.
+- [x] Probe: a spell row's `raw` MUST contain a `description` entry with `raw_offset` + `resolved` (the client tooltip text), even though it is `raw_only`.
+- [x] Fix: emit the `description` string observation (cell 170) into `raw` (never into `mechanics`). Green + commit.
 
 ### Task 2.2: Real projection envelope expansion
 **Files:** Modify `coa_client_extract/cli.py` (projection build) or `coa_client_extract/spell_record.py`; Test: `tests/test_e0r1_projection_expansion.py`.
-- [ ] Probe: the projection row expands each compact `raw` cell into the specified rich `field_observations` envelope (not a shallow copy of the compact row); cross-child `_expand_compact` + Node consumer accept it.
-- [ ] Fix: implement the expansion; keep the full child compact. Green + commit.
+- [x] Probe: the projection row expands each compact `raw` cell into the specified rich `field_observations` envelope (not a shallow copy of the compact row); cross-child `_expand_compact` + Node consumer accept it.
+- [x] Fix: implement the expansion; keep the full child compact. Green + commit.
 
 ### Task 2.3: Icons through promotion + honest coverage (icon join adjudicated in WS1)
 **Files:** Modify `coa_client_extract/spell_icons.py` (`iter_icon_catalog`), `coa_client_extract/cli.py` (icon coverage in manifest/summary); Test: `tests/test_e0r1_icon_promotion.py`.
-- [ ] Probe: an unresolved icon join row is `asset_status: "placeholder"` (a valid `ICON_ASSET_STATUSES` value) with `readiness: "unavailable"` — NOT `asset_status:"unavailable"` (invalid) and NOT a resolved FK-0 path; `"missing"` is reserved for a proven path whose client asset is absent. A resolved path requires the join + components promotion-eligible via `make_string_join`. The manifest records real resolved-icon **coverage** counts; zero coverage is emitted only when the WS1 icon probe genuinely stayed ambiguous (proven in the committed recon report).
-- [ ] Fix: route icon resolution through `make_string_join` + promotion; if WS1 adjudicated the icon index cell, resolve real paths; else emit placeholders + zero coverage. Green + commit.
+- [x] Probe: an unresolved icon join row is `asset_status: "placeholder"` (a valid `ICON_ASSET_STATUSES` value) with `readiness: "unavailable"` — NOT `asset_status:"unavailable"` (invalid) and NOT a resolved FK-0 path; `"missing"` is reserved for a proven path whose client asset is absent. A resolved path requires the join + components promotion-eligible via `make_string_join`. The manifest records real resolved-icon **coverage** counts; zero coverage is emitted only when the WS1 icon probe genuinely stayed ambiguous (proven in the committed recon report).
+- [x] Fix: route icon resolution through `make_string_join` + promotion; if WS1 adjudicated the icon index cell, resolve real paths; else emit placeholders + zero coverage. Green + commit.
 
 ### Task 2.4: Wire the client icon catalog through the production guide writer
 **Files:** Modify `coa_meta/guide_builder.py` callers + the production guide writer (`coa_meta/guide_writer.py` or equivalent) to accept/pass `icon_catalog`; Test: `tests/test_e0r1_guide_icon_catalog.py`.
-- [ ] Probe: the production guide-writing entry point accepts an `icon_catalog` and renders `client_icon`/placeholder (never a DB hotlink). Green + commit.
+- [x] Probe: the production guide-writing entry point accepts an `icon_catalog` and renders `client_icon`/placeholder (never a DB hotlink). Green + commit.
 
 ### Task 2.5: Untrack stale generated site + DB tooltip catalog
 **Files:** `git rm --cached` the tracked generated outputs (`reports/meta/**`, the DB tooltip catalog, any generated guide pages carrying `db.ascension.gg`) + `.gitignore` them; the generator/templates + source fonts stay under `coa_meta` (authority). Test: `tests/test_e0r1_no_stale_db_output.py`.
-- [ ] Probe: no tracked *generated* artifact contains `db.ascension.gg`; the generator + templates remain committed. (Optionally regenerate an **untracked** client-native preview AFTER Workstream 5, once blocked sections + heuristic labeling are correct — never committed.) Green + commit.
+- [x] Probe: no tracked *generated* artifact contains `db.ascension.gg`; the generator + templates remain committed. (Optionally regenerate an **untracked** client-native preview AFTER Workstream 5, once blocked sections + heuristic labeling are correct — never committed.) Green + commit.
 
 ---
 
@@ -76,32 +91,32 @@
 
 ### Task 3.0: One shared golden fixture corpus (Python + Node)
 **Files:** Create `tests/golden/e0r1_corpus/` (accept + reject rows/candidates) consumed by BOTH suites; Test scaffolding referenced by 3.1/3.1b/3.3.
-- [ ] Build a corpus covering: valid rows; both directions of the eligibility biconditional (eligible-not-populated AND populated-not-eligible); decoding disagreement; unresolved join states; a **required field omitted from both mechanics AND raw**; icon id/path (dis)agreement; trailing/extra/missing rows; a tampered bundle. Commit.
+- [x] Build a corpus covering: valid rows; both directions of the eligibility biconditional (eligible-not-populated AND populated-not-eligible); decoding disagreement; unresolved join states; a **required field omitted from both mechanics AND raw**; icon id/path (dis)agreement; trailing/extra/missing rows; a tampered bundle. Commit.
 
 ### Task 3.1: Node candidate validator does row semantics over the full required domain
 **Files:** Modify `coa_scraper/scripts/lib/generation.mjs` (`validateCandidateByPath`), `mechanics-projection.mjs` (`verifyRowAgainstPolicy`, wire `assertPolicyLock`); Test: `coa_scraper/tests/e0r1-candidate-trust.test.mjs` (uses the 3.0 corpus).
-- [ ] Probe: an **empty** V3 candidate FAILS; missing required child FAILS; bad `candidate_trust_sha256` FAILS; policy child not matching the lock FAILS; a required field omitted from **both** mechanics and raw FAILS (row validation iterates **policy-required fields ∪ mechanics ∪ raw**, not just `row.raw`); both biconditional directions + decoding disagreement + unresolved-join FAIL as specified.
-- [ ] Fix: `validateCandidateByPath` checks the required-child registry, recomputes `candidate_trust_sha256`, calls `assertPolicyLock` against the staged policy child, and iterates the full required-field domain. Green + commit.
+- [x] Probe: an **empty** V3 candidate FAILS; missing required child FAILS; bad `candidate_trust_sha256` FAILS; policy child not matching the lock FAILS; a required field omitted from **both** mechanics and raw FAILS (row validation iterates **policy-required fields ∪ mechanics ∪ raw**, not just `row.raw`); both biconditional directions + decoding disagreement + unresolved-join FAIL as specified.
+- [x] Fix: `validateCandidateByPath` checks the required-child registry, recomputes `candidate_trust_sha256`, calls `assertPolicyLock` against the staged policy child, and iterates the full required-field domain. Green + commit.
 
 ### Task 3.1b: Node cross-child + bundle verification (candidate path)
 **Files:** Modify `coa_scraper/scripts/lib/generation.mjs` (streaming cross-child in Node); Test: `coa_scraper/tests/e0r1-node-cross-child.test.mjs` (3.0 corpus).
-- [ ] Probe: Node candidate validation verifies full/projection/icon **sorted uniqueness + exact domains**; identity/attribution/compact-raw-expansion agreement; trailing/missing/extra rows; icon **id/path agreement**; bundle **path containment + internal manifest + contents + hashes**. Each corpus reject-case FAILS in Node.
-- [ ] Fix: implement the Node streaming cross-child + bundle checks (mirroring Python `_cross_child`). Green + commit.
+- [x] Probe: Node candidate validation verifies full/projection/icon **sorted uniqueness + exact domains**; identity/attribution/compact-raw-expansion agreement; trailing/missing/extra rows; icon **id/path agreement**; bundle **path containment + internal manifest + contents + hashes**. Each corpus reject-case FAILS in Node.
+- [x] Fix: implement the Node streaming cross-child + bundle checks (mirroring Python `_cross_child`). Green + commit.
 
 ### Task 3.2: Both resolvers require strict published state
 **Files:** Modify `coa_client_extract/publish.py` (`resolve_active_generation`), `coa_scraper/scripts/lib/generation.mjs` (`resolveGeneration`); Test: `tests/test_e0r1_resolver_strict.py`, `coa_scraper/tests/e0r1-resolver-strict.test.mjs`.
-- [ ] Probe: a manifest-v2, or v3 with `publication_state!="published"`, missing/invalid `candidate_trust_sha256`, `validation` not both-true, or `budget.within_budget!=true`, or missing a required child, is REJECTED by BOTH resolvers.
-- [ ] Fix: enforce strict `manifest-v3` + published + trust digest + validation + budget + required registry. Green + commit.
+- [x] Probe: a manifest-v2, or v3 with `publication_state!="published"`, missing/invalid `candidate_trust_sha256`, `validation` not both-true, or `budget.within_budget!=true`, or missing a required child, is REJECTED by BOTH resolvers.
+- [x] Fix: enforce strict `manifest-v3` + published + trust digest + validation + budget + required registry. Green + commit.
 
 ### Task 3.3: Complete Python cross-child (same standard, shared corpus)
 **Files:** Modify `coa_client_extract/publish.py` (`_cross_child`, `_icon_bundle`); Test: `tests/test_e0r1_cross_child.py` (3.0 corpus).
-- [ ] Probe: mismatched icon id/path FAILS; a trailing/extra icon row FAILS; a bundle whose contents/paths/hash/internal-manifest disagree FAILS — every 3.0 reject-case FAILS identically in Python and Node.
-- [ ] Fix: extend Python cross-child to icon id/path agreement + reject trailing/extra + validate bundle contents; assert parity with 3.1b over the shared corpus. Green + commit.
+- [x] Probe: mismatched icon id/path FAILS; a trailing/extra icon row FAILS; a bundle whose contents/paths/hash/internal-manifest disagree FAILS — every 3.0 reject-case FAILS identically in Python and Node.
+- [x] Fix: extend Python cross-child to icon id/path agreement + reject trailing/extra + validate bundle contents; assert parity with 3.1b over the shared corpus. Green + commit.
 
 ### Task 3.4: True transaction under late failure + concurrency
 **Files:** Modify `coa_client_extract/cli.py` (stage parity BEFORE publish; summary cannot fail publication), `coa_client_extract/publish.py` (hold lock predecessor-read→replace with revalidation); Test: `tests/test_e0r1_transaction.py`.
-- [ ] Probe: a parity/summary failure leaves the previous pointer untouched; two concurrent publishers cannot last-writer-win (predecessor revalidated under the lock).
-- [ ] Fix: move parity into the candidate stage; acquire the lock before `_predecessor()` and revalidate before replace. Green + commit.
+- [x] Probe: a parity/summary failure leaves the previous pointer untouched; two concurrent publishers cannot last-writer-win (predecessor revalidated under the lock).
+- [x] Fix: move parity into the candidate stage; acquire the lock before `_predecessor()` and revalidate before replace. Green + commit.
 
 ---
 
@@ -109,8 +124,8 @@
 
 ### Task 4.1: Stream producer → writer → Python validation/cross-child
 **Files:** Modify `coa_client_extract/cli.py` (`regenerate`), `coa_client_extract/publish.py` (`add_jsonl` streaming write + incremental sha/count; `_cross_child`/`_validate_children_by_path` stream by line, no whole-child read); Test: `tests/test_e0r1_streaming_py.py`.
-- [ ] Probe: RSS measured in an **isolated subprocess** shows **bounded growth** as synthetic record count scales (e.g. 10k→100k rows ⇒ sub-linear peak RSS); no whole-table list/`str`+`bytes` double copy; validators read line-by-line.
-- [ ] Fix: stream rows to disk with incremental hashing/record-count; two-pass or spooled index for projection/icons; stream Python validation + cross-child. Green + commit.
+- [x] Probe: RSS measured in an **isolated subprocess** shows **bounded growth** as synthetic record count scales (e.g. 10k→100k rows ⇒ sub-linear peak RSS); no whole-table list/`str`+`bytes` double copy; validators read line-by-line.
+- [x] Fix: stream rows to disk with incremental hashing/record-count; two-pass or spooled index for projection/icons; stream Python validation + cross-child. Green + commit.
 
 ### Task 4.2: Stream Node validation → projection consumption → mechanics serialization
 **Files:** Modify `coa_scraper/scripts/lib/generation.mjs`, `mechanics-projection.mjs`, `build-mechanics-artifacts.mjs` (stream the mechanics OUTPUT serialization too); Test: `coa_scraper/tests/e0r1-streaming-node.test.mjs`.
