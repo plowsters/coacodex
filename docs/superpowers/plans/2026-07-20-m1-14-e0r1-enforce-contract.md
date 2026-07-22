@@ -16,8 +16,9 @@
 | T3.2, T3.3, T3.4 | done | `adb942a`, `372efa3`, `cef2a32` |
 | T4.1 | done | `d83a91f` |
 | T4.2 | done | `9ce7d9e` |
-| **T4.3** | **next** | policy-bound ceilings + benchmark_env |
-| T5.1–T5.4, T6.1–T6.3 | open | — |
+| T4.3 | done | `c38ebe8` (policy sha 3e76457c→e206fbb8) |
+| **T5.1** | **next** | AscensionDB exact per-file disposition |
+| T5.2–T5.4, T6.1–T6.3 | open | — |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
@@ -135,8 +136,8 @@
 
 ### Task 4.3: Separate, unambiguous policy-bound ceilings + pinned env
 **Files:** Modify `coa_client_extract/data/spell_layout_v2.json` (a `budget` block), `coa_client_extract/spell_mechanics.py`/`publish.py` (read ceilings from policy; enforce per-child AND whole-generation), `coa_client_extract/manifest.py` (record `benchmark_env`); Test: `tests/test_e0r1_budget_policy_bound.py`.
-- [ ] Probe: the policy declares **max_serialized_bytes_per_child**, **max_whole_generation_bytes**, **python_peak_rss_mb**/**python_elapsed_s**, **node_peak_rss_mb**/**node_elapsed_s**, and optional per-child overrides; a single child over its per-child ceiling FAILS even if the whole is under; whole-gen over FAILS; the manifest records a reproducible `benchmark_env`.
-- [ ] Fix + green + commit.
+- [x] Probe: the policy declares **max_serialized_bytes_per_child**, **max_whole_generation_bytes**, **python_peak_rss_mb**/**python_elapsed_s**, **node_peak_rss_mb**/**node_elapsed_s**, and optional per-child overrides; a single child over its per-child ceiling FAILS even if the whole is under; whole-gen over FAILS; the manifest records a reproducible `benchmark_env`.
+- [x] Fix + green + commit.
 
 ---
 
