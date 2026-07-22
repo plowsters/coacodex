@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -182,22 +183,58 @@ def regenerate(
     skill_index = build_skill_line_index(sla_raw.rows, coa_skill_lines)
     spell_attr = attribute(nodes, class_types, skill_line_index=skill_index)
 
-    # === PASS 2: the AUTHORITATIVE CoA spell-id set (graph attribution + proven skill-line fallback) drives
-    # is_coa. Stream the v3 spell children sorted by spell_id (so the cross-child merge-join is a linear
-    # scan and the icon catalog covers every spell); project ONLY authoritatively-attributed rows. ===
+    # === PASS 2 (STREAMING, E0R.1 T4.1): the AUTHORITATIVE CoA spell-id set (graph attribution + proven
+    # skill-line fallback) drives is_coa. Each producer row is serialized straight into an anonymous SPOOL
+    # file, keeping only a (spell_id, offset, length) index in memory; the children are then written in
+    # ascending spell_id by seeking the spool — no whole-table row list, no whole-child body (design A4). ===
+    out_dir.mkdir(parents=True, exist_ok=True)
     coa_attributed_ids = {sid for sid, sa in spell_attr.items() if sa.result.is_coa}
-    full_rows = sorted(iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance,
-                                          coa_spell_ids=coa_attributed_ids),
-                       key=lambda r: r["spell_id"])
-    # The projection is the RICH form: each compact `raw` cell expands into a canonical field observation
-    # (project_v3_row), and the row carries NO compact `raw` — full=compact, projection=rich, disjoint.
-    projection_rows = [project_v3_row(r, policy)
-                       for r in full_rows if r["coa_attribution"].get("is_coa") is True]
-    icon_rows = sorted(iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver),
-                       key=lambda r: r["spell_id"])
-    # Honest resolved-icon coverage: how many icon joins resolved to a real client path vs stayed placeholders
-    # (fk 0 / no side row / unadjudicated), and how many resolved paths had a present vs absent client asset.
-    icon_cov = icon_coverage(icon_rows)
+    adv_spell_ids = {n.spell_id for n in coa_nodes if n.spell_id}
+    spell_names: dict[int, str] = {}                 # names ONLY for graph-attributed ids (bounded by graph)
+
+    def _spool(row_iter, per_row=None):
+        fh = tempfile.TemporaryFile(dir=out_dir)
+        index, offset = [], 0
+        for row in row_iter:
+            if per_row is not None:
+                per_row(row)
+            line = (json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+            fh.write(line)
+            index.append((row["spell_id"], offset, len(line)))
+            offset += len(line)
+        index.sort()
+        return fh, index
+
+    def _spool_lines(fh, index):
+        for _sid, offset, length in index:
+            fh.seek(offset)
+            yield fh.read(length)
+
+    full_is_coa: set[int] = set()
+
+    def _observe_full(row):
+        if row["coa_attribution"].get("is_coa") is True:
+            full_is_coa.add(row["spell_id"])
+        if row["spell_id"] in adv_spell_ids:
+            spell_names[row["spell_id"]] = row.get("name") or ""
+
+    full_spool, full_index = _spool(
+        iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance,
+                           coa_spell_ids=coa_attributed_ids), _observe_full)
+    icon_spool, icon_index = _spool(
+        iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver))
+    # Honest resolved-icon coverage: a streaming pass over the spool (never a row list).
+    icon_cov = icon_coverage(json.loads(line) for line in _spool_lines(icon_spool, icon_index))
+
+    def _projection_rows():
+        # The projection is the RICH form: each compact `raw` cell expands into a canonical field
+        # observation (project_v3_row), and the row carries NO compact `raw` — full=compact,
+        # projection=rich, disjoint dialects. Streamed from the spool in ascending spell_id.
+        for sid, offset, length in full_index:
+            if sid in full_is_coa:
+                full_spool.seek(offset)
+                yield project_v3_row(json.loads(full_spool.read(length)), policy)
+
     unknown_symbol_inventory = _unknown_symbol_inventory(spell_view, policy)
 
     adv_provenance = {
@@ -215,8 +252,8 @@ def regenerate(
         "semantics": "undecoded_per_level_progression",
         "extraction_date": date.today().isoformat(),
     }
-    # current names come from the already-extracted spell records (Spell.dbc), not the CA string block
-    spell_names = {r["spell_id"]: (r.get("name") or "") for r in full_rows}
+    # current names come from the already-extracted spell records (Spell.dbc), not the CA string block —
+    # collected during the spool pass for graph-attributed ids only (bounded by the graph, not the table).
     adv_records = build_advancement_records(coa_nodes, provenance=adv_provenance,
                                             spell_names=spell_names, attribution=spell_attr)
     class_type_records = build_class_type_records(class_types)
@@ -225,14 +262,13 @@ def regenerate(
 
     # === stage the candidate generation: every REQUIRED_CHILD streamed into gen-<uuid>/ (design A5). The
     # generation's manifest-v3 is the AUTHORITATIVE manifest; the fixed-path summary below is noncanonical.
-    out_dir.mkdir(parents=True, exist_ok=True)
     projection_manifest = {
         "schema_version": "coa-client-spell-projection-manifest-v3",
         "inclusion_rule": {"predicate": "coa_attribution.is_coa == true", "version": "m1.14e0r"},
         "client_build": client_build, "extractor_commit": _extractor_commit(),
         "extraction_date": date.today().isoformat(), "policy_sha256": policy.sha256,
-        "counts": {"source_records": len(full_rows), "projected_records": len(projection_rows),
-                   "unique_spell_ids": len({r["spell_id"] for r in projection_rows})},
+        "counts": {"source_records": len(full_index), "projected_records": len(full_is_coa),
+                   "unique_spell_ids": len(full_is_coa)},
     }
     base_manifest = build_manifest(
         backend_name=getattr(backend, "name", "unknown"),
@@ -242,11 +278,16 @@ def regenerate(
         archive_plan=plan.to_dict())
     base_manifest["icon_coverage"] = icon_cov          # rides in the authoritative generation manifest-v3
     gw = GenerationWriter(out_dir)
-    gw.add_jsonl("coa_client_spell.jsonl", full_rows, schema_version="coa-client-spell-v3")
-    gw.add_jsonl("coa_client_spell_coa.jsonl", projection_rows, schema_version="coa-client-spell-projection-v3")
+    gw.add_jsonl_lines("coa_client_spell.jsonl", _spool_lines(full_spool, full_index),
+                       schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell_coa.jsonl", _projection_rows(),
+                 schema_version="coa-client-spell-projection-v3")
     gw.add_json("coa_client_spell_projection.manifest.json", projection_manifest,
                 schema_version="coa-client-spell-projection-manifest-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", icon_rows, schema_version="coa-client-spell-icons-v1")
+    gw.add_jsonl_lines("coa_client_spell_icons.jsonl", _spool_lines(icon_spool, icon_index),
+                       schema_version="coa-client-spell-icons-v1")
+    full_spool.close()
+    icon_spool.close()
     gw.add_jsonl("coa_client_content.jsonl", content_records, schema_version="coa-client-content-v1")
     gw.add_json("coa_client_archive_plan.json", plan.to_dict(), schema_version="coa-client-archive-plan-v1")
     gw.add_jsonl("coa_client_advancement.jsonl", adv_records, schema_version="coa-client-advancement-v1")

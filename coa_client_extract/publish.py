@@ -86,9 +86,33 @@ class GenerationWriter:
         self._children[name] = {"sha256": _sha256(body), "byte_length": len(body),
                                 "records": records, "schema_version": schema_version}
 
-    def add_jsonl(self, name: str, records: list[dict], *, schema_version: str) -> None:
-        body = "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in records).encode("utf-8")
-        self._stage(name, body, len(records), schema_version)
+    def add_jsonl_lines(self, name: str, lines, *, schema_version: str) -> None:
+        """Stage a JSONL child from an iterable of PRE-SERIALIZED lines (bytes, each one record ending in
+        a newline), streamed straight to disk with incremental sha256/byte/record accounting — no
+        whole-child body is ever materialized (design A4, E0R.1 T4.1)."""
+        _safe_child_name(name)
+        if name in self._children:
+            raise PublishError(f"duplicate child {name!r}")
+        if not schema_version:
+            raise PublishError(f"child {name!r} needs a non-empty schema_version")
+        tmp = self.gen_dir / f".{name}.tmp-{os.getpid()}"
+        digest, total, records = hashlib.sha256(), 0, 0
+        with open(tmp, "wb") as fh:
+            for line in lines:
+                digest.update(line)
+                fh.write(line)
+                total += len(line)
+                records += 1
+        os.replace(tmp, self.gen_dir / name)
+        self._children[name] = {"sha256": digest.hexdigest(), "byte_length": total,
+                                "records": records, "schema_version": schema_version}
+
+    def add_jsonl(self, name: str, records, *, schema_version: str) -> None:
+        """records is any iterable of dicts (a generator streams row-by-row to disk)."""
+        self.add_jsonl_lines(
+            name, ((json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+                   for r in records),
+            schema_version=schema_version)
 
     def add_json(self, name: str, doc: dict, *, schema_version: str) -> None:
         body = (json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -185,6 +209,26 @@ def _read_jsonl(path: Path):
         for line in fh:
             if line.strip():
                 yield json.loads(line)
+
+
+def _scan_child(path: Path, *, jsonl: bool) -> tuple[str, int, int]:
+    """Chunked integrity scan — sha256 + byte length + record count (non-empty lines for JSONL, else 1)
+    without ever holding the child in memory (mirrors Node countJsonlRecords) (design A4, E0R.1 T4.1)."""
+    digest, total, records, carry = hashlib.sha256(), 0, 0, b""
+    with open(path, "rb") as fh:
+        while True:
+            chunk = fh.read(1 << 20)
+            if not chunk:
+                break
+            digest.update(chunk)
+            total += len(chunk)
+            if jsonl:
+                lines = (carry + chunk).split(b"\n")
+                carry = lines.pop()
+                records += sum(1 for l in lines if l.strip())
+    if jsonl and carry.strip():
+        records += 1
+    return digest.hexdigest(), total, records if jsonl else 1
 
 
 class _Cursor:
@@ -312,12 +356,11 @@ def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
             raise ResolveError(f"child {name!r} escapes the generation directory")
         if not child_path.is_file():
             raise ResolveError(f"child {name!r} missing")
-        body = child_path.read_bytes()
-        if _sha256(body) != meta.get("sha256"):
+        sha, byte_length, actual = _scan_child(child_path, jsonl=name.endswith(".jsonl"))
+        if sha != meta.get("sha256"):
             raise ResolveError(f"child {name!r} sha256 mismatch")
-        if len(body) != meta.get("byte_length"):
+        if byte_length != meta.get("byte_length"):
             raise ResolveError(f"child {name!r} byte_length mismatch")
-        actual = sum(1 for line in body.splitlines() if line.strip()) if name.endswith(".jsonl") else 1
         if actual != meta.get("records"):
             raise ResolveError(f"child {name!r} record count mismatch ({actual} != {meta.get('records')})")
         if not meta.get("schema_version"):
@@ -395,12 +438,11 @@ def resolve_active_generation(root: Path) -> dict:
             raise ResolveError(f"child {name!r} escapes the generation directory")
         if not child_path.is_file():
             raise ResolveError(f"child {name!r} missing")
-        body = child_path.read_bytes()
-        if _sha256(body) != meta.get("sha256"):
+        sha, byte_length, actual_records = _scan_child(child_path, jsonl=name.endswith(".jsonl"))
+        if sha != meta.get("sha256"):
             raise ResolveError(f"child {name!r} sha256 mismatch")
-        if len(body) != meta.get("byte_length"):
+        if byte_length != meta.get("byte_length"):
             raise ResolveError(f"child {name!r} byte_length mismatch")
-        actual_records = sum(1 for line in body.splitlines() if line.strip()) if name.endswith(".jsonl") else 1
         if actual_records != meta.get("records"):
             raise ResolveError(f"child {name!r} record count mismatch ({actual_records} != {meta.get('records')})")
         if not meta.get("schema_version"):
