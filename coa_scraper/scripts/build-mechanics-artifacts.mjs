@@ -352,10 +352,6 @@ function atomicWrite(targetPath, data) {
   fs.renameSync(tmp, targetPath);
 }
 
-function jsonlBytes(rows) {
-  return rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
-}
-
 function winnerCounts(rows) {
   const bySource = {}; const byTier = {};
   for (const r of rows) {
@@ -417,8 +413,18 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
   const jsonlPath = path.join(outDir, jsonlName);
   const manifestPath = path.join(outDir, manifestName);
 
-  const body = jsonlBytes(rows);
-  const sha = crypto.createHash("sha256").update(body).digest("hex");
+  // Stream the OUTPUT serialization: row-by-row write to a temp file with an incremental hash — never a
+  // whole-output string or a post-hoc re-read of the artifact (E0R.1 T4.2).
+  const jsonlTmp = `${jsonlPath}.tmp-${process.pid}-${Date.now()}`;
+  const outFd = fs.openSync(jsonlTmp, "w");
+  const outHash = crypto.createHash("sha256");
+  for (const r of rows) {
+    const line = Buffer.from(JSON.stringify(r) + "\n");
+    fs.writeSync(outFd, line);
+    outHash.update(line);
+  }
+  fs.closeSync(outFd);
+  const sha = outHash.digest("hex");
   const { bySource, byTier } = winnerCounts(rows);
   const manifest = {
     schema_version: "coa-mechanics-manifest-v1",
@@ -442,7 +448,7 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
 
   // manifest-as-validity-marker: remove previous manifest first, then JSONL, then manifest — each atomic.
   if (fs.existsSync(manifestPath)) fs.rmSync(manifestPath);
-  atomicWrite(jsonlPath, body);
+  fs.renameSync(jsonlTmp, jsonlPath);
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return { canonical, manifest };
 }

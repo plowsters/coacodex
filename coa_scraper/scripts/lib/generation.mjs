@@ -26,20 +26,89 @@ export const REQUIRED_CHILDREN = [
 
 const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
 
-function readJsonlRows(childPath) {
-  return fs.readFileSync(childPath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
-}
+const CHUNK = 1 << 20;
 
-function assertSortedUnique(rows, label) {
-  let prev = null;
-  for (const r of rows) {
-    const sid = r.spell_id;
-    if (prev !== null && sid <= prev) {
-      throw new GenerationResolveError(`sorted_unique_ids: ${label} duplicate/out-of-order spell_id ${sid}`);
+// Sync generator over a JSONL child: fixed-size reads with a byte-level carry (utf8-safe across chunk
+// boundaries), yielding one parsed row at a time — never a whole-child string or row array (E0R.1 T4.2).
+function* readJsonlLines(childPath) {
+  const fd = fs.openSync(childPath, "r");
+  try {
+    const buf = Buffer.allocUnsafe(CHUNK);
+    let rem = Buffer.alloc(0);
+    while (true) {
+      const n = fs.readSync(fd, buf, 0, CHUNK, null);
+      if (n === 0) break;
+      const data = rem.length ? Buffer.concat([rem, buf.subarray(0, n)]) : buf.subarray(0, n);
+      let start = 0, idx;
+      while ((idx = data.indexOf(0x0a, start)) !== -1) {
+        const line = data.toString("utf8", start, idx);
+        if (line.trim()) yield JSON.parse(line);
+        start = idx + 1;
+      }
+      rem = Buffer.from(data.subarray(start));   // copy: `buf` is reused by the next read
     }
-    prev = sid;
+    const tail = rem.toString("utf8");
+    if (tail.trim()) yield JSON.parse(tail);
+  } finally {
+    fs.closeSync(fd);
   }
 }
+
+// Chunked integrity scan: sha256 + byte length + record count (non-empty lines) without holding the child
+// in memory — the streaming twin of Python publish._scan_child (E0R.1 T4.2).
+function scanChild(childPath, jsonl) {
+  const fd = fs.openSync(childPath, "r");
+  try {
+    const buf = Buffer.allocUnsafe(CHUNK);
+    const hash = crypto.createHash("sha256");
+    let bytes = 0, records = 0, lineHasContent = false;
+    while (true) {
+      const n = fs.readSync(fd, buf, 0, CHUNK, null);
+      if (n === 0) break;
+      const chunk = buf.subarray(0, n);
+      hash.update(chunk);
+      bytes += n;
+      if (jsonl) {
+        for (let i = 0; i < n; i++) {
+          const b = chunk[i];
+          if (b === 0x0a) { if (lineHasContent) records++; lineHasContent = false; }
+          else if (b !== 0x0d && b !== 0x20 && b !== 0x09) lineHasContent = true;
+        }
+      }
+    }
+    if (jsonl && lineHasContent) records++;
+    return { sha256: hash.digest("hex"), byteLength: bytes, records: jsonl ? records : 1 };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// A forward, ascending-by-spell_id cursor enforcing sorted-unique order as it advances — the exact mirror
+// of Python publish._Cursor, over ANY iterable (array or generator).
+class Cursor {
+  constructor(iterable, label) {
+    this.it = iterable[Symbol.iterator]();
+    this.label = label;
+    this.prev = null;
+    this.row = null;
+    this.advance();
+  }
+  advance() {
+    const nxt = this.it.next();
+    this.row = nxt.done ? null : nxt.value;
+    if (this.row !== null && this.row !== undefined) {
+      const sid = this.row.spell_id;
+      if (this.prev !== null && sid <= this.prev) {
+        throw new GenerationResolveError(`sorted_unique_ids: ${this.label} duplicate/out-of-order spell_id ${sid}`);
+      }
+      this.prev = sid;
+    } else {
+      this.row = null;
+    }
+    return this.row;
+  }
+}
+
 
 function identityAgrees(frow, prow) {
   if (frow.name !== prow.name) {
@@ -79,23 +148,26 @@ function verifyIconRow(r) {
 // icons), projection ⊆ is_coa within domain, the disjoint v3 dialects, identity/mechanics/attribution
 // agreement, and compact_raw_expands_to_envelope (expand(full.raw) deep-equals projection.field_observations).
 export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
-  assertSortedUnique(fullRows, "full");
-  assertSortedUnique(projRows, "projection");
-  assertSortedUnique(iconRows, "icons");
-  if (iconRows.length !== fullRows.length) {
-    throw new GenerationResolveError(`icons_agree: icon catalog has ${iconRows.length} rows but the full table has ${fullRows.length} (missing/extra/trailing)`);
-  }
-  for (const r of iconRows) verifyIconRow(r);
-
-  let pi = 0;
-  for (let i = 0; i < fullRows.length; i++) {
-    const frow = fullRows[i];
+  const full = new Cursor(fullRows, "full");
+  const proj = new Cursor(projRows, "projection");
+  const icons = new Cursor(iconRows, "icons");
+  let anyConverted = false;
+  while (full.row !== null) {
+    const frow = full.row;
     const sid = frow.spell_id;
-    if (iconRows[i].spell_id !== sid) {
-      throw new GenerationResolveError(`icons_agree: icon row ${i} spell_id ${iconRows[i].spell_id} != full ${sid}`);
+    // The icon catalog advances in LOCKSTEP with the full table (exact 1:1 domain): a missing, orphan, or
+    // trailing icon row is a mismatch — identical to Python publish._cross_child.
+    if (icons.row === null) {
+      throw new GenerationResolveError(`icons_agree: spell ${sid} lacks an icon-catalog row`);
     }
-    if (pi < projRows.length && projRows[pi].spell_id < sid) {
-      throw new GenerationResolveError(`projection_within_domain: ${projRows[pi].spell_id} outside is_coa domain`);
+    if (icons.row.spell_id !== sid) {
+      throw new GenerationResolveError(`icons_agree: icon row spell_id ${icons.row.spell_id} != full ${sid}`);
+    }
+    verifyIconRow(icons.row);
+    anyConverted = anyConverted || icons.row.asset_status === "converted";
+    icons.advance();
+    if (proj.row !== null && proj.row.spell_id < sid) {
+      throw new GenerationResolveError(`projection_within_domain: ${proj.row.spell_id} outside is_coa domain`);
     }
     if (!("raw" in frow)) throw new GenerationResolveError(`full_is_compact: spell ${sid} missing compact raw`);
     if ("field_observations" in frow) throw new GenerationResolveError(`full_is_compact: spell ${sid} carries field_observations`);
@@ -103,42 +175,32 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
     for (const [f, cell] of Object.entries(frow.raw)) expanded[f] = expandCompact(cell, policyDoc);
     const isCoa = frow.coa_attribution && frow.coa_attribution.is_coa === true;
     if (isCoa) {
-      if (pi >= projRows.length || projRows[pi].spell_id !== sid) {
+      if (proj.row === null || proj.row.spell_id !== sid) {
         throw new GenerationResolveError(`projection_is_coa_subset: ${sid} missing from projection`);
       }
-      const prow = projRows[pi];
+      const prow = proj.row;
       if ("raw" in prow) throw new GenerationResolveError(`projection_is_rich: spell ${sid} carries compact raw`);
       if (!("field_observations" in prow)) throw new GenerationResolveError(`projection_is_rich: spell ${sid} missing field_observations`);
       identityAgrees(frow, prow);
       if (!isDeepStrictEqual(expanded, prow.field_observations)) {
         throw new GenerationResolveError(`compact_raw_expands_to_envelope: spell ${sid} full.raw expansion != projection.field_observations`);
       }
-      pi++;
+      proj.advance();
     }
+    full.advance();
   }
-  if (pi < projRows.length) {
-    throw new GenerationResolveError(`projection_within_domain: ${projRows[pi].spell_id} outside is_coa domain`);
+  if (proj.row !== null) {
+    throw new GenerationResolveError(`projection_within_domain: ${proj.row.spell_id} outside is_coa domain`);
   }
-  const anyConverted = iconRows.some((r) => r.asset_status === "converted");
+  if (icons.row !== null) {
+    throw new GenerationResolveError(`icons_agree: trailing icon row ${icons.row.spell_id} beyond the full domain`);
+  }
   if (anyConverted && !("coa_client_spell_icons.bundle.tar" in (manifest.children || {}))) {
     throw new GenerationResolveError("icon bundle required: a converted row exists but no bundle child is registered");
   }
 }
 
 function sha256(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
-
-// Count non-empty JSONL lines by scanning bytes — never builds (or retains) a row array (design A4:
-// "hashing the byte stream without materializing a row array"). Whitespace-only lines don't count.
-function countJsonlRecords(body) {
-  let count = 0, lineHasContent = false;
-  for (let i = 0; i < body.length; i++) {
-    const b = body[i];
-    if (b === 0x0a) { if (lineHasContent) count++; lineHasContent = false; }
-    else if (b !== 0x0d && b !== 0x20 && b !== 0x09) lineHasContent = true;
-  }
-  if (lineHasContent) count++;
-  return count;
-}
 
 // Validate every registered child by path (name safety, containment, sha256, byte_length, record count,
 // schema) without materializing a row array. Shared by the pointer resolver and the candidate validator.
@@ -153,11 +215,10 @@ function validateChildrenByPath(genDir, manifest) {
     const childPath = path.resolve(genDir, name);
     if (path.dirname(childPath) !== path.resolve(genDir)) throw new GenerationResolveError(`child ${name} escapes the generation directory`);
     if (!fs.existsSync(childPath)) throw new GenerationResolveError(`child ${name} missing`);
-    const body = fs.readFileSync(childPath);
-    if (sha256(body) !== meta.sha256) throw new GenerationResolveError(`child ${name} sha256 mismatch`);
-    if (body.length !== meta.byte_length) throw new GenerationResolveError(`child ${name} byte_length mismatch`);
-    const records = name.endsWith(".jsonl") ? countJsonlRecords(body) : 1;
-    if (records !== meta.records) throw new GenerationResolveError(`child ${name} record count mismatch (${records} != ${meta.records})`);
+    const scan = scanChild(childPath, name.endsWith(".jsonl"));
+    if (scan.sha256 !== meta.sha256) throw new GenerationResolveError(`child ${name} sha256 mismatch`);
+    if (scan.byteLength !== meta.byte_length) throw new GenerationResolveError(`child ${name} byte_length mismatch`);
+    if (scan.records !== meta.records) throw new GenerationResolveError(`child ${name} record count mismatch (${scan.records} != ${meta.records})`);
     if (!meta.schema_version) throw new GenerationResolveError(`child ${name} missing schema_version`);
     resolved[name] = childPath;
   }
@@ -193,21 +254,22 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH }
   catch (e) { throw new GenerationResolveError(`policy lock unreadable: ${e.message}`); }
   try { assertPolicyLock(policyDoc, lock); }
   catch (e) { throw new GenerationResolveError(`policy child not matched by the lock: ${e.message}`); }
-  // Row semantics over the full required domain: every full row's required scalars are present (not just in
-  // row.raw), and every projection row's claims + biconditional + value agreement re-derive from the policy.
-  const fullRows = readJsonlRows(children["coa_client_spell.jsonl"]);
-  const projRows = readJsonlRows(children["coa_client_spell_coa.jsonl"]);
-  const iconRows = readJsonlRows(children["coa_client_spell_icons.jsonl"]);
-  for (const row of fullRows) {
-    try { verifyFullRowAgainstPolicy(row, policyDoc); }
-    catch (e) { throw new GenerationResolveError(e.message); }
-  }
-  for (const row of projRows) {
-    try { verifyRowAgainstPolicy(row, policyDoc); }
-    catch (e) { throw new GenerationResolveError(e.message); }
-  }
-  // Streaming cross-child + bundle: dialects, identity/attribution, compact-raw expansion, icon domain/agreement.
-  crossChild(fullRows, projRows, iconRows, policyDoc, manifest);
+  // Row semantics over the full required domain, verified AS the rows stream through the cross-child
+  // cursors — one pass, no retained row arrays (E0R.1 T4.2). Every full row's required scalars are present
+  // (not just in row.raw); every projection row's claims + biconditional + value agreement re-derive from
+  // the policy; then dialects, identity/attribution, compact-raw expansion, icon domain/agreement, bundle.
+  const verified = function* (iter, verify) {
+    for (const row of iter) {
+      try { verify(row, policyDoc); }
+      catch (e) { throw new GenerationResolveError(e.message); }
+      yield row;
+    }
+  };
+  crossChild(
+    verified(readJsonlLines(children["coa_client_spell.jsonl"]), verifyFullRowAgainstPolicy),
+    verified(readJsonlLines(children["coa_client_spell_coa.jsonl"]), verifyRowAgainstPolicy),
+    readJsonlLines(children["coa_client_spell_icons.jsonl"]),
+    policyDoc, manifest);
   return { genDir: dir, manifest, children };
 }
 
