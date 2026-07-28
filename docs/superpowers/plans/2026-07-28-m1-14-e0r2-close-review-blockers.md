@@ -7,12 +7,13 @@
 **Goal:** Make every guarantee E0R.1 *documented* impossible to violate, so PR #1 can merge on evidence
 rather than on description.
 
-**Architecture:** Seven review blockers, closed in dependency order. A single versioned JSON
-**generation contract** replaces the name-only child registry and is read by both trust boundaries. The
-acceptance record becomes one internally-executed, generation-bound command. Recon re-probes the
-ambiguous joins live on every run and stops making artifact-size claims it cannot support. The canonical
-Node build streams end to end. The generation sheds ~225 MB of provably-redundant bytes so E1 has real
-headroom. `converted` icon assets are prohibited until a bundle validator exists.
+**Architecture:** Seven review blockers, closed in dependency order. A **cryptographically bound**
+generation contract — staged as a generation child, hashed into `manifest.binding`, covered by candidate
+trust, and independently re-derived by both languages — replaces the name-only child registry, and
+expresses *relational* cardinalities against the client topology rather than conservative floors. The
+acceptance record becomes one internally-executed command whose every claim is bound to a single
+generation id **and** manifest hash. Recon re-probes the ambiguous joins against a hash-bound baseline.
+The canonical Node build streams end to end. A v4 schema migration sheds ~225 MB of measured redundancy.
 
 **Tech Stack:** Python 3.11 (`coa_client_extract/`, `coa_meta/`), Node 20 ESM
 (`coa_scraper/scripts/`), pytest, `node --test`.
@@ -22,6 +23,10 @@ headroom. `converted` icon assets are prohibited until a bundle validator exists
 - **Branch:** `m1-14-e0r`. No history rewrite. **Do NOT merge PR #1. Do NOT start E1.**
 - **Commits:** explicit file paths only — **NEVER `git add -A`**. One contract-focused commit per task.
 - **Method:** probe-first TDD. Every adversarial case is a failing test *before* its fix.
+- **EVERY COMMIT LEAVES THE FULL SYNTHETIC SUITE GREEN.** No task may end with a knowingly-red test.
+  Schema changes land as expand → migrate → contract, with each step independently valid. A gate that
+  can only pass after a real-client run (the headroom assertion) is committed **together with** the
+  artifact that satisfies it, never earlier.
 - **Push:** once, at the end (WS8), after the full local suite is green. Never claim a remote green
   before the push.
 - **Anchor-evidence precedence (verbatim, unchanged from E0R):** 1. Hash-bound client-static evidence
@@ -29,10 +34,29 @@ headroom. `converted` icon assets are prohibited until a bundle validator exists
   (`coa_scraper/dist/coa_entries.jsonl`) that explicitly encode the value. 3. Stock 3.3.5 data ONLY as
   corroboration for demonstrably-unchanged stock spells. Do not use AscensionDB, remembered values,
   runtime behavior, or values inferred from the candidate DBC column being tested.
-- **Client:** `COA_CLIENT_ROOT=/home/archbug/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live/Data`
+- **Client root:** always referenced as `$COA_CLIENT_ROOT`, never as a literal path — including in this
+  document, which T7.1's hygiene test scans.
 - **Suites:** `pytest -q` from the repo root (CI runs **bare** `pytest`); `npm --prefix coa_scraper test`.
-- **Baseline at plan time:** branch head `02e0b7c`, 625 Python + 121 Node green, generation
+- **Baseline at plan time:** branch head `d69b5d3`, 625 Python + 121 Node green, generation
   `a9663d1b410841dd8284cb7538c61185` at 523,026,495 bytes (97.42% of ceiling).
+
+## Verified schema facts this plan depends on
+
+Established by probe against the tree at `02e0b7c` — do not re-derive, do not assume otherwise:
+
+| Fact | Value |
+|---|---|
+| Recon client build | `recon.source_pins.client_build` |
+| Recon per-table capture hash | `recon.source_pins.dbc.<Table>.sha256` |
+| Recon topology | `recon.topology.tables.<Table>` (`.header.record_count`, `.sha256`, `.member`, …) |
+| Manifest policy hash | `manifest.binding.policy_sha256` |
+| Manifest topology | `manifest.binding.topology.tables.<Table>` — **not** `manifest.binding.tables` |
+| Spell header record_count | 208,447 — **equals** the full child's record count exactly |
+| Full-child raw cell shapes | `scalar` (1 `policy_ref`) or `join-absent` (1 `policy_ref`); **zero** resolved joins today |
+| Resolved join shape | `_compact_join` emits `components.{index,side_id,side_value}`, each with its **own** `policy_ref` |
+| `state` vocabulary | `present`, `unresolved`, `resolved`, `candidate`, `absent` — **no closed set is declared anywhere** |
+| `decoded_reason` vocabulary | `decoded`, `not_present`, `proof_withheld`, `value_out_of_domain`, `index_zero`, `side_row_missing`, `non_finite`, `unknown_symbol` — **no closed set is declared anywhere** |
+| Policy rehash | `load_spell_policy` raises `policy sha256 mismatch` on an edited doc; only `compute_policy_sha256(json.load(...))` yields a new hash |
 
 ---
 
@@ -40,44 +64,136 @@ headroom. `converted` icon assets are prohibited until a bundle validator exists
 
 | Task | Status | Commit |
 |---|---|---|
-| T1.1 Generation contract document + loader | pending | |
-| T1.2 Python candidate validator enforces the contract | pending | |
-| T1.3 Node candidate validator reads the same contract | pending | |
-| T1.4 Production policy gains `required_scalar_fields` | pending | |
-| T1.5 Publication requires both validations + budget | pending | |
-| T2.1 `converted` prohibited until a bundle validator exists | pending | |
+| T0.1 Closed observation vocabularies as schema constants | pending | |
+| T1.1 Contract document describing the **current** schema + validated loader | pending | |
+| T1.2 Contract staged, hashed into `binding`, covered by candidate trust | pending | |
+| T1.3 Node re-derives and compares the bound contract | pending | |
+| T2.1 Relational cardinalities + unregistered children rejected | pending | |
+| T2.2 Per-child shape validation (both languages) | pending | |
+| T2.3 Full observation domain in the policy, validated at load | pending | |
+| T2.4 Publication requires both validations and a clean budget | pending | |
+| T2.5 `converted` prohibited until a bundle validator exists | pending | |
 | T3.1 Live FK candidate scan on every recon | pending | |
-| T3.2 Recon state machine requires surviving ambiguity | pending | |
+| T3.2 Hash-bound ambiguity baseline; exact agreement required | pending | |
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | pending | |
-| T4.1 Readiness + source coverage producers | pending | |
+| T4.1 `observation_coverage` + `field_readiness_coverage` producers | pending | |
 | T4.2 One internally-executed acceptance command | pending | |
-| T4.3 Acceptance binds recon + mechanics to the generation | pending | |
+| T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | pending | |
 | T5.1 Streaming projection consumption | pending | |
 | T5.2 Generator mechanics rows + incremental statistics | pending | |
-| T5.3 RSS test through the real canonical build | pending | |
-| T6.1 Field-descriptor hoist (`policy_ref`, `join_name`) | pending | |
-| T6.2 Enum interning (`state`, `decoded_reason`) | pending | |
-| T6.3 Icon asset normalization | pending | |
-| T6.4 Budget target ≤75% asserted on real measurement | pending | |
-| T7.1 CI runs `npm test`; path hygiene | pending | |
-| T7.2 Documentation corrections | pending | |
+| T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
+| T6.1 Kind-aware field descriptors (expand) | pending | |
+| T6.2 v4 spell rows: hoist + intern (migrate + contract, atomic) | pending | |
+| T6.3 Icon v2: normalized assets (migrate + contract, atomic) | pending | |
+| T7.1 CI runs `npm test`; path hygiene over tracked text | pending | |
+| T7.2 Documentation + ROADMAP corrections | pending | |
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
-| T8.2 Push, PR update, CI green | pending | |
+| T8.2 Headroom gate committed with the record | pending | |
+| T8.3 Push, PR update, CI green | pending | |
 
 ---
 
-# Workstream 1 — one shared child-contract registry (blocker 1)
+# Workstream 0 — prerequisite: closed vocabularies
+
+### Task 0.1: The observation vocabularies become schema-owned constants
+
+**Files:**
+- Modify: `coa_client_extract/contracts.py`
+- Test: `tests/test_e0r2_vocabularies.py`
+
+**Why first:** T6.2 interns `state` and `decoded_reason` as integer codes. Interning a vocabulary that
+exists only as scattered string literals is unsound — a value with no code silently breaks
+round-tripping, and a code assignment read from a staged data file lets an attacker relabel meanings
+while keeping compact→rich expansion internally consistent. The codes must be **owned by the schema**,
+not by the generation.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_e0r2_vocabularies.py
+"""E0R.2 T0.1: `state` and `decoded_reason` are closed vocabularies that existed only as scattered
+string literals. T6.2 assigns them integer codes, so the vocabularies AND their code assignments must
+be schema-owned constants — a code table read from the staged generation would let a tampered
+descriptor relabel meanings while compact->rich expansion stayed self-consistent."""
+import re
+from pathlib import Path
+
+from coa_client_extract.contracts import (DECODED_REASONS, DECODED_REASON_CODES, OBSERVATION_STATES,
+                                          OBSERVATION_STATE_CODES)
+
+SRC = Path(__file__).resolve().parents[1] / "coa_client_extract"
+
+
+def test_the_vocabularies_are_closed_and_complete():
+    assert OBSERVATION_STATES == ("absent", "candidate", "present", "resolved", "unresolved")
+    assert DECODED_REASONS == (
+        "decoded", "index_zero", "non_finite", "not_present", "proof_withheld",
+        "side_row_missing", "unknown_symbol", "value_out_of_domain")
+
+
+def test_codes_are_dense_stable_and_derived_from_the_tuple_order():
+    """Dense 0..n-1 so an out-of-range index is detectable; tuple order is the wire format, so
+    REORDERING THE TUPLE IS A SCHEMA BREAK — append only."""
+    assert OBSERVATION_STATE_CODES == {s: i for i, s in enumerate(OBSERVATION_STATES)}
+    assert DECODED_REASON_CODES == {r: i for i, r in enumerate(DECODED_REASONS)}
+
+
+def test_no_producer_emits_a_value_outside_the_vocabulary():
+    """The real defect this guards: a new literal added in spell_record.py with no code assignment."""
+    literals = set()
+    for path in SRC.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r'"(?:state|decoded_reason)":\s*"([a-z_]+)"', text):
+            literals.add(match.group(1))
+    unknown = literals - set(OBSERVATION_STATES) - set(DECODED_REASONS)
+    assert unknown == set(), f"producer emits values with no schema code: {sorted(unknown)}"
+```
+
+- [ ] **Step 2: Run and confirm failure** — `ImportError: cannot import name 'DECODED_REASONS'`.
+
+- [ ] **Step 3: Add the constants to `contracts.py`**
+
+```python
+# The closed observation vocabularies (E0R.2 T0.1). Order IS the wire format: T6.2 serializes the index,
+# so entries may be APPENDED but never reordered or removed without a schema version bump. Sourced by
+# enumerating every literal the producer emits (`spell_record.py`, `observations.py`) — before this,
+# no closed set existed anywhere in the package.
+OBSERVATION_STATES = ("absent", "candidate", "present", "resolved", "unresolved")
+DECODED_REASONS = ("decoded", "index_zero", "non_finite", "not_present", "proof_withheld",
+                   "side_row_missing", "unknown_symbol", "value_out_of_domain")
+OBSERVATION_STATE_CODES = {s: i for i, s in enumerate(OBSERVATION_STATES)}
+DECODED_REASON_CODES = {r: i for i, r in enumerate(DECODED_REASONS)}
+```
+
+- [ ] **Step 4: Run the full suite; commit**
+
+```bash
+git add coa_client_extract/contracts.py tests/test_e0r2_vocabularies.py
+git commit -m "feat(e0r2): T0.1 — closed observation vocabularies as schema-owned constants"
+```
+
+---
+
+# Workstream 1 — a cryptographically bound generation contract (blocker 1, part 1)
 
 **Blocker:** both validators accept a candidate carrying every required child *name* with zero
-spell/projection/icon rows, arbitrary child `schema_version` strings, and (in production) no
-`required_scalar_fields`, so a full row may omit its entire expected field domain. Reproduced:
+spell/projection/icon rows and arbitrary child `schema_version` strings. Reproduced at `02e0b7c`:
 
 ```
 === PYTHON validate_candidate_generation ===  ACCEPTED
 === NODE  validateCandidateByPath        ===  ACCEPTED
 ```
 
-### Task 1.1: The generation contract document and its loader
+**Correction carried from review round 2:** a contract read from the working tree is not bound to the
+generation. A generation produced under contract A could later be validated under contract B. The
+contract must be staged as a child, hashed into `manifest.binding`, and covered by candidate trust —
+and **both languages must compare the staged contract against their own trusted supported contract**,
+so a tampered staged copy is rejected rather than obeyed.
+
+**This workstream describes the CURRENT schema** (`coa-client-spell-v3`, `coa-client-spell-icons-v1`,
+11 children). WS6 migrates to v4 and updates the contract atomically. Every commit here is green.
+
+### Task 1.1: The contract document and a self-validating loader
 
 **Files:**
 - Create: `coa_client_extract/data/generation_contract.json`
@@ -85,25 +201,45 @@ spell/projection/icon rows, arbitrary child `schema_version` strings, and (in pr
 - Test: `tests/test_e0r2_generation_contract.py`
 
 **Interfaces:**
-- Produces: `load_generation_contract() -> dict`, `GENERATION_CONTRACT_SCHEMA = "coa-generation-contract-v1"`.
-  Contract shape per child: `{kind, child_schema_version, row_schema_version, min_records,
-  max_records, requires}`. `kind` ∈ `{"jsonl", "json"}`. `row_schema_version` is `null` for
-  `kind: "json"` children.
+- Produces: `GENERATION_CONTRACT_SCHEMA = "coa-generation-contract-v1"`,
+  `load_generation_contract() -> dict`, `validate_generation_contract(doc) -> dict` (raises
+  `ContractError`), `generation_contract_sha256(doc) -> str` (canonical JSON: sorted keys, no
+  whitespace variance).
+
+Per-child shape:
+
+```json
+{
+  "kind": "jsonl" | "json",
+  "child_schema_version": "<exact string>",
+  "row_schema_version": "<exact string>" | null,
+  "optional": false,
+  "cardinality": {"rule": "<named relational rule>" | "min", "min": <int>},
+  "shape": "<named semantic validator>"
+}
+```
+
+`cardinality.rule` names a **relational** rule resolved at validation time (see T2.1); `"min"` with an
+explicit floor is permitted **only** for ancillary datasets whose exact source-domain count cannot be
+derived. `shape` names a validator implemented independently in both languages (see T2.2) — top-level
+key presence is not a shape.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_generation_contract.py
-"""E0R.2 T1.1: the generation contract is ONE versioned document both trust boundaries read. A name
-list cannot express cardinality, row schema, or domain — which is how a complete-but-empty generation
-passed both validators at 02e0b7c."""
-import json
-from pathlib import Path
+"""E0R.2 T1.1: the generation contract is ONE versioned, SELF-VALIDATED document. A name list cannot
+express cardinality, row schema, or shape — which is how a complete-but-empty generation passed both
+validators at 02e0b7c. The loader validates the contract itself: a malformed contract is a broken gate,
+and a broken gate that loads is worse than no gate."""
+import copy
 
-from coa_client_extract.contracts import GENERATION_CONTRACT_SCHEMA, load_generation_contract
+import pytest
+
+from coa_client_extract.contracts import (ContractError, GENERATION_CONTRACT_SCHEMA,
+                                          generation_contract_sha256, load_generation_contract,
+                                          validate_generation_contract)
 from coa_client_extract.publish import REQUIRED_CHILDREN
-
-CONTRACT_PATH = Path(__file__).resolve().parents[1] / "coa_client_extract/data/generation_contract.json"
 
 
 def test_contract_covers_exactly_the_required_children():
@@ -112,291 +248,306 @@ def test_contract_covers_exactly_the_required_children():
     assert set(contract["children"]) == set(REQUIRED_CHILDREN)
 
 
-def test_every_child_declares_kind_schema_and_cardinality():
+def test_every_child_declares_kind_schema_cardinality_and_shape():
     for name, spec in load_generation_contract()["children"].items():
         assert spec["kind"] in ("jsonl", "json"), name
         assert spec["child_schema_version"], name
-        assert isinstance(spec["min_records"], int) and spec["min_records"] >= 1, name
+        assert spec["shape"], name
+        assert spec["cardinality"]["rule"], name
         if spec["kind"] == "jsonl":
             assert spec["row_schema_version"], name
         else:
             assert spec["row_schema_version"] is None, name
 
 
-def test_the_spell_domain_children_require_a_nonempty_domain():
-    """A zero-row spell/icon child is not a small generation, it is not a generation."""
+def test_the_spell_domain_children_use_relational_cardinality_not_a_floor():
+    """A floor of 1 admits a one-spell generation. The domain count is derivable from the client
+    topology, so it must be derived."""
     children = load_generation_contract()["children"]
-    for name in ("coa_client_spell.jsonl", "coa_client_spell_icons.jsonl", "coa_client_spell_coa.jsonl"):
-        assert children[name]["min_records"] >= 1, name
+    assert children["coa_client_spell.jsonl"]["cardinality"]["rule"] == "spell_topology_record_count"
+    assert children["coa_client_spell_icons.jsonl"]["cardinality"]["rule"] == "equals_full_spell_records"
+    assert children["coa_client_spell_coa.jsonl"]["cardinality"]["rule"] == "equals_is_coa_full_records"
 
 
-def test_the_contract_file_is_the_only_source_node_reads():
-    """Node must load THIS file, not a hand-mirrored copy — the mirror is what drifts."""
-    generation_mjs = (Path(__file__).resolve().parents[1]
-                      / "coa_scraper/scripts/lib/generation.mjs").read_text(encoding="utf-8")
-    assert "generation_contract.json" in generation_mjs
-    assert "REQUIRED_CHILDREN = [" not in generation_mjs      # the retired hand-mirrored name list
+@pytest.mark.parametrize("mutate, match", [
+    (lambda d: d.update(schema_version="nope"), "schema_version"),
+    (lambda d: d["children"]["spell_layout_v2.json"].update(kind="parquet"), "kind"),
+    (lambda d: d["children"]["spell_layout_v2.json"].update(shape=""), "shape"),
+    (lambda d: d["children"]["spell_layout_v2.json"].update(unexpected_key=1), "unexpected_key"),
+    (lambda d: d["children"]["coa_client_spell.jsonl"].update(row_schema_version=None), "row_schema_version"),
+    (lambda d: d["children"].update(dupe=copy.deepcopy(d["children"]["spell_layout_v2.json"])), "shape"),
+])
+def test_the_loader_rejects_a_malformed_contract(mutate, match):
+    doc = copy.deepcopy(load_generation_contract())
+    mutate(doc)
+    with pytest.raises(ContractError, match=match):
+        validate_generation_contract(doc)
+
+
+def test_the_contract_hash_is_canonical_and_stable():
+    doc = load_generation_contract()
+    reordered = {"children": doc["children"], "schema_version": doc["schema_version"],
+                 **{k: v for k, v in doc.items() if k not in ("children", "schema_version")}}
+    assert generation_contract_sha256(doc) == generation_contract_sha256(reordered)
+    assert len(generation_contract_sha256(doc)) == 64
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [ ] **Step 2: Run and confirm failure.**
 
-Run: `python -m pytest tests/test_e0r2_generation_contract.py -q`
-Expected: FAIL — `ImportError: cannot import name 'GENERATION_CONTRACT_SCHEMA'`.
+- [ ] **Step 3: Author the contract for the CURRENT schema**
 
-- [ ] **Step 3: Author the contract document**
-
-Cardinalities come from the real generation `a9663d1b` (advancement 3,614; class_types 46;
-tab_types 94; essence 5,600; content 52,744). `min_records` is a floor that a *degenerate* generation
-fails, not a regression detector — set it to 1 for domain children and to a conservative fraction for
-the reference tables, so a client patch that legitimately shrinks a table does not fail the gate.
+Eleven children, matching what `regenerate` emits today. Relational rules for the three spell-domain
+children and the two derived-count JSON children; explicit `min` floors **only** for the five ancillary
+DBC-derived tables, whose source-domain counts are not recorded in the topology binding.
 
 ```json
 {
   "schema_version": "coa-generation-contract-v1",
-  "note": "The E0R child contract read by BOTH trust boundaries (coa_client_extract.publish and coa_scraper/scripts/lib/generation.mjs). A name list cannot express cardinality or row schema; this can.",
+  "note": "The E0R child contract. STAGED as a generation child and hashed into manifest.binding, so a generation is always interpreted under the contract it was produced with. Both languages re-derive their own trusted copy and compare.",
   "children": {
     "coa_client_spell.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-spell-v4",
-      "row_schema_version": "coa-client-spell-v4", "min_records": 1, "max_records": null,
-      "requires": ["spell_id", "name", "mechanics", "raw", "coa_attribution"]
+      "kind": "jsonl", "child_schema_version": "coa-client-spell-v3",
+      "row_schema_version": "coa-client-spell-v3", "optional": false,
+      "cardinality": {"rule": "spell_topology_record_count"}, "shape": "full_spell_row_v3"
     },
     "coa_client_spell_coa.jsonl": {
       "kind": "jsonl", "child_schema_version": "coa-client-spell-projection-v3",
-      "row_schema_version": "coa-client-spell-projection-v3", "min_records": 1, "max_records": null,
-      "requires": ["spell_id", "name", "mechanics", "field_observations", "coa_attribution"]
+      "row_schema_version": "coa-client-spell-projection-v3", "optional": false,
+      "cardinality": {"rule": "equals_is_coa_full_records"}, "shape": "projection_row_v3"
     },
     "coa_client_spell_icons.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-spell-icons-v2",
-      "row_schema_version": "coa-client-spell-icons-v2", "min_records": 1, "max_records": null,
-      "requires": ["spell_id", "spell_icon_id", "asset_status", "readiness"]
-    },
-    "coa_client_icon_assets.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-icon-assets-v1",
-      "row_schema_version": "coa-client-icon-assets-v1", "min_records": 1, "max_records": null,
-      "requires": ["asset_id", "client_path"]
-    },
-    "coa_client_spell_fields.json": {
-      "kind": "json", "child_schema_version": "coa-client-spell-fields-v1",
-      "row_schema_version": null, "min_records": 1, "max_records": 1, "requires": []
+      "kind": "jsonl", "child_schema_version": "coa-client-spell-icons-v1",
+      "row_schema_version": "coa-client-spell-icons-v1", "optional": false,
+      "cardinality": {"rule": "equals_full_spell_records"}, "shape": "icon_row_v1"
     },
     "coa_client_spell_projection.manifest.json": {
       "kind": "json", "child_schema_version": "coa-client-spell-projection-manifest-v3",
-      "row_schema_version": null, "min_records": 1, "max_records": 1, "requires": []
-    },
-    "coa_client_content.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-content-v1",
-      "row_schema_version": "coa-client-content-v1", "min_records": 1000, "max_records": null,
-      "requires": ["content_kind", "values", "provenance"]
-    },
-    "coa_client_archive_plan.json": {
-      "kind": "json", "child_schema_version": "coa-client-archive-plan-v1",
-      "row_schema_version": null, "min_records": 1, "max_records": 1, "requires": []
-    },
-    "coa_client_advancement.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-advancement-v1",
-      "row_schema_version": "coa-client-advancement-v1", "min_records": 100, "max_records": null,
-      "requires": ["node_id", "name", "class", "entry_type", "provenance"]
-    },
-    "coa_client_class_types.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-class-types-v1",
-      "row_schema_version": "coa-client-class-types-v1", "min_records": 1, "max_records": null,
-      "requires": []
-    },
-    "coa_client_tab_types.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-tab-types-v1",
-      "row_schema_version": "coa-client-tab-types-v1", "min_records": 1, "max_records": null,
-      "requires": []
-    },
-    "coa_client_essence.jsonl": {
-      "kind": "jsonl", "child_schema_version": "coa-client-essence-v1",
-      "row_schema_version": "coa-client-essence-v1", "min_records": 1, "max_records": null,
-      "requires": []
+      "row_schema_version": null, "optional": false,
+      "cardinality": {"rule": "single_document"}, "shape": "projection_manifest_v3"
     },
     "spell_layout_v2.json": {
       "kind": "json", "child_schema_version": "coa-spell-layout-v2",
-      "row_schema_version": null, "min_records": 1, "max_records": 1, "requires": []
+      "row_schema_version": null, "optional": false,
+      "cardinality": {"rule": "single_document"}, "shape": "spell_policy_v2"
+    },
+    "coa_client_archive_plan.json": {
+      "kind": "json", "child_schema_version": "coa-client-archive-plan-v1",
+      "row_schema_version": null, "optional": false,
+      "cardinality": {"rule": "single_document"}, "shape": "archive_plan_v1"
+    },
+    "coa_client_content.jsonl": {
+      "kind": "jsonl", "child_schema_version": "coa-client-content-v1",
+      "row_schema_version": "coa-client-content-v1", "optional": false,
+      "cardinality": {"rule": "min", "min": 1000}, "shape": "content_row_v1"
+    },
+    "coa_client_advancement.jsonl": {
+      "kind": "jsonl", "child_schema_version": "coa-client-advancement-v1",
+      "row_schema_version": "coa-client-advancement-v1", "optional": false,
+      "cardinality": {"rule": "min", "min": 100}, "shape": "advancement_row_v1"
+    },
+    "coa_client_class_types.jsonl": {
+      "kind": "jsonl", "child_schema_version": "coa-client-class-types-v1",
+      "row_schema_version": "coa-client-class-types-v1", "optional": false,
+      "cardinality": {"rule": "min", "min": 1}, "shape": "class_type_row_v1"
+    },
+    "coa_client_tab_types.jsonl": {
+      "kind": "jsonl", "child_schema_version": "coa-client-tab-types-v1",
+      "row_schema_version": "coa-client-tab-types-v1", "optional": false,
+      "cardinality": {"rule": "min", "min": 1}, "shape": "tab_type_row_v1"
+    },
+    "coa_client_essence.jsonl": {
+      "kind": "jsonl", "child_schema_version": "coa-client-essence-v1",
+      "row_schema_version": "coa-client-essence-v1", "optional": false,
+      "cardinality": {"rule": "min", "min": 1}, "shape": "essence_row_v1"
     }
   }
 }
 ```
 
-> **Note on the two new children and the two bumped schema versions:** `coa_client_spell_fields.json`,
-> `coa_client_icon_assets.jsonl`, `coa-client-spell-v4` and `coa-client-spell-icons-v2` are introduced by
-> Workstream 6. Authoring them here keeps the contract a single document; T6.x makes the producer emit
-> them. Between T1.1 and T6.3 the Python/Node candidate validators will reject the *old* generation
-> shape — that is expected and is why WS6 precedes the real re-run in WS8. The synthetic test corpus is
-> migrated in T6.1–T6.3 alongside the producer.
-
-- [ ] **Step 4: Add the loader to `contracts.py`**
+- [ ] **Step 4: Implement the loader with full self-validation**
 
 ```python
-GENERATION_CONTRACT_SCHEMA = "coa-generation-contract-v1"
-_CONTRACT_CACHE: dict | None = None
+class ContractError(Exception):
+    """The generation contract itself is malformed. A broken gate that loads is worse than no gate."""
 
 
-def load_generation_contract() -> dict:
-    """The ONE child contract both trust boundaries read (E0R.2 T1.1). Cached: it is a frozen data file,
-    and the candidate validator consults it per child."""
-    global _CONTRACT_CACHE
-    if _CONTRACT_CACHE is None:
-        import json
-        from pathlib import Path
-        path = Path(__file__).resolve().parent / "data" / "generation_contract.json"
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        if doc.get("schema_version") != GENERATION_CONTRACT_SCHEMA:
-            raise ValueError(f"generation contract bad schema_version {doc.get('schema_version')!r}")
-        _CONTRACT_CACHE = doc
-    return _CONTRACT_CACHE
+_CHILD_KEYS = {"kind", "child_schema_version", "row_schema_version", "optional", "cardinality", "shape"}
+_CARDINALITY_RULES = frozenset({
+    "spell_topology_record_count", "equals_full_spell_records", "equals_is_coa_full_records",
+    "single_document", "min"})
+
+
+def validate_generation_contract(doc: dict) -> dict:
+    if doc.get("schema_version") != GENERATION_CONTRACT_SCHEMA:
+        raise ContractError(f"contract schema_version {doc.get('schema_version')!r}")
+    children = doc.get("children")
+    if not isinstance(children, dict) or not children:
+        raise ContractError("contract declares no children")
+    seen_shapes = set()
+    for name, spec in children.items():
+        extra = set(spec) - _CHILD_KEYS
+        if extra:
+            raise ContractError(f"child {name!r} has unexpected_key(s) {sorted(extra)}")
+        missing = _CHILD_KEYS - set(spec)
+        if missing:
+            raise ContractError(f"child {name!r} missing {sorted(missing)}")
+        if spec["kind"] not in ("jsonl", "json"):
+            raise ContractError(f"child {name!r} kind {spec['kind']!r}")
+        if not spec["child_schema_version"] or not isinstance(spec["child_schema_version"], str):
+            raise ContractError(f"child {name!r} child_schema_version")
+        if spec["kind"] == "jsonl":
+            if not spec["row_schema_version"]:
+                raise ContractError(f"child {name!r} jsonl child needs a row_schema_version")
+        elif spec["row_schema_version"] is not None:
+            raise ContractError(f"child {name!r} json child must have row_schema_version null")
+        if not isinstance(spec["shape"], str) or not spec["shape"]:
+            raise ContractError(f"child {name!r} shape must name a validator")
+        if spec["shape"] in seen_shapes:
+            raise ContractError(f"shape {spec['shape']!r} is reused; each child needs its own shape")
+        seen_shapes.add(spec["shape"])
+        rule = (spec["cardinality"] or {}).get("rule")
+        if rule not in _CARDINALITY_RULES:
+            raise ContractError(f"child {name!r} cardinality rule {rule!r}")
+        if rule == "min" and not isinstance(spec["cardinality"].get("min"), int):
+            raise ContractError(f"child {name!r} min cardinality needs an integer floor")
+    return doc
+
+
+def generation_contract_sha256(doc: dict) -> str:
+    """Canonical digest: sorted keys, no whitespace variance — key order must not change the hash."""
+    import hashlib
+    import json
+    return hashlib.sha256(
+        json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
 ```
 
-- [ ] **Step 5: Run the test — two assertions stay red until T1.2 and T1.3**
+- [ ] **Step 5: Derive `REQUIRED_CHILDREN` from the contract in `publish.py`** so the first test passes:
+  `REQUIRED_CHILDREN = tuple(sorted(load_generation_contract()["children"]))`. Because this workstream
+  describes the *current* schema, the derived tuple equals the existing literal and nothing else moves.
 
-Run: `python -m pytest tests/test_e0r2_generation_contract.py -q`
-Expected: 2 pass, 2 FAIL. `test_contract_covers_exactly_the_required_children` fails because
-`publish.REQUIRED_CHILDREN` is still the hand-written 11-name tuple and the contract names 13 children
-(the two WS6 additions) — T1.2 makes it contract-derived. `test_the_contract_file_is_the_only_source_node_reads`
-fails until T1.3. Both are expected red; do not soften the contract to make them pass early.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run the full suite (must be fully green); commit**
 
 ```bash
+python -m pytest -q
 git add coa_client_extract/data/generation_contract.json coa_client_extract/contracts.py \
-        tests/test_e0r2_generation_contract.py
-git commit -m "feat(e0r2): T1.1 — one versioned generation contract read by both boundaries"
+        coa_client_extract/publish.py tests/test_e0r2_generation_contract.py
+git commit -m "feat(e0r2): T1.1 — a self-validating generation contract for the current schema"
 ```
 
-### Task 1.2: The Python candidate validator enforces the contract
+### Task 1.2: The contract is staged, hashed into `binding`, and covered by candidate trust
 
 **Files:**
-- Modify: `coa_client_extract/publish.py` (`REQUIRED_CHILDREN`, `_validate_children_by_path`,
-  `validate_candidate_generation`)
-- Test: `tests/test_e0r2_empty_generation_rejected.py`
+- Modify: `coa_client_extract/cli.py` (`regenerate` — stage the child, extend `binding`),
+  `coa_client_extract/publish.py` (`validate_candidate_generation`),
+  `coa_client_extract/data/generation_contract.json` (add itself as a child)
+- Test: `tests/test_e0r2_contract_binding.py`
 
-**Interfaces:**
-- Consumes: `load_generation_contract()` from T1.1.
-- Produces: `REQUIRED_CHILDREN` derived from the contract (kept as a name tuple for existing importers).
+**Design:** the contract is staged as `generation_contract.json` (a twelfth child, self-describing) and
+`manifest.binding.generation_contract = {"schema_version": ..., "sha256": ...}`. `binding` is already
+inside `TRUST_CRITICAL_MANIFEST_KEYS`, so candidate trust covers the hash with no change to the digest
+definition. Validation compares three things: the **staged child bytes**, the **bound hash**, and the
+validator's **own trusted contract**. All three must agree.
 
-- [ ] **Step 1: Write the failing probe — this is the exact reproduction from the review**
+- [ ] **Step 1: Write the failing test**
 
 ```python
-# tests/test_e0r2_empty_generation_rejected.py
-"""E0R.2 T1.2: a candidate carrying every required child NAME but no spell/projection/icon domain is
-not a small generation — it is a hole in the trust boundary. At 02e0b7c both validators ACCEPTED it."""
-import hashlib
+# tests/test_e0r2_contract_binding.py
+"""E0R.2 T1.2: a contract read from the working tree is not bound to the generation — a generation
+produced under contract A could later be validated under contract B. Stage it, hash it into binding,
+cover it with candidate trust, and make the validator compare the staged copy against its OWN trusted
+contract so a tampered staged copy is rejected rather than obeyed."""
 import json
 
 import pytest
 
-from coa_client_extract.publish import (REQUIRED_CHILDREN, ResolveError, candidate_trust_sha256,
-                                        validate_candidate_generation)
-from tests._e0r2_fixtures import POLICY_TEXT, stage_candidate
+from coa_client_extract.contracts import generation_contract_sha256, load_generation_contract
+from coa_client_extract.publish import ResolveError, validate_candidate_generation
+from tests._e0r2_fixtures import stage_candidate
 
 
-def test_a_complete_but_empty_candidate_is_rejected(tmp_path):
-    gen = stage_candidate(tmp_path, rows={})          # every child present, every JSONL child empty
-    with pytest.raises(ResolveError, match="min_records|empty"):
+def test_the_contract_is_staged_as_a_child_and_bound_in_the_manifest(tmp_path):
+    gen = stage_candidate(tmp_path)
+    manifest = json.loads((gen / "manifest.json").read_text(encoding="utf-8"))
+    bound = manifest["binding"]["generation_contract"]
+    assert bound["sha256"] == generation_contract_sha256(load_generation_contract())
+    assert (gen / "generation_contract.json").is_file()
+
+
+def test_a_staged_contract_that_differs_from_the_bound_hash_is_rejected(tmp_path):
+    gen = stage_candidate(tmp_path, tamper_staged_contract={"schema_version": "coa-generation-contract-v1",
+                                                            "children": {}})
+    with pytest.raises(ResolveError, match="generation_contract"):
         validate_candidate_generation(gen)
 
 
-def test_an_arbitrary_child_schema_version_is_rejected(tmp_path):
-    gen = stage_candidate(tmp_path, child_schema_overrides={
-        "coa_client_spell.jsonl": "totally-made-up-schema-v99"})
-    with pytest.raises(ResolveError, match="schema_version"):
+def test_a_generation_bound_to_an_unsupported_contract_is_rejected(tmp_path):
+    """Both the staged child AND the bound hash say contract B; the validator only supports A."""
+    gen = stage_candidate(tmp_path, contract_override={"schema_version": "coa-generation-contract-v1",
+                                                        "children": {"only.jsonl": {}}})
+    with pytest.raises(ResolveError, match="not the supported contract"):
         validate_candidate_generation(gen)
 
 
-def test_a_row_missing_its_schema_version_is_rejected(tmp_path):
-    gen = stage_candidate(tmp_path, drop_row_keys={"coa_client_spell.jsonl": ["schema_version"]})
-    with pytest.raises(ResolveError, match="row schema_version"):
+def test_candidate_trust_covers_the_bound_contract_hash(tmp_path):
+    """Rewriting the bound hash without restaging breaks the trust digest."""
+    gen = stage_candidate(tmp_path)
+    manifest = json.loads((gen / "manifest.json").read_text(encoding="utf-8"))
+    manifest["binding"]["generation_contract"]["sha256"] = "0" * 64
+    (gen / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    with pytest.raises(ResolveError, match="candidate_trust_sha256"):
         validate_candidate_generation(gen)
-
-
-def test_a_row_missing_a_required_key_is_rejected(tmp_path):
-    gen = stage_candidate(tmp_path, drop_row_keys={"coa_client_spell.jsonl": ["coa_attribution"]})
-    with pytest.raises(ResolveError, match="coa_attribution"):
-        validate_candidate_generation(gen)
-
-
-def test_a_wellformed_candidate_still_validates(tmp_path):
-    """The gate must not be a wall: the golden-shaped generation passes unchanged."""
-    validate_candidate_generation(stage_candidate(tmp_path))
 ```
 
-`tests/_e0r2_fixtures.py` builds a minimal *valid* generation (three spells, one is_coa, one icon
-asset) and lets each probe degrade exactly one property. Model it on
-`tests/golden/e0r1_corpus/` — reuse that corpus's rows rather than inventing new ones, so the golden
-corpus stays the single source of row shape.
+- [ ] **Step 2: Run and confirm failure.**
 
-- [ ] **Step 2: Run it and confirm every probe but the last fails**
+- [ ] **Step 3: Implement**
 
-Run: `python -m pytest tests/test_e0r2_empty_generation_rejected.py -q`
-Expected: 4 FAIL (no exception raised), 1 PASS.
-
-- [ ] **Step 3: Enforce the contract in `_validate_children_by_path` and `validate_candidate_generation`**
-
-Replace the literal `REQUIRED_CHILDREN` tuple with a contract-derived one, add the per-child
-cardinality/schema checks, and add a streaming per-row check:
+Stage the contract in `regenerate` beside `spell_layout_v2.json`; add
+`binding["generation_contract"] = {"schema_version": ..., "sha256": generation_contract_sha256(doc)}`;
+add `generation_contract.json` to the contract's own `children` map (kind `json`, shape
+`generation_contract_v1`, `single_document`). In `validate_candidate_generation`, before any per-child
+work:
 
 ```python
-from .contracts import load_generation_contract
-
-REQUIRED_CHILDREN = tuple(sorted(load_generation_contract()["children"]))
-
-
-def _verify_child_against_contract(name: str, meta: dict, path: Path, spec: dict) -> None:
-    """Cardinality, child schema, and (for JSONL) per-row schema + required keys. A generation whose
-    children are all present but all empty carries no domain and is rejected here (E0R.2 T1.2)."""
-    if meta.get("schema_version") != spec["child_schema_version"]:
+    supported = load_generation_contract()
+    staged_path = gen_dir / "generation_contract.json"
+    if not staged_path.is_file():
+        raise ResolveError("generation_contract child missing; the generation is unbound")
+    staged = json.loads(staged_path.read_text(encoding="utf-8"))
+    staged_sha = generation_contract_sha256(staged)
+    bound_sha = ((manifest.get("binding") or {}).get("generation_contract") or {}).get("sha256")
+    if staged_sha != bound_sha:
         raise ResolveError(
-            f"child {name!r} schema_version {meta.get('schema_version')!r} != contract "
-            f"{spec['child_schema_version']!r}")
-    records = meta.get("records")
-    if records < spec["min_records"]:
-        raise ResolveError(f"child {name!r} min_records: {records} < {spec['min_records']}")
-    if spec["max_records"] is not None and records > spec["max_records"]:
-        raise ResolveError(f"child {name!r} max_records: {records} > {spec['max_records']}")
-    if spec["kind"] != "jsonl":
-        return
-    row_schema, required = spec["row_schema_version"], spec["requires"]
-    for index, row in enumerate(_read_jsonl(path)):        # streaming; never a row list
-        if row.get("schema_version") != row_schema:
-            raise ResolveError(
-                f"child {name!r} row {index} schema_version {row.get('schema_version')!r} != {row_schema!r}")
-        for key in required:
-            if key not in row:
-                raise ResolveError(f"child {name!r} row {index} missing required key {key!r}")
+            f"generation_contract: staged child hashes {staged_sha[:16]} but binding names {str(bound_sha)[:16]}")
+    if staged_sha != generation_contract_sha256(supported):
+        raise ResolveError(
+            "generation_contract: the generation is bound to a contract that is not the supported "
+            f"contract ({staged_sha[:16]} != {generation_contract_sha256(supported)[:16]})")
+    contract = validate_generation_contract(staged)
 ```
 
-Call it from `_validate_children_by_path` for every child the contract names, after the existing
-hash/bytes/records scan. Leave unknown children alone — the contract governs *required* children, and
-an extra child is already caught by `candidate_trust_sha256`.
+Use `contract` — the verified staged copy — for all downstream child checks.
 
-- [ ] **Step 4: Run the probes and the full suite**
-
-Run: `python -m pytest tests/test_e0r2_empty_generation_rejected.py -q && python -m pytest -q`
-Expected: probes PASS. The full suite will show failures in existing tests whose synthetic generations
-predate the contract — migrate those fixtures (they are the same class of omission the contract now
-catches). Do not weaken the contract to accommodate a fixture.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Run the full suite; commit**
 
 ```bash
-git add coa_client_extract/publish.py tests/test_e0r2_empty_generation_rejected.py tests/_e0r2_fixtures.py
-git commit -m "fix(e0r2): T1.2 — the Python candidate validator enforces cardinality and row schema"
+git add coa_client_extract/cli.py coa_client_extract/publish.py \
+        coa_client_extract/data/generation_contract.json tests/test_e0r2_contract_binding.py
+git commit -m "feat(e0r2): T1.2 — the contract is staged, bound in the manifest, and trust-covered"
 ```
 
-### Task 1.3: The Node candidate validator reads the same contract
+### Task 1.3: Node re-derives and compares the bound contract
 
 **Files:**
-- Modify: `coa_scraper/scripts/lib/generation.mjs:19-25` (delete the mirrored `REQUIRED_CHILDREN`),
-  `validateChildrenByPath`, `validateCandidateByPath`
+- Modify: `coa_scraper/scripts/lib/generation.mjs:19-25` (delete the mirrored name list)
 - Test: `coa_scraper/tests/generation-contract.test.mjs`
 
-**Interfaces:**
-- Consumes: `coa_client_extract/data/generation_contract.json` — the same file Python reads, resolved
-  via `new URL("../../../coa_client_extract/data/generation_contract.json", import.meta.url)`.
-- Produces: `loadGenerationContract()`, `REQUIRED_CHILDREN` (derived, kept as a named export for
-  existing importers).
+**Design:** Node loads its **own** trusted copy from `coa_client_extract/data/generation_contract.json`
+(the same file Python ships, so there is no hand-mirrored constant to drift), validates it with an
+independent implementation of `validateGenerationContract`, then performs the same three-way comparison
+against the staged child and the bound hash. Node's canonical-JSON hash must agree byte-for-byte with
+Python's — that equality is itself a test.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -404,215 +555,395 @@ git commit -m "fix(e0r2): T1.2 — the Python candidate validator enforces cardi
 // coa_scraper/tests/generation-contract.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadGenerationContract, validateCandidateByPath, GenerationResolveError } from "../scripts/lib/generation.mjs";
+import { execFileSync } from "node:child_process";
+import { loadGenerationContract, generationContractSha256, validateCandidateByPath,
+         GenerationResolveError } from "../scripts/lib/generation.mjs";
 import { stageCandidate } from "./_e0r2-fixtures.mjs";
 
-test("the Node boundary reads the same contract document Python reads", () => {
-  const contract = loadGenerationContract();
-  assert.equal(contract.schema_version, "coa-generation-contract-v1");
-  assert.ok(contract.children["coa_client_spell.jsonl"].min_records >= 1);
+test("Node and Python compute the same canonical contract hash", () => {
+  const fromPython = execFileSync("python3", ["-c",
+    "from coa_client_extract.contracts import generation_contract_sha256, load_generation_contract;" +
+    "print(generation_contract_sha256(load_generation_contract()))"],
+    { cwd: "..", encoding: "utf8", env: { ...process.env, PYTHONPATH: ".." } }).trim();
+  assert.equal(generationContractSha256(loadGenerationContract()), fromPython);
 });
 
-test("a complete-but-empty candidate is rejected", (t) => {
-  const dir = stageCandidate(t, { rows: {} });
-  assert.throws(() => validateCandidateByPath(dir), GenerationResolveError, /min_records|empty/);
+test("a staged contract that differs from the bound hash is rejected", (t) => {
+  const dir = stageCandidate(t, { tamperStagedContract: true });
+  assert.throws(() => validateCandidateByPath(dir), /generation_contract/);
 });
 
-test("an arbitrary child schema_version is rejected", (t) => {
-  const dir = stageCandidate(t, { childSchemaOverrides: { "coa_client_spell.jsonl": "made-up-v99" } });
-  assert.throws(() => validateCandidateByPath(dir), GenerationResolveError, /schema_version/);
+test("a generation bound to an unsupported contract is rejected", (t) => {
+  const dir = stageCandidate(t, { contractOverride: { schema_version: "coa-generation-contract-v1", children: {} } });
+  assert.throws(() => validateCandidateByPath(dir), /not the supported contract/);
 });
 
-test("a row missing its schema_version is rejected", (t) => {
-  const dir = stageCandidate(t, { dropRowKeys: { "coa_client_spell.jsonl": ["schema_version"] } });
-  assert.throws(() => validateCandidateByPath(dir), GenerationResolveError, /row schema_version/);
-});
-
-test("a well-formed candidate still validates", (t) => {
-  validateCandidateByPath(stageCandidate(t, {}));
+test("the hand-mirrored name list is gone", () => {
+  const src = fs.readFileSync(new URL("../scripts/lib/generation.mjs", import.meta.url), "utf8");
+  assert.ok(!/REQUIRED_CHILDREN = \[/.test(src), "a mirrored constant is what drifts");
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure**
+- [ ] **Step 2: Run and confirm failure.**
 
-Run: `cd coa_scraper && node --test tests/generation-contract.test.mjs`
-Expected: FAIL — `loadGenerationContract is not exported`.
+- [ ] **Step 3: Implement** `loadGenerationContract`, `validateGenerationContract`,
+  `generationContractSha256` (canonical JSON: `JSON.stringify` over recursively key-sorted objects with
+  no separators — verify against Python by the first test), and the three-way comparison in
+  `validateCandidateByPath`. `REQUIRED_CHILDREN` becomes a derived export.
 
-- [ ] **Step 3: Implement, reusing the existing `readJsonlLines` generator so the row check streams**
-
-```javascript
-const CONTRACT_URL = new URL("../../../coa_client_extract/data/generation_contract.json", import.meta.url);
-let _contract = null;
-
-export function loadGenerationContract() {
-  if (_contract === null) {
-    _contract = JSON.parse(fs.readFileSync(CONTRACT_URL, "utf8"));
-    if (_contract.schema_version !== "coa-generation-contract-v1") {
-      throw new GenerationResolveError(`generation contract bad schema_version ${_contract.schema_version}`);
-    }
-  }
-  return _contract;
-}
-
-export const REQUIRED_CHILDREN = Object.keys(loadGenerationContract().children).sort();
-
-function verifyChildAgainstContract(name, meta, childPath, spec) {
-  if (meta.schema_version !== spec.child_schema_version) {
-    throw new GenerationResolveError(`child ${name} schema_version ${meta.schema_version} != contract ${spec.child_schema_version}`);
-  }
-  if (meta.records < spec.min_records) throw new GenerationResolveError(`child ${name} min_records: ${meta.records} < ${spec.min_records}`);
-  if (spec.max_records !== null && meta.records > spec.max_records) {
-    throw new GenerationResolveError(`child ${name} max_records: ${meta.records} > ${spec.max_records}`);
-  }
-  if (spec.kind !== "jsonl") return;
-  let index = 0;
-  for (const row of readJsonlLines(childPath)) {          // streaming; never a row array
-    if (row.schema_version !== spec.row_schema_version) {
-      throw new GenerationResolveError(`child ${name} row ${index} schema_version ${row.schema_version} != ${spec.row_schema_version}`);
-    }
-    for (const key of spec.requires) {
-      if (!(key in row)) throw new GenerationResolveError(`child ${name} row ${index} missing required key ${key}`);
-    }
-    index += 1;
-  }
-}
-```
-
-- [ ] **Step 4: Run both suites**
-
-Run: `cd coa_scraper && node --test tests/*.test.mjs`
-Expected: PASS. Then re-run `python -m pytest tests/test_e0r2_generation_contract.py -q` — the
-`test_the_contract_file_is_the_only_source_node_reads` assertion now passes.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Run both suites; commit**
 
 ```bash
 git add coa_scraper/scripts/lib/generation.mjs coa_scraper/tests/generation-contract.test.mjs \
         coa_scraper/tests/_e0r2-fixtures.mjs
-git commit -m "fix(e0r2): T1.3 — Node reads the shared contract; the mirrored name list is deleted"
+git commit -m "feat(e0r2): T1.3 — Node re-derives and compares the bound contract"
 ```
 
-### Task 1.4: The production policy declares `required_scalar_fields`
+---
+
+# Workstream 2 — real domain enforcement (blocker 1, part 2; blocker 7)
+
+### Task 2.1: Relational cardinalities; unregistered children rejected
 
 **Files:**
-- Modify: `coa_client_extract/data/spell_layout_v2.json` (add `required_scalar_fields`, bump `sha256`),
-  `coa_scraper/config/spell_layout.lock.json`
-- Test: `tests/test_e0r2_required_scalar_fields.py`
+- Modify: `coa_client_extract/publish.py`, `coa_scraper/scripts/lib/generation.mjs`
+- Test: `tests/test_e0r2_cardinality.py`, `coa_scraper/tests/generation-contract.test.mjs`
 
-**Context:** `mechanics-projection.mjs:326` reads `policyDoc.required_scalar_fields || []`. The key
-exists only in `tests/golden/e0r1_corpus/policy.json:199`, so in production the required-field domain
-check is vacuous — a full row may omit its entire expected field domain and pass.
+**Correction carried from review round 2:** a floor of 1 admits a one-spell generation, and my earlier
+claim that an unregistered child is "caught by `candidate_trust_sha256`" was **wrong** — the digest
+authenticates an intentionally-added child, it does not reject one. Both are fixed here.
+
+**The relational rules** (`binding.topology.tables.Spell.header.record_count` is 208,447 and equals the
+full child's record count exactly — verified):
+
+| rule | assertion |
+|---|---|
+| `spell_topology_record_count` | full-child records **==** `manifest.binding.topology.tables.Spell.header.record_count` |
+| `equals_full_spell_records` | icon-child records **==** full-child records |
+| `equals_is_coa_full_records` | projection records **==** count of full rows with `coa_attribution.is_coa is True` |
+| `single_document` | exactly 1 record |
+| `min` | records **>=** floor (ancillary tables only) |
+
+The projection equality is *already* enforced exactly by `_cross_child`'s streaming merge-join
+(`projection_is_coa_subset` + `projection_within_domain` compose to an equality). The contract-level
+count is a cheap manifest-level pre-check that fails fast with a clearer message — it is not new
+coverage, and it must not be treated as replacing the merge-join.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# tests/test_e0r2_required_scalar_fields.py
-"""E0R.2 T1.4: the PRODUCTION policy must name the scalars a full row is required to carry. The
-golden fixture declared them; the shipped policy did not, so the check ran against an empty list."""
-import json
-import subprocess
-from pathlib import Path
+# tests/test_e0r2_cardinality.py
+"""E0R.2 T2.1: `min_records: 1` is not a domain gate — a one-spell generation passes it. The client
+topology records the exact source-domain count, so the contract derives the expectation instead of
+guessing a floor."""
+import pytest
 
-REPO = Path(__file__).resolve().parents[1]
-
-
-def test_the_production_policy_declares_required_scalar_fields():
-    policy = json.loads((REPO / "coa_client_extract/data/spell_layout_v2.json").read_text(encoding="utf-8"))
-    assert set(policy["required_scalar_fields"]) >= {"id", "name", "power_type", "school_mask"}
+from coa_client_extract.publish import ResolveError, validate_candidate_generation
+from tests._e0r2_fixtures import stage_candidate
 
 
-def test_a_full_row_omitting_a_required_scalar_is_rejected_under_the_production_policy():
-    """Drive the real Node verifier with the real policy — a unit assertion on the JSON would not
-    prove the verifier consumes it."""
-    script = """
-    import { verifyFullRowAgainstPolicy, MechanicsBuildError } from "./scripts/lib/mechanics-projection.mjs";
-    import fs from "node:fs";
-    const policy = JSON.parse(fs.readFileSync("../coa_client_extract/data/spell_layout_v2.json", "utf8"));
-    const row = { spell_id: 1, schema_version: "coa-client-spell-v4", mechanics: {}, raw: { id: {} } };
-    try { verifyFullRowAgainstPolicy(row, policy); console.log("ACCEPTED"); }
-    catch (e) { console.log("REJECTED:" + e.message); }
-    """
-    probe = REPO / "coa_scraper/_t14_probe.mjs"
-    probe.write_text(script)
-    try:
-        out = subprocess.run(["node", "_t14_probe.mjs"], cwd=REPO / "coa_scraper",
-                             capture_output=True, text=True).stdout
-    finally:
-        probe.unlink(missing_ok=True)
-    assert out.startswith("REJECTED"), out
-    assert "name" in out
+def test_a_truncated_full_child_is_rejected(tmp_path):
+    """Three spells staged, topology says three; drop one row and restage the manifest honestly."""
+    gen = stage_candidate(tmp_path, truncate_full_to=2)
+    with pytest.raises(ResolveError, match="spell_topology_record_count|2 != 3"):
+        validate_candidate_generation(gen)
+
+
+def test_an_icon_catalog_shorter_than_the_full_domain_is_rejected(tmp_path):
+    gen = stage_candidate(tmp_path, truncate_icons_to=2)
+    with pytest.raises(ResolveError, match="equals_full_spell_records"):
+        validate_candidate_generation(gen)
+
+
+def test_a_projection_missing_an_is_coa_row_is_rejected(tmp_path):
+    gen = stage_candidate(tmp_path, drop_projection_rows=1)
+    with pytest.raises(ResolveError, match="equals_is_coa_full_records|projection_is_coa_subset"):
+        validate_candidate_generation(gen)
+
+
+def test_a_json_child_with_more_than_one_document_is_rejected(tmp_path):
+    gen = stage_candidate(tmp_path, duplicate_json_document="coa_client_archive_plan.json")
+    with pytest.raises(ResolveError, match="single_document"):
+        validate_candidate_generation(gen)
+
+
+def test_an_unregistered_child_is_rejected(tmp_path):
+    """candidate_trust_sha256 AUTHENTICATES an added child; it does not reject one."""
+    gen = stage_candidate(tmp_path, extra_child=("smuggled.jsonl", b'{"x":1}\n'))
+    with pytest.raises(ResolveError, match="unregistered child"):
+        validate_candidate_generation(gen)
+
+
+def test_a_wellformed_candidate_still_validates(tmp_path):
+    validate_candidate_generation(stage_candidate(tmp_path))
 ```
 
-- [ ] **Step 2: Run and confirm failure** — `KeyError: 'required_scalar_fields'`, and the Node probe
-  prints `ACCEPTED`.
+- [ ] **Step 2: Run and confirm the first five fail.**
 
-- [ ] **Step 3: Add the key to the production policy**
+- [ ] **Step 3: Implement `_resolve_cardinality(rule, name, meta, manifest, gen_dir, counts)`**
 
-The value is the set of normalized Spell scalars every full row carries today, read off the real
-generation's `mechanics` + `raw` keys: `["id", "name", "power_type", "school_mask"]`. Do **not**
-include the four join-derived fields (`cast_time_ms`, `duration_ms`, `range_min_yd`, `range_max_yd`):
-they are `raw_only` with null cells by reviewed adjudication, so requiring them would make every real
-row fail.
+The `is_coa` count is accumulated during the streaming pass `_cross_child` already makes — do not add a
+second full read. Reject unregistered children explicitly:
 
-- [ ] **Step 4: Recompute the policy `sha256` and the Node lock in lockstep**
+```python
+    registered = set(contract["children"])
+    for name in children:
+        if name not in registered:
+            raise ResolveError(
+                f"unregistered child {name!r}: the contract is a whitelist, and candidate trust "
+                "authenticates an added child rather than rejecting it")
+```
 
-The policy carries its own digest and `coa_scraper/config/spell_layout.lock.json` pins it. Use the
-existing helper rather than hand-editing:
+- [ ] **Step 4: Mirror in `generation.mjs`; run both suites; commit**
+
+```bash
+git add coa_client_extract/publish.py coa_scraper/scripts/lib/generation.mjs \
+        tests/test_e0r2_cardinality.py coa_scraper/tests/generation-contract.test.mjs
+git commit -m "fix(e0r2): T2.1 — relational cardinalities and a child whitelist"
+```
+
+### Task 2.2: Per-child shape validation in both languages
+
+**Files:**
+- Create: `coa_client_extract/shapes.py`, `coa_scraper/scripts/lib/shapes.mjs`
+- Modify: `coa_client_extract/publish.py`, `coa_scraper/scripts/lib/generation.mjs`
+- Test: `tests/test_e0r2_shapes.py`, `coa_scraper/tests/shapes.test.mjs`
+
+**Correction carried from review round 2:** checking `schema_version` plus top-level key presence
+establishes neither field types, nullability, nested envelope shape, nor JSON-document semantics —
+`{}` would pass as a one-record JSON artifact.
+
+**Design:** each contract `shape` name maps to a validator function implemented **independently** in
+both languages (independent implementations are the point — a shared serialization would reproduce a
+shared bug). Each validator asserts: exact key set (no unknown keys), per-key type, explicit
+nullability, and nested envelope shape. The two implementations are held together by the shared golden
+corpus, which every shape validator runs against in both languages.
+
+- [ ] **Step 1: Write the failing test** — for each shape, a positive case from the golden corpus and
+  negative cases for: unknown key, wrong scalar type, null in a non-nullable slot, non-null in a
+  must-be-null slot, malformed nested envelope, and (for JSON children) `{}`.
+
+```python
+# tests/test_e0r2_shapes.py
+"""E0R.2 T2.2: a shape is a type contract, not a key list. `{}` passed as a one-record JSON artifact
+because `requires: []` asked nothing of it."""
+import pytest
+
+from coa_client_extract.shapes import SHAPES, ShapeError
+from tests.golden import golden_rows
+
+
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_every_shape_accepts_its_golden_row(shape):
+    SHAPES[shape](golden_rows(shape))
+
+
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_every_shape_rejects_an_unknown_key(shape):
+    row = dict(golden_rows(shape)); row["smuggled"] = 1
+    with pytest.raises(ShapeError, match="smuggled"):
+        SHAPES[shape](row)
+
+
+def test_an_empty_json_document_is_not_a_valid_archive_plan():
+    with pytest.raises(ShapeError):
+        SHAPES["archive_plan_v1"]({})
+
+
+def test_a_full_row_with_a_malformed_raw_envelope_is_rejected():
+    row = dict(golden_rows("full_spell_row_v3"))
+    row["raw"] = {"id": {"state": "present"}}          # no decoded_reason, no substrate
+    with pytest.raises(ShapeError, match="raw.id"):
+        SHAPES["full_spell_row_v3"](row)
+
+
+def test_mechanics_values_may_be_null_but_the_keys_may_not_be_absent():
+    row = dict(golden_rows("full_spell_row_v3"))
+    row["mechanics"] = {k: None for k in row["mechanics"]}
+    SHAPES["full_spell_row_v3"](row)                    # nullable values: fine
+    row["mechanics"].pop("school_mask")
+    with pytest.raises(ShapeError, match="school_mask"):
+        SHAPES["full_spell_row_v3"](row)
+```
+
+- [ ] **Step 2: Run and confirm failure.**
+- [ ] **Step 3: Implement `SHAPES` in Python and `shapes.mjs` in Node**, wired into the streaming row
+  loop from T2.1 (one pass, shape-checked per row).
+- [ ] **Step 4: Run both suites; commit**
+
+```bash
+git add coa_client_extract/shapes.py coa_scraper/scripts/lib/shapes.mjs \
+        coa_client_extract/publish.py coa_scraper/scripts/lib/generation.mjs \
+        tests/test_e0r2_shapes.py coa_scraper/tests/shapes.test.mjs
+git commit -m "fix(e0r2): T2.2 — per-child shape validators in both languages"
+```
+
+### Task 2.3: The full observation domain lives in the policy and is validated at load
+
+**Files:**
+- Modify: `coa_client_extract/data/spell_layout_v2.json`, `coa_client_extract/spell_layout.py`
+  (`load_spell_policy`), `coa_scraper/config/spell_layout.lock.json`
+- Test: `tests/test_e0r2_observation_domain.py`
+
+**Correction carried from review round 2:** `required_scalar_fields = ["id","name","power_type",
+"school_mask"]` still permits omitting `description`, `cast_time_ms`, `duration_ms`, `range_min_yd`
+and `range_max_yd` entirely. **Required means the observation envelope exists, not that a normalized
+value exists** — and the real rows already satisfy that: every one of the 208,447 rows carries all nine
+raw cells, the join-derived ones in `state: "unresolved"` form. My earlier exclusion of them conflated
+"normalized value is null" with "cell absent" and was wrong.
+
+**Design:** replace the single flat list with an explicit three-part `artifact_contract`, validated in
+`load_spell_policy()` rather than left as an unchecked JSON property that only Node consumes:
+
+```json
+"artifact_contract": {
+  "required_raw_observations": ["cast_time_ms", "description", "duration_ms", "id", "name",
+                                "power_type", "range_max_yd", "range_min_yd", "school_mask"],
+  "required_mechanics_keys": ["cast_time_ms", "duration_ms", "power_type", "range_max_yd",
+                              "range_min_yd", "school_mask"],
+  "nullable_mechanics_keys": ["cast_time_ms", "duration_ms", "power_type", "range_max_yd",
+                              "range_min_yd"],
+  "icon_observation_domain": ["spell_icon_id"]
+}
+```
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_e0r2_observation_domain.py
+"""E0R.2 T2.3: lossless extraction means every field has an OBSERVATION, even when it has no
+normalized value. A raw_only join in `unresolved` state is still a required cell; omitting it is
+silent loss, which is exactly what E0R exists to prevent."""
+import copy
+import json
+from pathlib import Path
+
+import pytest
+
+from coa_client_extract.spell_layout import SpellPolicyError, compute_policy_sha256, load_spell_policy
+
+POLICY = Path(__file__).resolve().parents[1] / "coa_client_extract/data/spell_layout_v2.json"
+
+
+def _policy_doc():
+    return json.loads(POLICY.read_text(encoding="utf-8"))
+
+
+def test_the_production_policy_requires_the_full_raw_domain():
+    contract = _policy_doc()["artifact_contract"]
+    assert set(contract["required_raw_observations"]) == {
+        "cast_time_ms", "description", "duration_ms", "id", "name", "power_type",
+        "range_max_yd", "range_min_yd", "school_mask"}
+
+
+def test_nullable_mechanics_keys_are_a_subset_of_required_mechanics_keys():
+    contract = _policy_doc()["artifact_contract"]
+    assert set(contract["nullable_mechanics_keys"]) <= set(contract["required_mechanics_keys"])
+    assert "school_mask" not in contract["nullable_mechanics_keys"]   # proven, never null
+
+
+def test_load_spell_policy_rejects_an_incoherent_artifact_contract():
+    doc = _policy_doc()
+    doc["artifact_contract"]["nullable_mechanics_keys"].append("not_a_field")
+    doc["sha256"] = compute_policy_sha256(doc)      # rehash so we test the contract check, not the hash
+    with pytest.raises(SpellPolicyError, match="not_a_field"):
+        load_spell_policy(doc)
+
+
+def test_load_spell_policy_rejects_a_missing_artifact_contract():
+    doc = _policy_doc()
+    del doc["artifact_contract"]
+    doc["sha256"] = compute_policy_sha256(doc)
+    with pytest.raises(SpellPolicyError, match="artifact_contract"):
+        load_spell_policy(doc)
+```
+
+- [ ] **Step 2: Run and confirm failure.**
+
+- [ ] **Step 3: Add the block, validate it in `load_spell_policy`, and rehash correctly**
+
+`load_spell_policy` raises `policy sha256 mismatch` on an edited document, so
+`load_default_policy().sha256` can **never** yield the new hash. Load the JSON directly:
 
 ```bash
 python -c "
-from coa_client_extract.spell_layout import load_default_policy
-print(load_default_policy().sha256)"
+import json, pathlib
+from coa_client_extract.spell_layout import compute_policy_sha256
+p = pathlib.Path('coa_client_extract/data/spell_layout_v2.json')
+doc = json.loads(p.read_text(encoding='utf-8'))
+doc.pop('sha256', None)
+doc['sha256'] = compute_policy_sha256(doc)
+p.write_text(json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+print(doc['sha256'])"
 ```
 
-Write the value into both files. Run `python -m pytest tests/ -q -k 'policy_lock or layout'` to confirm
-the lock tests agree.
+Write the printed value into `coa_scraper/config/spell_layout.lock.json` in the same commit.
 
-- [ ] **Step 5: Run the tests; commit**
+- [ ] **Step 4: Point Node's `verifyFullRowAgainstPolicy` at `artifact_contract` (replacing the
+  `policyDoc.required_scalar_fields || []` read at `mechanics-projection.mjs:326`), asserting the raw
+  domain, the mechanics key set, and the nullability split.**
+
+- [ ] **Step 5: Run both suites; commit**
 
 ```bash
-git add coa_client_extract/data/spell_layout_v2.json coa_scraper/config/spell_layout.lock.json \
-        tests/test_e0r2_required_scalar_fields.py
-git commit -m "fix(e0r2): T1.4 — the production policy declares required_scalar_fields"
+git add coa_client_extract/data/spell_layout_v2.json coa_client_extract/spell_layout.py \
+        coa_scraper/config/spell_layout.lock.json coa_scraper/scripts/lib/mechanics-projection.mjs \
+        tests/test_e0r2_observation_domain.py
+git commit -m "fix(e0r2): T2.3 — the full observation domain is policy-declared and load-validated"
 ```
 
-### Task 1.5: Publication itself requires both validations and a passing budget
+### Task 2.4: Publication requires both validations and a clean budget
 
 **Files:**
-- Modify: `coa_client_extract/publish.py:171-204` (`finalize_and_publish`)
+- Modify: `coa_client_extract/publish.py:171-204` (`finalize_and_publish`),
+  `coa_client_extract/cli.py:329-346`
 - Test: `tests/test_e0r2_publish_requires_validation.py`
-
-**Context:** `finalize_and_publish` writes caller-supplied `validation`/`budget` verbatim. Strict
-consumers reject the resulting pointer afterwards, but the publisher should never create it.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_publish_requires_validation.py
-"""E0R.2 T1.5: a generation that failed a trust boundary or its budget must never become the pointer's
+"""E0R.2 T2.4: a generation that failed a trust boundary or its budget must never become the pointer's
 target. Consumer-side strictness is a second line of defence, not the gate."""
 import pytest
 
-from coa_client_extract.publish import PublishError, POINTER_NAME
+from coa_client_extract.publish import POINTER_NAME, PublishError
 from tests._e0r2_fixtures import staged_writer
 
 
-def test_publishing_with_a_failed_node_validation_is_refused(tmp_path):
+@pytest.mark.parametrize("validation", [
+    {"python": True, "node": False},
+    {"python": True, "node": "yes"},       # truthy but not True
+    {"python": True},                      # absent
+])
+def test_publishing_without_both_validations_is_refused(tmp_path, validation):
     gw, candidate = staged_writer(tmp_path)
     with pytest.raises(PublishError, match="validation"):
-        gw.finalize_and_publish(candidate_manifest=candidate,
-                                validation={"python": True, "node": False},
+        gw.finalize_and_publish(candidate_manifest=candidate, validation=validation,
                                 budget={"within_budget": True, "breach": []})
-    assert not (tmp_path / POINTER_NAME).exists()      # pointer untouched
+    assert not (tmp_path / POINTER_NAME).exists()
 
 
-def test_publishing_over_budget_is_refused(tmp_path):
+@pytest.mark.parametrize("budget", [
+    {"within_budget": False, "breach": ["whole_generation bytes ..."]},
+    {"within_budget": "ok", "breach": []},               # truthy but not True
+    {"within_budget": True, "breach": ["a breach nobody acted on"]},
+])
+def test_publishing_with_an_unclean_budget_is_refused(tmp_path, budget):
     gw, candidate = staged_writer(tmp_path)
     with pytest.raises(PublishError, match="budget"):
         gw.finalize_and_publish(candidate_manifest=candidate,
-                                validation={"python": True, "node": True},
-                                budget={"within_budget": False, "breach": ["whole_generation bytes ..."]})
+                                validation={"python": True, "node": True}, budget=budget)
     assert not (tmp_path / POINTER_NAME).exists()
+
+
+def test_the_budget_is_recomputed_from_staged_child_metadata(tmp_path):
+    """A caller-supplied within_budget must not outrank the staged bytes."""
+    gw, candidate = staged_writer(tmp_path, oversized=True)
+    with pytest.raises(PublishError, match="budget"):
+        gw.finalize_and_publish(candidate_manifest=candidate,
+                                validation={"python": True, "node": True},
+                                budget={"within_budget": True, "breach": []})
 
 
 def test_a_fully_validated_within_budget_generation_publishes(tmp_path):
@@ -624,58 +955,40 @@ def test_a_fully_validated_within_budget_generation_publishes(tmp_path):
     assert (tmp_path / POINTER_NAME).is_file()
 ```
 
-- [ ] **Step 2: Run and confirm the first two fail (no exception, pointer written).**
+- [ ] **Step 2: Run and confirm failure.**
 
-- [ ] **Step 3: Add the gate as the first statement inside `finalize_and_publish`'s `try:`**
+- [ ] **Step 3: Implement** — `is True` identity checks (not truthiness), `breach == []`, and a
+  recomputation of the byte ceilings from `self._children` inside `finalize_and_publish` so the
+  caller's verdict cannot outrank the staged metadata. Keep it inside the existing `try:` so the
+  `finally: self._release_publish_lock()` still covers the refusal path. Also delete the
+  `three_part_budget` escape hatch at `cli.py:341-344`: a policy with no reviewed budget block raises
+  `PublishError`, and synthetic test policies get explicit synthetic reviewed budgets.
 
-```python
-            if not (validation.get("python") and validation.get("node")):
-                raise PublishError(
-                    f"refusing to publish: validation {validation!r} — a generation must pass BOTH "
-                    "trust boundaries before the pointer may name it")
-            if not budget.get("within_budget"):
-                raise PublishError(f"refusing to publish: budget breach {budget.get('breach')!r}")
-```
-
-Placing it inside the existing `try:` keeps `finally: self._release_publish_lock()` covering the refusal
-path, so a refused publication still releases the lock.
-
-- [ ] **Step 4: Run the full Python suite**
-
-Run: `python -m pytest -q`
-Expected: PASS. Any test that published with `node: False` was asserting the old permissiveness —
-update it to assert the refusal.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Run the full suite; commit**
 
 ```bash
-git add coa_client_extract/publish.py tests/test_e0r2_publish_requires_validation.py
-git commit -m "fix(e0r2): T1.5 — finalize refuses to publish an unvalidated or over-budget generation"
+git add coa_client_extract/publish.py coa_client_extract/cli.py \
+        tests/test_e0r2_publish_requires_validation.py
+git commit -m "fix(e0r2): T2.4 — publication requires both validations and a recomputed clean budget"
 ```
 
----
-
-# Workstream 2 — prohibit `converted` until a bundle validator exists (blocker 7)
-
-**Blocker:** both validators only check that a bundle child *exists* if any row is `converted` —
-no tar path containment, no internal manifest, no content hashes. No code path produces `converted`
-(grep over `coa_client_extract/` finds only validation reads), so the honest resolution is to reject
-the status in this schema and reintroduce it with its validator.
-
-### Task 2.1: `converted` is not a valid icon asset status in this schema
+### Task 2.5: `converted` is prohibited until a bundle validator exists
 
 **Files:**
-- Modify: `coa_client_extract/contracts.py:16` (`ICON_ASSET_STATUSES`), `coa_client_extract/publish.py`
-  (`_verify_icon_row`, `_cross_child` bundle branch), `coa_scraper/scripts/lib/generation.mjs:10,128-144,198-200`
+- Modify: `coa_client_extract/contracts.py:16`, `coa_client_extract/publish.py` (`_verify_icon_row`,
+  `_cross_child`), `coa_scraper/scripts/lib/generation.mjs:10,128-144,198-200`
 - Test: `tests/test_e0r2_converted_prohibited.py`
+
+**Context:** both validators only check that a bundle child *exists* if any row is `converted` — no tar
+path containment, no internal manifest, no content hashes. No code path produces `converted`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_converted_prohibited.py
-"""E0R.2 T2.1: `converted` promised tar containment, bundle-manifest and content-hash verification that
-were never implemented, and nothing produces the status. An unverifiable status that no producer emits
-is not a feature — reject it here and reintroduce it WITH its validator."""
+"""E0R.2 T2.5: `converted` promised tar containment, bundle-manifest and content-hash verification that
+were never implemented, and nothing produces the status. An unverifiable status with no producer is not
+a feature — reject it and reintroduce it WITH its validator."""
 import pytest
 
 from coa_client_extract.contracts import ICON_ASSET_STATUSES
@@ -683,43 +996,32 @@ from coa_client_extract.publish import ResolveError, _verify_icon_row
 
 
 def test_converted_is_not_an_admissible_status():
-    assert "converted" not in ICON_ASSET_STATUSES
     assert ICON_ASSET_STATUSES == frozenset({"source_only", "missing", "placeholder"})
 
 
 def test_a_converted_row_is_rejected():
     with pytest.raises(ResolveError, match="converted"):
-        _verify_icon_row({"spell_id": 1, "asset_status": "converted", "client_path": "Interface\\Icons\\x",
-                          "converted_ref": "bundle:1"})
+        _verify_icon_row({"spell_id": 1, "asset_status": "converted",
+                          "client_path": "Interface\\Icons\\x", "converted_ref": "bundle:1"})
 
 
 def test_no_producer_emits_converted():
-    """A grep-level guard: if a converter lands, this test is the reminder to bring its validator."""
+    """If a converter lands, this test is the reminder to bring its validator with it."""
     from pathlib import Path
     src = Path(__file__).resolve().parents[1] / "coa_client_extract"
     offenders = [p.name for p in src.glob("*.py")
-                 if '"converted"' in p.read_text(encoding="utf-8") and p.name not in
-                 ("contracts.py", "publish.py")]
-    assert offenders == [], f"a producer references converted without a bundle validator: {offenders}"
+                 if '"converted"' in p.read_text(encoding="utf-8")
+                 and p.name not in ("contracts.py", "publish.py")]
+    assert offenders == []
 ```
 
 - [ ] **Step 2: Run and confirm failure.**
-
-- [ ] **Step 3: Implement**
-
-- `ICON_ASSET_STATUSES = frozenset({"source_only", "missing", "placeholder"})`.
-- `_verify_icon_row`: the existing `status not in ICON_ASSET_STATUSES` branch now rejects `converted`
-  with the enumeration in the message; delete the two `converted_ref` branches and the
-  `status in ("source_only", "converted")` branch becomes `status == "source_only"`.
-- `_cross_child`: delete `any_converted` and the bundle-required check; the `children` parameter it was
-  the only consumer of goes with it (update the call site in `validate_candidate_generation`).
-- `generation.mjs`: the same three edits, plus deleting the `manifest` parameter from `crossChild`.
-- Leave a comment at the deleted bundle check naming what reintroduction requires:
+- [ ] **Step 3: Implement**, leaving the reintroduction requirements as a comment at the deleted check:
 
 ```python
-# E0R.2 T2.1: `converted` (and its icon bundle) is PROHIBITED in this schema. Reintroducing it requires,
+# E0R.2 T2.5: `converted` (and its icon bundle) is PROHIBITED in this schema. Reintroducing it requires,
 # in the same change: tar path containment, per-entry bundle-manifest verification, and per-asset content
-# hashes checked against the catalog — the checks the E0R design specified and E0R.1 deferred to an
+# hashes checked against the catalog — the checks the E0R design specified and E0R.1 reduced to an
 # existence test. Until then no producer may emit it and no validator may accept it.
 ```
 
@@ -728,7 +1030,7 @@ def test_no_producer_emits_converted():
 ```bash
 git add coa_client_extract/contracts.py coa_client_extract/publish.py \
         coa_scraper/scripts/lib/generation.mjs tests/test_e0r2_converted_prohibited.py
-git commit -m "fix(e0r2): T2.1 — prohibit converted icon assets until the bundle validator exists"
+git commit -m "fix(e0r2): T2.5 — prohibit converted icon assets until the bundle validator exists"
 ```
 
 ---
@@ -737,12 +1039,10 @@ git commit -m "fix(e0r2): T2.1 — prohibit converted icon assets until the bund
 
 **Blocker 3:** for `reviewed_ambiguous` joins `probe_joins` copies authored evidence *without reading
 the side table or scanning the client* (`spell_mechanics.py:147-150`), and `_recon_status` accepts
-`pair: null` unconditionally (`:194-196`). Both docstrings claim every required join is probed on every
-run. A client patch that made a numeric FK uniquely discoverable would be invisible.
+`pair: null` unconditionally (`:194-196`).
 
 **Blocker 4:** recon estimates `record_count * record_size` (raw DBC bytes) against the retired
-`DEFAULT_BUDGET = {512, 4096, 600}` and ignores the reviewed policy budget — reporting 186.07 MiB for a
-generation that is actually 523,026,495 bytes.
+`DEFAULT_BUDGET = {512, 4096, 600}`, reporting 186.07 MiB for a 523,026,495-byte generation.
 
 ### Task 3.1: A live FK candidate scan runs for every ambiguous join on every recon
 
@@ -751,20 +1051,19 @@ generation that is actually 523,026,495 bytes.
 - Test: `tests/test_e0r2_recon_live_joins.py`
 
 **Interfaces:**
-- Produces: `scan_index_candidates(view, side_view, *, side_id_cell=0) -> list[int]` — every Spell cell
-  whose non-zero values are ≥99% valid side ids spanning ≥`_MIN_DISTINCT` distinct side rows.
-  `probe_joins` records `{"table", "pair": None, "winners": [], "adjudication": "reviewed_ambiguous",
-  "evidence", "scanned": True, "candidate_index_cells": [...], "candidate_count": N}`.
+- Produces: `scan_index_candidates(view, side_view, *, side_id_cell=0) -> list[dict]` — one entry per
+  surviving candidate cell: `{"cell": int, "nonzero": int, "valid_fraction": float, "distinct_ids": int}`.
+  Metrics ride along because T3.2 compares them against a reviewed baseline.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_recon_live_joins.py
 """E0R.2 T3.1: an adjudicated-ambiguous join is still PROBED on every run. Copying the authored verdict
-forward means recon cannot notice the day the client makes the join unique — which is the one thing the
-hold exists to catch."""
+forward means recon cannot notice the day the client makes the join unique — the one thing the hold
+exists to catch."""
 from coa_client_extract.spell_mechanics import probe_joins, scan_index_candidates
-from tests._e0r2_recon_fixtures import ambiguous_backend, unique_backend, open_spell_view
+from tests._e0r2_recon_fixtures import ambiguous_backend, unique_backend
 
 
 def test_an_ambiguous_join_is_scanned_not_asserted():
@@ -772,223 +1071,135 @@ def test_an_ambiguous_join_is_scanned_not_asserted():
     cast = probes["casting_time_index"]
     assert cast["scanned"] is True
     assert cast["pair"] is None
-    assert cast["candidate_count"] >= 2                  # the ambiguity is re-proven, not remembered
-    assert cast["candidate_index_cells"] == sorted(cast["candidate_index_cells"])
+    assert len(cast["candidates"]) >= 2
+    assert [c["cell"] for c in cast["candidates"]] == sorted(c["cell"] for c in cast["candidates"])
+    assert all({"cell", "nonzero", "valid_fraction", "distinct_ids"} <= set(c) for c in cast["candidates"])
 
 
 def test_a_join_that_became_unique_is_recorded_as_unique():
-    """Synthesize a client where exactly one column is FK-valid into SpellCastTimes."""
     probes = probe_joins(*unique_backend())
-    assert probes["casting_time_index"]["candidate_count"] == 1
+    assert len(probes["casting_time_index"]["candidates"]) == 1
 
 
-def test_the_scan_reads_the_side_table():
-    """Regression: the old path returned before read_effective_file, so a missing side table was
-    indistinguishable from an ambiguous one."""
+def test_a_missing_side_table_is_distinguishable_from_an_ambiguous_one():
+    """Regression: the old path returned before read_effective_file, so the two were identical."""
     backend, root, attach, view, id_to_rec, policy, anchors = ambiguous_backend()
     backend.forget("DBFilesClient\\SpellCastTimes.dbc")
-    probes = probe_joins(backend, root, attach, view, id_to_rec, policy, anchors)
-    assert probes["casting_time_index"]["scanned"] is False
-    assert probes["casting_time_index"]["side_table_missing"] is True
+    probe = probe_joins(backend, root, attach, view, id_to_rec, policy, anchors)["casting_time_index"]
+    assert probe["scanned"] is False
+    assert probe["side_table_missing"] is True
 ```
 
-- [ ] **Step 2: Run and confirm failure** — `ImportError: cannot import name 'scan_index_candidates'`.
-
-- [ ] **Step 3: Implement the scan and rewire the ambiguous branch**
-
-```python
-def scan_index_candidates(view, side_view, *, side_id_cell=0) -> list[int]:
-    """The bare FK-validity scan: every Spell cell whose non-zero values are ~all valid side ids over
-    enough distinct side rows. Deliberately NOT unique on its own — its job is to re-prove, on every
-    run, that the ambiguity the review adjudicated is still the client's shape. A collapse to one
-    candidate means the client changed and the adjudication must be revisited (E0R.2 T3.1)."""
-    side_ids = {r.u32(side_id_cell) for r in side_view.records()}
-    candidates = []
-    for ic in range(view.cell_count):
-        nonzero = [r.u32(ic) for r in view.records() if r.u32(ic) != 0]
-        if len(nonzero) < _MIN_SUPPORT:
-            continue
-        hits = [v for v in nonzero if v in side_ids]
-        if len(hits) / len(nonzero) < 0.99 or len(set(hits)) < _MIN_DISTINCT:
-            continue
-        candidates.append(ic)
-    return candidates
-```
-
-In `probe_joins`, the `reviewed_ambiguous` branch stops returning early. Open the side table first
-(recording `side_table_missing: True` and `scanned: False` when it is absent, instead of the old silent
-`continue`), then:
-
-```python
-        if spec.get("adjudication") == "reviewed_ambiguous":
-            candidates = scan_index_candidates(view, side_view, side_id_cell=spec.get("side_id_cell", 0))
-            join_pairs[field] = {
-                "table": side_name, "pair": None, "winners": [],
-                "adjudication": "reviewed_ambiguous", "evidence": spec.get("evidence"),
-                "scanned": True, "candidate_index_cells": candidates,
-                "candidate_count": len(candidates)}
-            continue
-```
-
-- [ ] **Step 4: Run the probes and the recon suite**
-
-Run: `python -m pytest tests/test_e0r2_recon_live_joins.py tests/test_e0r_recon_cli.py tests/test_e0r1_recon_mandatory.py -q`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 2: Run and confirm failure.**
+- [ ] **Step 3: Implement `scan_index_candidates` and rewire the `reviewed_ambiguous` branch** so it
+  opens the side table first (recording `side_table_missing`/`scanned: False` when absent, rather than
+  the old silent `continue`) and then scans.
+- [ ] **Step 4: Run; commit**
 
 ```bash
-git add coa_client_extract/spell_mechanics.py tests/test_e0r2_recon_live_joins.py tests/_e0r2_recon_fixtures.py
+git add coa_client_extract/spell_mechanics.py tests/test_e0r2_recon_live_joins.py \
+        tests/_e0r2_recon_fixtures.py
 git commit -m "fix(e0r2): T3.1 — ambiguous joins are re-scanned live on every recon"
 ```
 
-### Task 3.2: `verified` requires the reviewed ambiguity to have survived
+### Task 3.2: The reviewed ambiguity is a hash-bound baseline, not a count
 
 **Files:**
-- Modify: `coa_client_extract/spell_mechanics.py:176-202` (`_recon_status`)
+- Modify: `coa_client_extract/data/spell_layout_v2.json` (per-join `ambiguity_baseline`),
+  `coa_client_extract/spell_mechanics.py:176-202` (`_recon_status`),
+  `coa_scraper/config/spell_layout.lock.json`
 - Test: `tests/test_e0r2_recon_live_joins.py` (extend)
+
+**Correction carried from review round 2:** accepting "any candidate set of size ≥2" means a change
+from candidate cells `{10,11}` to `{90,91}` still verifies. The reviewed policy must hash-bind the scan
+**algorithm version and thresholds**, the **expected candidate-cell set**, and the **per-candidate
+metrics**; recon requires exact agreement, and any addition, removal, or metric drift is
+`review_required`.
+
+```json
+"ambiguity_baseline": {
+  "scan_algorithm": "fk_validity_v1",
+  "thresholds": {"min_support": 2, "min_distinct": 2, "valid_fraction": 0.99},
+  "joins": {
+    "casting_time_index": {
+      "candidates": [{"cell": 10, "nonzero": 190123, "valid_fraction": 1.0, "distinct_ids": 41}, "..."],
+      "digest": "<sha256 of the canonical candidate list>"
+    }
+  }
+}
+```
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-def test_a_join_that_collapsed_to_one_candidate_forces_review():
-    status = _recon_status(**_base_args(join_pairs={
-        "casting_time_index": {"pair": None, "scanned": True, "candidate_count": 1,
-                               "adjudication": "reviewed_ambiguous"}}))
+def test_a_join_whose_candidate_SET_changed_forces_review():
+    """Same count, different cells — the ambiguity did not survive, it was replaced."""
+    baseline = _baseline(cells=[10, 11])
+    status = _recon_status(**_args(baseline=baseline, scanned={"casting_time_index": [90, 91]}))
     assert status == "review_required"
 
 
-def test_a_join_with_no_surviving_candidate_forces_review():
-    status = _recon_status(**_base_args(join_pairs={
-        "casting_time_index": {"pair": None, "scanned": True, "candidate_count": 0,
-                               "adjudication": "reviewed_ambiguous"}}))
+def test_a_join_whose_metrics_drifted_forces_review():
+    status = _recon_status(**_args(baseline=_baseline(cells=[10, 11], distinct_ids=41),
+                                   scanned_metrics={"distinct_ids": 12}))
+    assert status == "review_required"
+
+
+def test_a_join_that_collapsed_to_one_candidate_forces_review():
+    status = _recon_status(**_args(baseline=_baseline(cells=[10, 11]),
+                                   scanned={"casting_time_index": [10]}))
     assert status == "review_required"
 
 
 def test_an_unscanned_ambiguous_join_forces_review():
-    """The exact 02e0b7c behaviour: pair=None with no machine evidence used to read as verified."""
-    status = _recon_status(**_base_args(join_pairs={
-        "casting_time_index": {"pair": None, "adjudication": "reviewed_ambiguous"}}))
+    """The exact 02e0b7c behaviour: pair=None with no machine evidence read as verified."""
+    status = _recon_status(**_args(join_pairs={"casting_time_index": {
+        "pair": None, "adjudication": "reviewed_ambiguous"}}))
     assert status == "review_required"
 
 
-def test_a_surviving_ambiguity_still_verifies():
-    status = _recon_status(**_base_args(join_pairs={
-        "casting_time_index": {"pair": None, "scanned": True, "candidate_count": 30,
-                               "adjudication": "reviewed_ambiguous"}}))
+def test_a_scan_run_under_different_thresholds_forces_review():
+    status = _recon_status(**_args(baseline=_baseline(min_distinct=2), scan_thresholds={"min_distinct": 5}))
+    assert status == "review_required"
+
+
+def test_an_exactly_matching_baseline_verifies():
+    status = _recon_status(**_args(baseline=_baseline(cells=[10, 11]),
+                                   scanned={"casting_time_index": [10, 11]}))
     assert status == "verified"
 ```
 
-- [ ] **Step 2: Run and confirm the first three fail (all return `verified`).**
-
-- [ ] **Step 3: Replace the unconditional `continue` in `_recon_status`**
-
-```python
-        pair = probe.get("pair")
-        if pair is None:
-            # An ambiguous join stays raw_only ONLY while the ambiguity is re-proven by a live scan.
-            # >=2 surviving candidates == the reviewed shape. Exactly 1 means the client now pins the
-            # join and the adjudication is stale; 0 means the join vanished. Either is a human decision,
-            # never a silent `verified` (E0R.2 T3.2).
-            if not probe.get("scanned"):
-                return "review_required"
-            if (probe.get("candidate_count") or 0) < 2:
-                return "review_required"
-            continue
-```
-
-Update the docstring: `verified` now requires *every* required join either uniquely discovered **and**
-adopted at the authored cell, or **live-scanned** with ≥2 surviving candidates.
-
+- [ ] **Step 2: Run and confirm failure.**
+- [ ] **Step 3: Author the baseline from a real recon run** (run T3.1's scan against the live client,
+  record the observed candidates verbatim), add it to the policy, rehash with `compute_policy_sha256`
+  per T2.3's recipe, update the Node lock, and implement the exact-agreement check in `_recon_status`.
 - [ ] **Step 4: Run; commit**
 
 ```bash
-git add coa_client_extract/spell_mechanics.py tests/test_e0r2_recon_live_joins.py
-git commit -m "fix(e0r2): T3.2 — verified requires the reviewed ambiguity to survive a live scan"
+git add coa_client_extract/spell_mechanics.py coa_client_extract/data/spell_layout_v2.json \
+        coa_scraper/config/spell_layout.lock.json tests/test_e0r2_recon_live_joins.py
+git commit -m "fix(e0r2): T3.2 — verified requires exact agreement with a hash-bound ambiguity baseline"
 ```
 
-### Task 3.3: Recon stops claiming artifact size; its own budget is policy-bound
+### Task 3.3: Recon stops claiming artifact size
 
 **Files:**
-- Modify: `coa_client_extract/spell_mechanics.py:205-218` (`three_part_budget` → `recon_budget`),
-  `:358-365` (drop `est_bytes`), `coa_client_extract/cli.py:341-344` (delete the `DEFAULT_BUDGET`
-  fallback), `:16` (`DEFAULT_BUDGET`)
+- Modify: `coa_client_extract/spell_mechanics.py` (`three_part_budget` → `recon_budget`, `:358-365`,
+  `DEFAULT_BUDGET`), `coa_client_extract/cli.py`
 - Test: `tests/test_e0r2_recon_budget.py`
 
-**Design:** recon measures a *recon*, not a generation. It has no basis for a generation-size forecast —
-`record_count * record_size` is raw DBC bytes, off by 2.8× against the real 523 MB. Recon gates its own
-peak RSS and elapsed against the reviewed policy ceilings (`python_peak_rss_mb`, `python_elapsed_s`) and
-makes no size claim at all. Generation size stays gated at publication, where it is measured exactly.
-A serialized-sample forecast is an explicit **non-goal** here: a wrong forecast is worse than no forecast.
+**Design:** recon measures a *recon*. `record_count * record_size` is raw DBC bytes — off by 2.8×
+against the real 523 MB. Recon gates its own peak RSS and elapsed against the reviewed policy ceilings
+and makes no size claim. A serialized-sample forecast is an explicit **non-goal**: a wrong forecast is
+worse than none, and publication measures the real thing exactly.
 
-- [ ] **Step 1: Write the failing test**
-
-```python
-# tests/test_e0r2_recon_budget.py
-"""E0R.2 T3.3: recon reported 186.07 MiB for a generation that was 523,026,495 bytes, because it
-estimated raw DBC bytes against a retired hard-coded ceiling. A number that wrong is worse than no
-number — recon now gates only what it actually measures, against the reviewed policy."""
-import pytest
-
-from coa_client_extract.spell_mechanics import recon_budget
-
-
-def test_recon_makes_no_artifact_size_claim():
-    report = recon_budget(peak_rss_mb=100.0, elapsed_s=12.0,
-                          ceilings={"python_peak_rss_mb": 4096, "python_elapsed_s": 1200})
-    assert "artifact_size_mb" not in report
-    assert "serialized_bytes" not in report
-    assert report["within_budget"] is True
-
-
-def test_recon_gates_its_own_rss_and_elapsed_against_the_policy():
-    report = recon_budget(peak_rss_mb=9000.0, elapsed_s=12.0,
-                          ceilings={"python_peak_rss_mb": 4096, "python_elapsed_s": 1200})
-    assert report["within_budget"] is False
-    assert any("python_peak_rss_mb" in b for b in report["breach"])
-
-
-def test_the_retired_default_budget_is_gone():
-    import coa_client_extract.spell_mechanics as sm
-    assert not hasattr(sm, "DEFAULT_BUDGET")
-    assert not hasattr(sm, "three_part_budget")
-
-
-def test_regenerate_refuses_a_policy_without_a_budget_block(tmp_path):
-    """The silent DEFAULT_BUDGET fallback meant a policy with no reviewed ceilings still published."""
-    from coa_client_extract.cli import regenerate
-    from coa_client_extract.publish import PublishError
-    from tests._e0r2_fixtures import policy_without_budget, synthetic_client
-    with pytest.raises(PublishError, match="budget"):
-        regenerate(*synthetic_client(tmp_path), spell_policy=policy_without_budget())
-```
-
+- [ ] **Step 1: Write the failing test** — `recon_budget` reports no `artifact_size_mb`/
+  `serialized_bytes`; it breaches on `python_peak_rss_mb`; `DEFAULT_BUDGET` and `three_part_budget` no
+  longer exist; recon reads ceilings from `spell_policy.doc["budget"]`.
 - [ ] **Step 2: Run and confirm failure.**
-
-- [ ] **Step 3: Implement**
-
-```python
-def recon_budget(*, peak_rss_mb, elapsed_s, ceilings) -> dict:
-    """Recon's OWN resource envelope against the reviewed policy ceilings. Recon makes no
-    generation-size claim: it reads DBC headers, and record_count*record_size is not a forecast of a
-    serialized generation (it was off by 2.8x on the real client). Size is gated at publication, where
-    it is measured exactly (E0R.2 T3.3)."""
-    breach = []
-    for key, value in (("python_peak_rss_mb", peak_rss_mb), ("python_elapsed_s", elapsed_s)):
-        ceiling = ceilings.get(key)
-        if ceiling is not None and value > ceiling:
-            breach.append(f"{key} {value} > {ceiling}")
-    return {"measured": {"python_peak_rss_mb": peak_rss_mb, "python_elapsed_s": elapsed_s},
-            "ceilings": dict(ceilings), "within_budget": not breach, "breach": breach}
-```
-
-`recon_spell_mechanics` takes `budget` from the policy (`spell_policy.doc["budget"]`) rather than the
-module default; delete the `est_bytes` line and `DEFAULT_BUDGET`. In `cli.py`, delete the
-`three_part_budget` else-branch and raise `PublishError` when `policy.doc.get("budget")` is absent and
-no explicit `budget` was passed. Synthetic test policies that relied on the fallback get an explicit
-budget block in `tests/_e0r2_fixtures.py`.
-
-- [ ] **Step 4: Run the full Python suite; migrate the fixtures the fallback was propping up; commit**
+- [ ] **Step 3: Implement `recon_budget(*, peak_rss_mb, elapsed_s, ceilings)`, delete `est_bytes`,
+  `DEFAULT_BUDGET` and `three_part_budget`, and thread the policy budget through.**
+- [ ] **Step 4: Run the full suite; commit**
 
 ```bash
 git add coa_client_extract/spell_mechanics.py coa_client_extract/cli.py tests/test_e0r2_recon_budget.py
@@ -999,157 +1210,66 @@ git commit -m "fix(e0r2): T3.3 — recon gates what it measures; the retired har
 
 # Workstream 4 — one internally-executed, generation-bound acceptance (blocker 2)
 
-**Blocker:** `write_acceptance_summary(dist, *, recon_report_path, build_mechanics, ...)` trusts a
-caller-supplied `build_mechanics` dict for `executed`, `exit_code`, `network_attempts` and
-`pointer_only`. It accepts a recon document containing only `{"status": "verified"}`. It binds no recon
-client/policy/topology identity to the resolved generation and no mechanics output hash, and it
-silently substitutes `{}` for absent readiness/source coverage. *(Precision: the shipped
-`acceptance-summary` subcommand does always execute the build first — `cli.py:833-839` — so the
-committed record came from the executing path. The fabricable surface is the function API, which is
-what a future caller will reach for.)*
+**Blocker:** `write_acceptance_summary` trusts a caller-supplied `build_mechanics` dict for `executed`,
+`exit_code`, `network_attempts` and `pointer_only`; accepts a recon document containing only
+`{"status": "verified"}`; binds no recon or mechanics identity to the generation; and silently
+substitutes `{}` for absent coverage. *(Precision: the shipped subcommand does always execute the build
+first — `cli.py:833-839` — so the committed record came from the executing path. The fabricable surface
+is the function API.)*
 
-**Additional finding:** `readiness_coverage` and `source_coverage` have **no producer anywhere** —
-grep finds only the two reader lines at `cli.py:555-556`. The `{}` is not a dropped measurement; the
-measurement was never implemented, while the E0R.1 tracker's T6.2 checkbox claims it is recorded.
+**Additional finding:** `readiness_coverage` and `source_coverage` have **no producer anywhere** — only
+the two reader lines at `cli.py:555-556`. The `{}` is not a dropped measurement; it was never
+implemented, while the E0R.1 tracker's T6.2 checkbox claims it is recorded.
 
-### Task 4.1: Real readiness and source coverage producers
+### Task 4.1: `observation_coverage` and `field_readiness_coverage` producers
 
 **Files:**
-- Modify: `coa_client_extract/spell_record.py` or `coa_client_extract/cli.py` (a streaming
-  `readiness_coverage` accumulator in `regenerate`), `coa_client_extract/cli.py:280` (manifest hoist)
-- Test: `tests/test_e0r2_coverage_producers.py`
+- Modify: `coa_client_extract/spell_record.py`, `coa_client_extract/cli.py`,
+  `coa_scraper/scripts/build-mechanics-artifacts.mjs`
+- Test: `tests/test_e0r2_coverage_producers.py`, `coa_scraper/tests/coverage.test.mjs`
 
-**Design:** the two coverages belong to different artifacts and must be sourced accordingly.
-- `readiness_coverage` is a **generation** fact: per-field counts of cell `state` and `decoded_reason`
-  across the full child, accumulated during the streaming write (single pass, no materialization) and
-  hoisted into manifest-v3 next to `icon_coverage`.
-- `source_coverage` is a **mechanics-artifact** fact: the canonical build already computes
-  `per_field_winner_counts_by_source`. The acceptance record reads it from the mechanics manifest the
-  measured build emitted — not from the generation manifest, which has no such concept.
+**Correction carried from review round 2:** raw extraction states are **observation** coverage, not
+final mechanics readiness. Two different denominators, two different layers:
 
-- [ ] **Step 1: Write the failing test**
+| coverage | layer | denominator |
+|---|---|---|
+| `observation_coverage` | generation manifest | every raw cell of every full row |
+| `icon_coverage` | generation manifest | every spell in the domain (already exists) |
+| `field_readiness_coverage` | mechanics manifest | Builder-domain mechanics fields, status/reason counts |
+| `source_coverage` | mechanics manifest | `per_field_winner_counts_by_source` (already exists) |
 
-```python
-# tests/test_e0r2_coverage_producers.py
-"""E0R.2 T4.1: the acceptance schema has claimed icon/readiness/source coverage since E0R.1 T6.2, but
-readiness_coverage and source_coverage had NO producer — the writer read absent manifest keys and
-substituted {}. A coverage claim with no producer is worse than an omitted one."""
-from coa_client_extract.spell_record import readiness_accumulator
-
-
-def test_readiness_coverage_counts_states_and_reasons_per_field():
-    acc = readiness_accumulator()
-    acc.observe({"id": {"state": "present", "decoded_reason": "decoded"},
-                 "power_type": {"state": "present", "decoded_reason": "proof_withheld"}})
-    acc.observe({"id": {"state": "present", "decoded_reason": "decoded"},
-                 "power_type": {"state": "unresolved", "decoded_reason": "not_present"}})
-    cov = acc.result()
-    assert cov["fields"]["id"]["state"]["present"] == 2
-    assert cov["fields"]["power_type"]["decoded_reason"]["proof_withheld"] == 1
-    assert cov["cells"] == 4
-
-
-def test_regenerate_hoists_readiness_coverage_into_the_manifest(tmp_path):
-    from tests._e0r2_fixtures import regenerate_synthetic
-    manifest = regenerate_synthetic(tmp_path)
-    assert manifest["readiness_coverage"]["cells"] > 0
-    assert "power_type" in manifest["readiness_coverage"]["fields"]
-```
-
+- [ ] **Step 1: Write the failing test** — the accumulator counts states and reasons per field with an
+  exact `cells` denominator; `regenerate` hoists `observation_coverage`; the mechanics build emits
+  `field_readiness_coverage` with status/reason counts and an exact `fields_considered` denominator.
 - [ ] **Step 2: Run and confirm failure.**
-
-- [ ] **Step 3: Implement the accumulator and wire it into the streaming write**
-
-```python
-def readiness_accumulator():
-    """Single-pass per-field readiness counts over the full child's compact cells — the generation-level
-    twin of icon_coverage. Never materializes rows (E0R.2 T4.1)."""
-    from collections import Counter, defaultdict
-
-    class _Acc:
-        def __init__(self):
-            self.fields = defaultdict(lambda: {"state": Counter(), "decoded_reason": Counter()})
-            self.cells = 0
-
-        def observe(self, raw_block: dict) -> None:
-            for field, cell in raw_block.items():
-                bucket = self.fields[field]
-                bucket["state"][cell.get("state")] += 1
-                bucket["decoded_reason"][cell.get("decoded_reason")] += 1
-                self.cells += 1
-
-        def result(self) -> dict:
-            return {"cells": self.cells,
-                    "fields": {f: {"state": dict(b["state"]), "decoded_reason": dict(b["decoded_reason"])}
-                               for f, b in sorted(self.fields.items())}}
-
-    return _Acc()
-```
-
-Call `acc.observe(row["raw"])` in the same loop that already writes and hashes the full child, and set
-`base_manifest["readiness_coverage"] = acc.result()` beside the existing
-`base_manifest["icon_coverage"] = icon_cov` at `cli.py:280`.
-
-- [ ] **Step 4: Run; commit**
+- [ ] **Step 3: Implement `observation_accumulator()` (single pass, folded into the existing streaming
+  write loop) and the Node-side readiness accumulator (folded into T5.2's incremental statistics).**
+- [ ] **Step 4: Run both suites; commit**
 
 ```bash
-git add coa_client_extract/spell_record.py coa_client_extract/cli.py tests/test_e0r2_coverage_producers.py
-git commit -m "feat(e0r2): T4.1 — real readiness coverage producer (source coverage comes from the build)"
+git add coa_client_extract/spell_record.py coa_client_extract/cli.py \
+        coa_scraper/scripts/build-mechanics-artifacts.mjs \
+        tests/test_e0r2_coverage_producers.py coa_scraper/tests/coverage.test.mjs
+git commit -m "feat(e0r2): T4.1 — observation coverage (generation) and readiness coverage (mechanics)"
 ```
 
 ### Task 4.2: One acceptance command that executes what it attests to
 
 **Files:**
-- Modify: `coa_client_extract/cli.py:492-567` (`write_acceptance_summary` → `run_acceptance`),
-  `:833-846` (subcommand)
+- Modify: `coa_client_extract/cli.py:492-567`, `:833-846`
 - Test: `tests/test_e0r2_acceptance_executes.py`
 
 **Interfaces:**
 - Produces: `run_acceptance(dist, *, recon_report_path, scraper_dir, builder_entries, mechanics_out,
-  benchmark_env_id="local", out=None, node="node") -> dict`. `write_acceptance_summary` is **deleted**;
-  there is no entry point that accepts a caller-supplied measurement.
+  benchmark_env_id="local", out=None, node="node") -> dict`. `write_acceptance_summary` is **deleted**.
+  Record `schema_version` becomes `coa-e0r-acceptance-summary-v3`.
 
-- [ ] **Step 1: Write the failing test**
-
-```python
-# tests/test_e0r2_acceptance_executes.py
-"""E0R.2 T4.2: acceptance must EXECUTE what it attests to. The v2 writer took a build_mechanics dict
-and trusted executed/exit_code/network_attempts/pointer_only, so any caller could hand it a fabricated
-successful run."""
-import inspect
-
-import pytest
-
-from coa_client_extract import cli
-
-
-def test_there_is_no_entry_point_that_accepts_a_caller_supplied_measurement():
-    assert not hasattr(cli, "write_acceptance_summary")
-    assert "build_mechanics" not in inspect.signature(cli.run_acceptance).parameters
-
-
-def test_a_fabricated_measurement_cannot_reach_the_record(monkeypatch, tmp_path):
-    """The only path to build_mechanics is the internal executor."""
-    calls = []
-    monkeypatch.setattr(cli, "run_measured_build_mechanics",
-                        lambda *a, **k: calls.append(a) or {"executed": True, "exit_code": 1})
-    from tests._e0r2_fixtures import published_generation, verified_recon
-    dist = published_generation(tmp_path)
-    with pytest.raises(cli.AcceptanceError, match="exit_code=1"):
-        cli.run_acceptance(dist, recon_report_path=verified_recon(tmp_path), scraper_dir=tmp_path,
-                           builder_entries=tmp_path / "e.jsonl", mechanics_out=tmp_path / "out")
-    assert calls, "the build was not executed"
-```
-
+- [ ] **Step 1: Write the failing test** — `cli` has no `write_acceptance_summary`; `run_acceptance`
+  has no `build_mechanics` parameter; a monkeypatched executor returning `exit_code: 1` makes
+  `run_acceptance` raise and proves the executor was called.
 - [ ] **Step 2: Run and confirm failure.**
-
-- [ ] **Step 3: Fold the executor inside**
-
-`run_acceptance` performs, in order: resolve the generation → read + validate the recon → **execute**
-`run_measured_build_mechanics` → `_require_executed_build_mechanics` → bind (T4.3) → write. Delete
-`write_acceptance_summary` and point the subcommand at `run_acceptance`. Bump the record's
-`schema_version` to `coa-e0r-acceptance-summary-v3`.
-
+- [ ] **Step 3: Fold the executor inside** — resolve → validate recon → **execute** → require executed →
+  bind (T4.3) → write.
 - [ ] **Step 4: Run; commit**
 
 ```bash
@@ -1157,29 +1277,41 @@ git add coa_client_extract/cli.py tests/test_e0r2_acceptance_executes.py
 git commit -m "fix(e0r2): T4.2 — acceptance executes the build it attests to; the v2 writer is deleted"
 ```
 
-### Task 4.3: The record binds recon and mechanics to *this* generation
+### Task 4.3: The record binds recon and mechanics to one generation
 
 **Files:**
-- Modify: `coa_client_extract/cli.py` (`run_acceptance`)
+- Modify: `coa_client_extract/cli.py` (`run_acceptance`),
+  `coa_scraper/scripts/build-mechanics-artifacts.mjs` (record input identities)
 - Test: `tests/test_e0r2_acceptance_binding.py`
 
-**Design — every claim tied to one generation id:**
-1. The recon report must carry a full binding, not just `{"status": "verified"}`: its
-   `binding.policy_sha256` must equal the manifest's, its `client_build` must match, and its per-table
-   `sha256` values must equal the manifest `binding` capture identities.
-2. The mechanics manifest's output `sha256` and `record_count` are recorded.
-3. `source_coverage` is read from the mechanics manifest's `per_field_winner_counts_by_source`.
-4. Missing coverage **fails**; there is no `{}` substitution.
-5. After the build, the pointer is re-read and its `generation_id` must still equal the one resolved at
-   the start — otherwise a concurrent publish combined measurements from two generations.
+**Correction carried from review round 2 — the field paths in the previous draft did not exist.** Use
+the real schemas (verified by probe):
+
+| what | recon | manifest |
+|---|---|---|
+| policy hash | `source_pins.policy_sha256` | `binding.policy_sha256` |
+| client build | `source_pins.client_build` | `binding.topology.client_build` |
+| per-table capture hash | `source_pins.dbc.<T>.sha256` | `binding.topology.tables.<T>.sha256` |
+| topology | `topology.tables.<T>` | `binding.topology.tables.<T>` |
+
+Compare via a **canonical recon-binding digest** computed identically from both sides, so the check is
+one equality rather than a field-by-field walk that silently skips a key it does not know about.
+
+**Mechanics binding, strengthened:**
+1. The mechanics manifest records `input_generation_id`, `pointer_manifest_sha256`, `policy_sha256`,
+   `projection_child_sha256`, and `builder_entries_sha256`.
+2. Acceptance **hashes and counts the emitted mechanics JSONL itself** rather than trusting the
+   manifest's claimed output hash.
+3. After the build, re-resolve the pointer and compare **both** `generation_id` **and**
+   `manifest_sha256`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_acceptance_binding.py
-"""E0R.2 T4.3: the record must prove the measurements and the generation are the same run. At 02e0b7c
-a recon document containing only {"status": "verified"} was accepted, and a concurrent pointer change
-between resolve and build would have gone unnoticed."""
+"""E0R.2 T4.3: the record must prove the measurements and the generation are the same run. At 02e0b7c a
+recon document containing only {"status": "verified"} was accepted, and a concurrent publish between
+resolve and build would have combined two generations' measurements into one attestation."""
 import pytest
 
 from coa_client_extract.cli import AcceptanceError, run_acceptance
@@ -1187,165 +1319,108 @@ from tests._e0r2_fixtures import acceptance_env
 
 
 def test_a_bare_status_only_recon_is_refused(tmp_path):
-    env = acceptance_env(tmp_path, recon={"status": "verified"})
-    with pytest.raises(AcceptanceError, match="binding"):
-        run_acceptance(**env)
+    with pytest.raises(AcceptanceError, match="source_pins"):
+        run_acceptance(**acceptance_env(tmp_path, recon={"status": "verified"}))
 
 
 def test_a_recon_bound_to_a_different_policy_is_refused(tmp_path):
-    env = acceptance_env(tmp_path, recon_policy_sha256="0" * 64)
-    with pytest.raises(AcceptanceError, match="policy_sha256"):
-        run_acceptance(**env)
+    with pytest.raises(AcceptanceError, match="recon binding digest"):
+        run_acceptance(**acceptance_env(tmp_path, recon_policy_sha256="0" * 64))
 
 
 def test_a_recon_bound_to_a_different_client_capture_is_refused(tmp_path):
-    env = acceptance_env(tmp_path, recon_table_sha256={"Spell": "f" * 64})
-    with pytest.raises(AcceptanceError, match="Spell"):
-        run_acceptance(**env)
+    with pytest.raises(AcceptanceError, match="recon binding digest"):
+        run_acceptance(**acceptance_env(tmp_path, recon_table_sha256={"Spell": "f" * 64}))
 
 
 def test_a_pointer_that_moved_during_the_build_is_refused(tmp_path):
-    env = acceptance_env(tmp_path, republish_during_build=True)
-    with pytest.raises(AcceptanceError, match="pointer moved|generation changed"):
-        run_acceptance(**env)
+    with pytest.raises(AcceptanceError, match="pointer moved"):
+        run_acceptance(**acceptance_env(tmp_path, republish_during_build=True))
 
 
-def test_absent_coverage_fails_instead_of_becoming_an_empty_object(tmp_path):
-    env = acceptance_env(tmp_path, drop_manifest_keys=["readiness_coverage"])
-    with pytest.raises(AcceptanceError, match="readiness_coverage"):
-        run_acceptance(**env)
+def test_a_pointer_whose_manifest_hash_changed_is_refused(tmp_path):
+    """Same generation_id, rewritten manifest — id equality alone would have missed it."""
+    with pytest.raises(AcceptanceError, match="manifest_sha256"):
+        run_acceptance(**acceptance_env(tmp_path, rewrite_manifest_during_build=True))
 
 
-def test_the_record_binds_the_mechanics_output_hash(tmp_path):
+def test_a_mechanics_manifest_claiming_a_hash_the_jsonl_does_not_have_is_refused(tmp_path):
+    with pytest.raises(AcceptanceError, match="mechanics jsonl sha256"):
+        run_acceptance(**acceptance_env(tmp_path, forge_mechanics_output_hash=True))
+
+
+def test_a_mechanics_build_bound_to_another_generation_is_refused(tmp_path):
+    with pytest.raises(AcceptanceError, match="input_generation_id"):
+        run_acceptance(**acceptance_env(tmp_path, mechanics_input_generation_id="deadbeef"))
+
+
+@pytest.mark.parametrize("missing", ["observation_coverage", "icon_coverage"])
+def test_absent_generation_coverage_fails_instead_of_becoming_an_empty_object(tmp_path, missing):
+    with pytest.raises(AcceptanceError, match=missing):
+        run_acceptance(**acceptance_env(tmp_path, drop_manifest_keys=[missing]))
+
+
+@pytest.mark.parametrize("missing", ["field_readiness_coverage", "per_field_winner_counts_by_source"])
+def test_absent_mechanics_coverage_fails(tmp_path, missing):
+    with pytest.raises(AcceptanceError, match=missing):
+        run_acceptance(**acceptance_env(tmp_path, drop_mechanics_keys=[missing]))
+
+
+def test_the_record_binds_every_identity(tmp_path):
     record = run_acceptance(**acceptance_env(tmp_path))
-    assert len(record["mechanics"]["sha256"]) == 64
+    assert record["schema_version"] == "coa-e0r-acceptance-summary-v3"
+    assert len(record["generation_contract"]["sha256"]) == 64
+    assert len(record["mechanics"]["jsonl_sha256"]) == 64
     assert record["mechanics"]["record_count"] > 0
-    assert record["coverage"]["source"]                       # from the mechanics manifest
-    assert record["coverage"]["readiness"]["cells"] > 0
+    assert record["coverage"]["observation"]["cells"] > 0
+    assert record["coverage"]["readiness"]["fields_considered"] > 0
+    assert record["coverage"]["source"]
 ```
 
 - [ ] **Step 2: Run and confirm every probe fails.**
-
-- [ ] **Step 3: Implement the five binding checks in `run_acceptance`**
-
-```python
-    # --- the recon must be bound to THIS generation, not merely verified ---
-    recon_binding = recon_report.get("binding") or {}
-    if not recon_binding:
-        raise AcceptanceError("recon report carries no binding block; a status alone binds nothing")
-    if recon_binding.get("policy_sha256") != binding.get("policy_sha256"):
-        raise AcceptanceError(
-            f"recon policy_sha256 {recon_binding.get('policy_sha256')!r} != generation "
-            f"{binding.get('policy_sha256')!r}")
-    if recon_report.get("client_build") != manifest.get("client_build"):
-        raise AcceptanceError(
-            f"recon client_build {recon_report.get('client_build')!r} != generation "
-            f"{manifest.get('client_build')!r}")
-    for table, meta in (binding.get("tables") or {}).items():
-        observed = ((recon_binding.get("tables") or {}).get(table) or {}).get("sha256")
-        if observed != meta.get("sha256"):
-            raise AcceptanceError(
-                f"recon bound {table} sha256 {observed!r} != generation {meta.get('sha256')!r}")
-
-    # --- coverage must exist; {} was a claim with no producer (E0R.2 T4.1) ---
-    readiness_cov = manifest.get("readiness_coverage")
-    if not readiness_cov:
-        raise AcceptanceError("generation manifest carries no readiness_coverage")
-
-    # --- the build's own outputs, bound ---
-    emitted = json.loads((mechanics_manifest_path).read_text(encoding="utf-8"))
-    source_cov = emitted.get("per_field_winner_counts_by_source")
-    if not source_cov:
-        raise AcceptanceError("mechanics manifest carries no per_field_winner_counts_by_source")
-    mechanics = {"sha256": emitted["outputs"]["sha256"],
-                 "record_count": emitted["outputs"]["record_count"],
-                 "manifest_sha256": _sha256_bytes(mechanics_manifest_path.read_bytes())}
-
-    # --- the pointer must not have moved under us ---
-    after = json.loads(pointer.read_text(encoding="utf-8")).get("generation_id")
-    if after != manifest.get("generation_id"):
-        raise AcceptanceError(
-            f"pointer moved during the acceptance run ({manifest.get('generation_id')!r} -> {after!r}); "
-            "the measurements would describe two different generations")
-```
-
-- [ ] **Step 4: Run; commit**
+- [ ] **Step 3: Implement** `recon_binding_digest(source_pins, topology)` (canonical, computed
+  identically from the recon report and from `manifest.binding`), the mechanics input-identity block in
+  the Node build, independent hashing of the emitted JSONL, the two-field pointer recheck, and
+  fail-closed coverage. Record the generation contract schema and hash in the summary.
+- [ ] **Step 4: Run both suites; commit**
 
 ```bash
-git add coa_client_extract/cli.py tests/test_e0r2_acceptance_binding.py
-git commit -m "fix(e0r2): T4.3 — acceptance binds recon, coverage and mechanics to one generation"
+git add coa_client_extract/cli.py coa_scraper/scripts/build-mechanics-artifacts.mjs \
+        tests/test_e0r2_acceptance_binding.py
+git commit -m "fix(e0r2): T4.3 — acceptance binds recon, contract, coverage and mechanics to one generation"
 ```
 
 ---
 
 # Workstream 5 — the canonical build streams end to end (blocker 5)
 
-**Blocker:** candidate validation streams, but the canonical mechanics path still does
-`readFileSync` → `.toString("utf8")` → `.split("\n")` → accumulate a `projection` array and a
-`clientById` Map over all of it, then retains the full mechanics output array
-(`mechanics-projection.mjs:339-385`, `build-mechanics-artifacts.mjs:37-49,102-133,386-423`). The
-E0R.1 design named "projection consumption → mechanics serialization" as in scope for streaming; the
-T4.2 RSS test covers candidate validation instead. Node peaked at 866 MB on the real run.
+**Blocker:** the canonical mechanics path does `readFileSync` → `.toString("utf8")` → `.split("\n")` →
+accumulate a `projection` array and a `clientById` Map over all of it, then retains the full output
+array (`mechanics-projection.mjs:339-385`, `build-mechanics-artifacts.mjs:37-49,102-133,386-423`). The
+E0R.1 design named "projection consumption → mechanics serialization" as in scope; the T4.2 RSS test
+covers candidate validation instead. Node peaked at 866 MB on the real run.
 
-**Key observation that makes this cheap:** `buildCanonicalMechanics` emits one row per **Builder**
-spell (~3,600), not per projection row (10,410). The projection is only a lookup. So the streaming pass
-needs to retain only the projection rows whose `spell_id` is in `builderSpellIds` — a ~3× smaller map
-and no whole-file string.
+**Key observation:** `buildCanonicalMechanics` emits one row per **Builder** spell (~3,600), not per
+projection row (10,410). The projection is only a lookup, so the streaming pass needs to retain only
+rows whose `spell_id` is in `builderSpellIds`.
 
 ### Task 5.1: Streaming projection consumption
 
 **Files:**
 - Modify: `coa_scraper/scripts/lib/mechanics-projection.mjs:339-385`
-  (`loadAndValidateProjectionV3` → `streamAndValidateProjectionV3`)
 - Test: `coa_scraper/tests/mechanics-streaming.test.mjs`
 
 **Interfaces:**
-- Produces: `streamAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds,
-  policyPath }) -> { absent: false, clientById: Map, coverage, projection_sha256, manifest_sha256,
-  client_build }`. The `projection` array is **gone**; callers use `clientById`.
+- Produces: `streamAndValidateProjectionV3({...}) -> { absent: false, clientById: Map, coverage,
+  projection_sha256, manifest_sha256, client_build }`. The `projection` array is **gone**.
 
-- [ ] **Step 1: Write the failing test**
-
-```javascript
-// coa_scraper/tests/mechanics-streaming.test.mjs
-import test from "node:test";
-import assert from "node:assert/strict";
-import { streamAndValidateProjectionV3 } from "../scripts/lib/mechanics-projection.mjs";
-import { syntheticProjection } from "./_e0r2-fixtures.mjs";
-
-test("the projection is never materialized as an array or a whole-file string", () => {
-  const src = fs.readFileSync(new URL("../scripts/lib/mechanics-projection.mjs", import.meta.url), "utf8");
-  const fn = src.slice(src.indexOf("export function streamAndValidateProjectionV3"));
-  assert.ok(!/readFileSync\(projectionPath/.test(fn), "still reads the whole projection");
-  assert.ok(!/\.split\("\\n"\)/.test(fn), "still splits the whole projection into strings");
-});
-
-test("only builder-domain rows are retained", (t) => {
-  const { projectionPath, manifest, manifestBytes, policyPath } = syntheticProjection(t, { rows: 5000 });
-  const builderSpellIds = new Set([10, 20, 30]);
-  const loaded = streamAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath });
-  assert.equal(loaded.clientById.size, 3);
-  assert.equal(loaded.coverage.builder_joined_to_projection, 3);
-  assert.equal(loaded.coverage.projection_only, 4997);
-});
-
-test("every row is still validated, not just the retained ones", (t) => {
-  const { projectionPath, manifest, manifestBytes, policyPath } = syntheticProjection(t, { rows: 100, corruptAt: 73 });
-  assert.throws(() => streamAndValidateProjectionV3({
-    projectionPath, manifestBytes, manifest, builderSpellIds: new Set([1]), policyPath }), /line 73|schema_version/);
-});
-```
-
+- [ ] **Step 1: Write the failing test** — the function source contains no `readFileSync(projectionPath`
+  and no whole-file `.split`; only builder-domain rows are retained (`clientById.size === 3` over a
+  5,000-row projection); **every** row is still validated (a corruption at line 73 throws even though
+  only spell 1 is retained); the incremental hash equals the whole-file hash.
 - [ ] **Step 2: Run and confirm failure.**
-
-- [ ] **Step 3: Implement using the existing `readJsonlLines` generator**
-
-Hash incrementally with the same chunked read that yields lines, rather than hashing a whole buffer.
-Keep every existing per-row check (`schema_version`, `is_coa`, positive-unique `spell_id`,
-`verifyRowAgainstPolicy`) — the point is memory, not fewer checks. Track `seen` as a `Set` of ids (ints,
-~10k — that is a counter-scale structure, not a row-scale one) so duplicate detection and the
-`unique_spell_ids` cross-check survive.
-
+- [ ] **Step 3: Implement** over the existing `readJsonlLines` generator, hashing incrementally, keeping
+  every per-row check and the `seen` id set (counter-scale, ~10k ints).
 - [ ] **Step 4: Run; commit**
 
 ```bash
@@ -1356,57 +1431,16 @@ git commit -m "perf(e0r2): T5.1 — the canonical build streams the projection i
 ### Task 5.2: Generator mechanics rows and incremental statistics
 
 **Files:**
-- Modify: `coa_scraper/scripts/build-mechanics-artifacts.mjs:37-49` (`buildCanonicalMechanics` →
-  generator), `:386-423` (`writeArtifact` consumes an iterable), `winnerCounts`/`aggregateCounts` →
-  incremental accumulators
+- Modify: `coa_scraper/scripts/build-mechanics-artifacts.mjs`
 - Test: `coa_scraper/tests/mechanics-streaming.test.mjs` (extend)
 
-- [ ] **Step 1: Write the failing test**
-
-```javascript
-test("buildCanonicalMechanics yields rows instead of returning an array", () => {
-  const gen = buildCanonicalMechanics({ entries: [], clientById: new Map() });
-  assert.equal(typeof gen[Symbol.iterator], "function");
-  assert.ok(!Array.isArray(gen));
-});
-
-test("writeArtifact never holds the row array", (t) => {
-  const src = fs.readFileSync(new URL("../scripts/build-mechanics-artifacts.mjs", import.meta.url), "utf8");
-  assert.ok(!/rows\.length/.test(src), "record_count still derived from a materialized array");
-  assert.ok(!/winnerCounts\(rows\)/.test(src), "statistics still computed over a materialized array");
-});
-
-test("the artifact is byte-identical to the pre-streaming implementation", (t) => {
-  /* golden: build the fixture corpus and compare sha256 against the recorded value — streaming is a
-     memory change, never an output change. */
-  const { sha } = buildFixtureArtifact(t);
-  assert.equal(sha, GOLDEN_MECHANICS_SHA256);
-});
-```
-
-The third test is the important one: capture `GOLDEN_MECHANICS_SHA256` from the *current*
-implementation before refactoring, so the refactor is provably output-preserving.
-
-- [ ] **Step 2: Record the golden sha, run, confirm failure.**
-
-- [ ] **Step 3: Implement**
-
-`buildCanonicalMechanics` becomes `function*` and `yield`s each row in ascending `spell_id`.
-`writeArtifact` keeps its existing `for (const r of rows)` write loop (already streaming) and folds the
-statistics into that loop:
-
-```javascript
-  let recordCount = 0;
-  const stats = statsAccumulator();          // bySource / byTier / aggregate counters
-  for (const r of rows) {
-    const line = Buffer.from(JSON.stringify(r) + "\n");
-    fs.writeSync(outFd, line);
-    outHash.update(line);
-    stats.observe(r);
-    recordCount += 1;
-  }
-```
-
+- [ ] **Step 1: Record a golden output hash from the CURRENT implementation first**, so the refactor is
+  provably output-preserving; then write the tests: `buildCanonicalMechanics` returns an iterator, not
+  an array; no `rows.length` or `winnerCounts(rows)` remains; the artifact sha256 equals the golden.
+- [ ] **Step 2: Run and confirm failure.**
+- [ ] **Step 3: Implement** — `function*` yielding ascending rows; `writeArtifact` folds
+  `statsAccumulator()` (bySource, byTier, aggregates, and T4.1's `field_readiness_coverage`) into its
+  existing write loop with a `recordCount` counter.
 - [ ] **Step 4: Run; commit**
 
 ```bash
@@ -1414,318 +1448,274 @@ git add coa_scraper/scripts/build-mechanics-artifacts.mjs coa_scraper/tests/mech
 git commit -m "perf(e0r2): T5.2 — mechanics rows are generated and counted incrementally"
 ```
 
-### Task 5.3: The RSS test runs through the real canonical build
+### Task 5.3: A bounded-retention RSS gate through the real canonical build
 
 **Files:**
 - Create: `coa_scraper/tests/_canonical_build_probe.mjs`
-- Modify: `coa_scraper/tests/generation-streaming.test.mjs` (or wherever T4.2's RSS test lives)
+- Modify: `coa_scraper/tests/generation-streaming.test.mjs`
 
-- [ ] **Step 1: Write the failing test**
+**Correction carried from review round 2:** the growth is not literally sub-linear — the retained id set
+grows with projection size. The property under test is **bounded row retention**: RSS must not grow in
+proportion to the *projection row count*, measured as an absolute delta against a pinned threshold.
 
-```javascript
-test("canonical build peak RSS grows sub-linearly with projection size", () => {
-  const small = runProbe(10_000);
-  const large = runProbe(100_000);
-  assert.ok(large.peak_rss_mb - small.peak_rss_mb < 150,
-    `RSS delta ${large.peak_rss_mb - small.peak_rss_mb} MB over a 10x projection`);
-});
-```
-
-`_canonical_build_probe.mjs` stages a synthetic generation of N projection rows, runs the **actual**
-`buildMechanicsArtifact` entry point in an isolated subprocess, and prints
-`{n, peak_rss_mb}` from `process.resourceUsage().maxRSS`. Mirror `tests/_streaming_probe.py`'s
-try/finally temp-dir cleanup — that leak produced a false "memory regression" during E0R.1 when it
-filled the tmpfs.
-
-- [ ] **Step 2: Run, confirm the delta exceeds the gate before T5.1/T5.2 (it should already pass after
-  them — if so, verify the probe is real by reverting T5.1 locally and watching it fail).**
-
+- [ ] **Step 1: Write the failing test** — run the **actual** `buildMechanicsArtifact` entry point in an
+  isolated subprocess at 10k and 100k projection rows with a fixed ~3,600-spell builder domain; assert
+  `peak_rss_mb` delta `< 150` and that the 100k peak is under a pinned absolute ceiling. Mirror
+  `tests/_streaming_probe.py`'s try/finally temp-dir cleanup — that leak produced a false "memory
+  regression" during E0R.1 when it filled the tmpfs.
+- [ ] **Step 2: Verify the probe is real** by stashing T5.1 locally and watching it fail.
 - [ ] **Step 3: Commit**
 
 ```bash
 git add coa_scraper/tests/_canonical_build_probe.mjs coa_scraper/tests/generation-streaming.test.mjs
-git commit -m "test(e0r2): T5.3 — the RSS gate runs through the real canonical build"
+git commit -m "test(e0r2): T5.3 — bounded-retention RSS gate through the real canonical build"
 ```
 
 ---
 
 # Workstream 6 — real E1 headroom (blocker 6)
 
-**Blocker:** the real generation is 523,026,495 of 536,870,912 bytes — **97.42%**, leaving 13.2 MiB.
-The design's exit condition is "Re-run the real client with substantial E1 headroom."
+**Blocker:** the real generation is 523,026,495 of 536,870,912 bytes — **97.42%**, leaving 13.2 MiB
+against a design exit condition of "substantial E1 headroom."
 
-**Measured attribution** (20,000-row sample of the full child, extrapolated to 208,447; per-field
-constancy verified over 50,000 rows):
+**Measured attribution** (20,000-row sample, extrapolated to 208,447; per-field constancy verified over
+50,000 rows; cell-shape distribution verified over all 208,447):
 
 | component | share | extrapolated | nature |
 |---|---|---|---|
-| `policy_ref` | 23.6% | 88.6 MB | **constant per field** (1 distinct value per field over 50k rows) |
-| `decoded_reason` | 14.8% | 55.4 MB | closed vocabulary — 3 values observed |
-| `state` | 9.7% | 36.3 MB | closed vocabulary — 2 values observed |
+| `policy_ref` | 23.6% | 88.6 MB | **constant per field** (1 distinct value per field) |
+| `decoded_reason` | 14.8% | 55.4 MB | closed vocabulary (T0.1) |
+| `state` | 9.7% | 36.3 MB | closed vocabulary (T0.1) |
 | `resolved` | 6.0% | 22.4 MB | descriptions; only 35% dedupable |
 | `join_name` | 5.9% | 22.3 MB | **constant per field** |
 | icons child | — | 66.1 MB | 14,022 unique paths across 179,774 resolved rows |
 
-The review proposed a description/string dictionary as the strongest opportunity. The measurement says
-otherwise: descriptions are mostly unique and dedup to ~8 MB. The dominant redundancy is per-cell
-**constant metadata** (111 MB) and **low-cardinality enums** (92 MB). Hoisting and interning those,
-plus normalizing icons, projects **~298 MB (55% of ceiling)** without touching descriptions — so
-description dedup is left undone as YAGNI and recorded here with its measured value.
+The review's first round proposed a description/string dictionary as the strongest opportunity. The
+measurement says otherwise: descriptions are mostly unique and dedup to ~8 MB. The dominant redundancy
+is per-cell **constant metadata** (111 MB) and **low-cardinality enums** (92 MB). Hoisting, interning,
+and normalizing icons projects **~298 MB (55% of ceiling)** without touching descriptions.
 
-**Invariant preserved:** `expand_compact` is exactly the bridge between compact `raw` and rich
-`field_observations`, so rehydration keeps
-`expand_compact(full.raw) == projection.field_observations` literally true and the projection child
-unchanged at `coa-client-spell-projection-v3`.
+**Sequencing so every commit stays green:** T6.1 *expands* (add descriptors, both encodings supported),
+T6.2 and T6.3 *migrate and contract atomically* (producer + both validators + contract + golden corpus
+in one commit each).
 
-### Task 6.1: Hoist the per-field constants into a field-descriptor child
+### Task 6.1: Kind-aware field descriptors (expand)
 
 **Files:**
-- Create: producer for `coa_client_spell_fields.json` in `coa_client_extract/spell_record.py`
-- Modify: `coa_client_extract/spell_record.py` (`_compact`, `_expand_compact`),
-  `coa_client_extract/cli.py` (stage the new child), `coa_client_extract/publish.py`
-  (`_expand_full_raw` and `_cross_child` must load the descriptor child and thread it into
-  `_expand_cell` — the signature grows a third argument),
-  `coa_scraper/scripts/lib/mechanics-projection.mjs` (`expandCompact`)
-- Test: `tests/test_e0r2_field_hoist.py`, `coa_scraper/tests/expand-compact.test.mjs`
+- Create: descriptor producer in `coa_client_extract/spell_record.py`
+- Modify: `coa_client_extract/spell_record.py`, `coa_client_extract/publish.py`,
+  `coa_scraper/scripts/lib/mechanics-projection.mjs`, `coa_scraper/scripts/lib/generation.mjs`
+- Test: `tests/test_e0r2_field_descriptors.py`, `coa_scraper/tests/descriptors.test.mjs`
 
-**Design:** `coa_client_spell_fields.json` is
-`{"schema_version": "coa-client-spell-fields-v1", "fields": {"<raw key>": {"policy_ref": "...",
-"join_name": "..."}}}`. Compact cells drop both keys; `expand_compact(cell, policy, fields)` puts them
-back. Bump the full child to `coa-client-spell-v4`.
+**Correction carried from review round 2:** a single `policy_ref` per field **cannot** reconstruct a
+resolved join. `_compact_join` emits `components.{index,side_id,side_value}`, each with its own
+`policy_ref` (via `policy_ref_component`). Descriptors must be kind-aware:
 
-- [ ] **Step 1: Write the failing test**
-
-```python
-# tests/test_e0r2_field_hoist.py
-"""E0R.2 T6.1: policy_ref and join_name are CONSTANT per field (verified: 1 distinct value per field
-over 50,000 real rows) yet were re-serialized on every cell of every row — 111 MB of the 523 MB
-generation. Hoist them once; expand_compact puts them back, so the cross-child equality is untouched."""
-from coa_client_extract.spell_record import _compact, _expand_compact, build_field_descriptors
-
-
-def test_compact_cells_carry_no_per_field_constants():
-    cell = _compact("cast_time_ms", _sample_observation())
-    assert "policy_ref" not in cell
-    assert "join_name" not in cell
-
-
-def test_expansion_restores_them_exactly():
-    fields = build_field_descriptors(_policy())
-    observation = _sample_observation()
-    assert _expand_compact(_compact("cast_time_ms", observation), _policy(), fields) == observation
-
-
-def test_the_descriptor_child_covers_every_raw_field():
-    fields = build_field_descriptors(_policy())
-    assert set(fields["fields"]) == set(_expected_raw_fields())
-    assert fields["schema_version"] == "coa-client-spell-fields-v1"
+```json
+{
+  "schema_version": "coa-client-spell-fields-v1",
+  "fields": {
+    "school_mask": {"kind": "scalar", "policy_ref": "/tables/Spell/fields/school_mask"},
+    "cast_time_ms": {
+      "kind": "join",
+      "join_name": "cast_time_ms",
+      "index_policy_ref": "/tables/Spell/fields/casting_time_index",
+      "components": {
+        "index":      {"policy_ref": "/tables/Spell/fields/casting_time_index"},
+        "side_id":    {"policy_ref": "/tables/SpellCastTimes/fields/id"},
+        "side_value": {"policy_ref": "/tables/SpellCastTimes/fields/base_ms"}
+      }
+    }
+  }
+}
 ```
 
+`index_policy_ref` serves the *absent-join* form (null index cell), `components` the *resolved* form.
+**Both validators must independently derive the expected descriptor from the policy and reject a staged
+descriptor that differs** — otherwise a tampered descriptor could redefine meanings while keeping
+compact→rich expansion internally self-consistent.
+
+> Today every cell in all 208,447 rows is `scalar` or `join-absent`, so the resolved-join path is
+> unexercised by real data — but it is reachable the moment a join is adopted, which is exactly what E1
+> does. The golden corpus must therefore include a resolved-join row.
+
+- [ ] **Step 1: Write the failing test** — descriptors round-trip all three cell shapes (scalar,
+  absent join, resolved join with three component refs); the derived descriptor equals the policy-derived
+  expectation in **both** languages; a staged descriptor that differs from the policy-derived one is
+  rejected; the golden corpus gains a resolved-join row.
 - [ ] **Step 2: Run and confirm failure.**
-- [ ] **Step 3: Implement `build_field_descriptors`, drop the two keys in `_compact`, restore them in
-  `_expand_compact`, stage the child in `regenerate`, bump the full child schema to
-  `coa-client-spell-v4`.**
-- [ ] **Step 4: Mirror `expandCompact` in `mechanics-projection.mjs` (it takes the descriptor doc
-  alongside the policy doc) and update `crossChild`'s expansion call in `generation.mjs`.**
-- [ ] **Step 5: Migrate `tests/golden/e0r1_corpus/` to v4 — the golden corpus is the shared source of
-  row shape for both languages, so it changes exactly once here.**
-- [ ] **Step 6: Run both suites; commit**
-
-```bash
-git add coa_client_extract/spell_record.py coa_client_extract/cli.py \
-        coa_scraper/scripts/lib/mechanics-projection.mjs coa_scraper/scripts/lib/generation.mjs \
-        tests/golden/e0r1_corpus tests/test_e0r2_field_hoist.py coa_scraper/tests/expand-compact.test.mjs
-git commit -m "perf(e0r2): T6.1 — hoist per-field constants out of every cell (-111 MB)"
-```
-
-### Task 6.2: Intern the closed-vocabulary enums
-
-**Files:** same as T6.1, plus the `vocabularies` block in `coa_client_spell_fields.json`.
-
-**Design:** the descriptor child gains
-`"vocabularies": {"state": ["present", "unresolved"], "decoded_reason": ["decoded", "not_present",
-"proof_withheld", ...]}` — the **full closed vocabulary from the policy/contract, not the observed
-subset**, so a value that appears for the first time in a later run still has a code. Compact cells
-carry `s` and `d` integer indices. An out-of-range index fails closed on expansion.
-
-- [ ] **Step 1: Write the failing test** — round-trip equality per vocabulary member; an out-of-range
-  index raises; the vocabulary is the closed set, not the observed set.
-- [ ] **Step 2: Run and confirm failure.**
-- [ ] **Step 3: Implement in `_compact`/`_expand_compact` and `expandCompact`.**
+- [ ] **Step 3: Implement `build_field_descriptors(policy)` + `derive_expected_descriptors(policy)` in
+  both languages. `_expand_compact` and `expandCompact` gain a descriptors argument.** Both encodings
+  (with and without inline `policy_ref`) are accepted at this step — that is what keeps the tree green.
 - [ ] **Step 4: Run both suites; commit**
 
 ```bash
-git commit -m "perf(e0r2): T6.2 — intern state/decoded_reason as vocabulary indices (-77 MB)"
+git add coa_client_extract/spell_record.py coa_client_extract/publish.py \
+        coa_scraper/scripts/lib/mechanics-projection.mjs coa_scraper/scripts/lib/generation.mjs \
+        tests/golden/e0r1_corpus tests/test_e0r2_field_descriptors.py \
+        coa_scraper/tests/descriptors.test.mjs
+git commit -m "feat(e0r2): T6.1 — kind-aware field descriptors derived and cross-checked from the policy"
 ```
 
-### Task 6.3: Normalize the icon catalog
+### Task 6.2: v4 spell rows — hoist and intern (migrate + contract, atomic)
 
-**Files:**
-- Modify: `coa_client_extract/spell_icons.py` (`iter_icon_catalog`, `icon_coverage`),
-  `coa_client_extract/cli.py` (stage `coa_client_icon_assets.jsonl`),
-  `coa_client_extract/publish.py` (`_verify_icon_row`, `_cross_child` asset-ref check),
-  `coa_scraper/scripts/lib/generation.mjs`, and the icon consumer in `coa_meta/`
-- Test: `tests/test_e0r2_icon_normalization.py`
+**Files:** producer, both validators, `generation_contract.json`, golden corpus — **one commit**.
 
-**Design:** `coa_client_icon_assets.jsonl` holds one row per unique client path
-(`{asset_id, client_path, source_asset_sha256, source_archive, schema_version}`); the per-spell child
-becomes `{spell_id, spell_icon_id, asset_ref, asset_status, readiness, schema_version}` at
-`coa-client-spell-icons-v2`. `asset_ref` is null exactly when `asset_status` is `placeholder`. The
-cross-child check gains: every non-null `asset_ref` resolves to an asset row, and every asset row is
-referenced at least once (no orphans).
+**Design:** compact cells drop `policy_ref`/`join_name` (restored from descriptors) and carry `s`/`d`
+integer codes from T0.1's **schema-owned** `OBSERVATION_STATE_CODES`/`DECODED_REASON_CODES` — never
+from the staged descriptor. An out-of-range code fails closed. Full child → `coa-client-spell-v4`;
+contract updated in the same commit; the projection stays `coa-client-spell-projection-v3` because
+`expand_compact` absorbs the change, keeping
+`expand_compact(full.raw) == projection.field_observations` literally true.
+
+- [ ] **Step 1: Write the failing test** — round-trip equality per vocabulary member and per cell shape;
+  an out-of-range code raises; codes come from `contracts.py` and **not** from the staged descriptor
+  (mutate the staged copy's vocabulary and assert the expansion is unaffected or rejected); the
+  cross-child equality still holds in both languages; measured bytes for the golden corpus drop.
+- [ ] **Step 2: Run and confirm failure.**
+- [ ] **Step 3: Implement in `_compact`/`_compact_join`/`_expand_compact` and `expandCompact`; bump the
+  contract's `coa_client_spell.jsonl` entry to v4; migrate the golden corpus; drop the dual-encoding
+  support added in T6.1.**
+- [ ] **Step 4: Run both suites; commit**
+
+```bash
+git commit -m "perf(e0r2): T6.2 — v4 spell rows: hoist per-field constants, intern vocabularies (-188 MB)"
+```
+
+### Task 6.3: Icon v2 — normalized assets (migrate + contract, atomic)
+
+**Files:** `coa_client_extract/spell_icons.py`, `cli.py`, `publish.py`, `generation.mjs`, the `coa_meta`
+icon consumer, `generation_contract.json`, golden corpus — **one commit**.
+
+**Correction carried from review round 2 — the previous model was internally ambiguous.** It said
+`asset_ref` is null only for `placeholder` while requiring every asset row to carry
+`source_asset_sha256` and `source_archive`; a `missing` asset (proven path, absent member) has neither.
+Explicit model:
+
+- **Asset row** = one normalized client path.
+  `{asset_id, client_path, availability: "source_only" | "missing", source_asset_sha256, source_archive, schema_version}`
+  Hash and archive are non-null **iff** `availability == "source_only"`, null **iff** `"missing"`.
+- **Spell row** = `{spell_id, spell_icon_id, asset_ref, readiness, schema_version}`.
+  `asset_ref` is null **iff** the join is unresolved (the old `placeholder`); `readiness` is
+  `"available"` iff `asset_ref` resolves to a `source_only` asset, `"unavailable"` otherwise — and the
+  cross-child check enforces that derivation rather than trusting the stored value.
+- **`asset_id` is deterministic**: `sha256(canonical_path)[:16]` where `canonical_path` is the
+  client path lowercased with backslashes normalized to forward slashes. Encounter-order numbering
+  would make byte-identical inputs produce different generations.
 
 - [ ] **Step 1: Write the failing test** — a dangling `asset_ref` is rejected; an orphan asset row is
-  rejected; a `placeholder` row with a non-null `asset_ref` is rejected; `icon_coverage` still reports
-  the same `resolved_paths`/`unique_paths` totals as the v1 catalog for the same input.
+  rejected; a null `asset_ref` with `readiness: "available"` is rejected; a `missing` asset carrying a
+  hash is rejected; a `source_only` asset without a hash is rejected; `asset_id` is stable across two
+  runs with shuffled input order; `icon_coverage` reports the same `resolved_paths`/`unique_paths`
+  totals as the v1 catalog for identical input.
 - [ ] **Step 2: Run and confirm failure.**
-- [ ] **Step 3: Implement, keeping the asset table streamed (accumulate `path -> asset_id` during the
-  single catalog pass; the map is 14,022 entries, counter-scale).**
-- [ ] **Step 4: Update the `coa_meta` icon consumer to resolve through the asset table.**
-- [ ] **Step 5: Run both suites; commit**
+- [ ] **Step 3: Implement**, accumulating `canonical_path -> asset_id` during the single existing
+  catalog pass (14,022 entries — counter-scale), updating both validators, the contract, the golden
+  corpus, and the `coa_meta` consumer to resolve through the asset table.
+- [ ] **Step 4: Run both suites; commit**
 
 ```bash
-git commit -m "perf(e0r2): T6.3 — normalize the icon catalog to unique assets + refs (-37 MB)"
-```
-
-### Task 6.4: Assert the headroom on a real measurement
-
-**Files:**
-- Modify: `coa_client_extract/data/spell_layout_v2.json` (`budget`), `coa_scraper/config/spell_layout.lock.json`
-- Test: `tests/test_e0r2_headroom.py`
-
-- [ ] **Step 1: Write the test**
-
-```python
-# tests/test_e0r2_headroom.py
-"""E0R.2 T6.4: E0R's exit condition is 'substantial E1 headroom'. 97.42% of ceiling is not headroom,
-and raising the ceiling is not reducing the artifact. This asserts against the COMMITTED acceptance
-record, so it fails if a future generation regresses."""
-import json
-from pathlib import Path
-
-RECORD = Path(__file__).resolve().parents[1] / "reports/client_extract/coa_e0r_acceptance_summary.json"
-TARGET = 0.75
-
-
-def test_the_published_generation_leaves_e1_headroom():
-    record = json.loads(RECORD.read_text(encoding="utf-8"))
-    budget = record["budget"]
-    used = budget["whole_generation_bytes"] / budget["ceilings"]["max_whole_generation_bytes"]
-    assert used <= TARGET, f"generation uses {used:.1%} of ceiling; E1 needs room below {TARGET:.0%}"
-```
-
-- [ ] **Step 2: This test stays RED until T8.1 produces the new record. That is intentional — it is the
-  gate on the re-run, not on the refactor.** Note it in the tracker so a red run is not mistaken for a
-  regression.
-- [ ] **Step 3: Commit the test now; it turns green in WS8.**
-
-```bash
-git add tests/test_e0r2_headroom.py
-git commit -m "test(e0r2): T6.4 — assert E1 headroom against the committed acceptance record"
+git commit -m "perf(e0r2): T6.3 — icon v2: deterministic normalized assets plus refs (-37 MB)"
 ```
 
 ---
 
 # Workstream 7 — CI, hygiene, documentation
 
-### Task 7.1: CI runs the specified suite; tracked reports carry no machine-local paths
+### Task 7.1: CI runs `npm test`; path hygiene over tracked text
 
 **Files:**
-- Modify: `.github/workflows/ci.yml:46-47`
+- Modify: `.github/workflows/ci.yml:46-47`, the artifact producers
 - Create: `tests/test_e0r2_path_hygiene.py`
 
 **Context:** CI runs `npm --prefix coa_scraper run unit-test`, but `npm test` is
 `unit-test && validate` — so `validate-normalized.mjs` has never been a merge gate. Eight tracked files
-contain `/home/archbug/...`.
+contain a machine-local home path, **including this plan's earlier draft**.
+
+**Correction carried from review round 2:** do **not** hash the absolute client-root path — that makes
+otherwise identical runs machine-dependent. Omit it, or record a symbolic label; archive names and
+content hashes carry the actual identity.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_e0r2_path_hygiene.py
 """E0R.2 T7.1: a tracked artifact is a published artifact. Machine-local absolute paths leak the
-author's filesystem layout into the repository and make records non-reproducible across machines."""
+author's filesystem layout and make records non-reproducible across machines."""
 import re
 import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 HOME_PATH = re.compile(r"/home/[a-z][a-z0-9_-]*/")
+TEXT_SUFFIXES = {".json", ".jsonl", ".md", ".py", ".mjs", ".js", ".yml", ".yaml", ".toml", ".txt"}
 
 
-def _tracked(pattern):
-    out = subprocess.check_output(["git", "ls-files", pattern], cwd=REPO, text=True)
-    return [REPO / line for line in out.splitlines() if line]
+def _tracked_text():
+    out = subprocess.check_output(["git", "ls-files"], cwd=REPO, text=True)
+    return [REPO / line for line in out.splitlines()
+            if line and Path(line).suffix in TEXT_SUFFIXES]
 
 
-def test_no_tracked_report_carries_a_machine_local_path():
+def test_no_tracked_text_artifact_carries_a_machine_local_path():
     offenders = []
-    for path in _tracked("reports/"):
-        if HOME_PATH.search(path.read_text(encoding="utf-8", errors="replace")):
+    for path in _tracked_text():
+        if path.name == "test_e0r2_path_hygiene.py":
+            continue                                   # this file names the pattern it forbids
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if HOME_PATH.search(text):
             offenders.append(str(path.relative_to(REPO)))
-    assert offenders == [], f"machine-local paths in tracked reports: {offenders}"
+    assert offenders == [], f"machine-local paths in tracked text: {offenders}"
 
 
 def test_ci_runs_the_full_node_suite():
     ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "npm --prefix coa_scraper test" in ci
-    assert "run unit-test" not in ci      # unit-test alone skips the validator
+    assert "run unit-test" not in ci          # unit-test alone skips the validator
 ```
 
 - [ ] **Step 2: Run and confirm both fail.**
-
-- [ ] **Step 3: Fix CI, then make the producers emit repo-relative paths**
-
-- `ci.yml`: `run: npm --prefix coa_scraper test`.
-- The acceptance record, recon report, and generation manifests record paths relative to the repo root
-  (`client_root`, `recon_report_path`, `effective_archive`, `patch_chain`). The client root lives
-  *outside* the repo, so record it as its **basename plus a sha256 of the full path** — the identity is
-  what matters for attribution, the absolute path is not. Add a small helper:
-
-```python
-def portable_path(path: Path, *, repo_root: Path) -> str:
-    """A tracked artifact must not embed the author's filesystem. Inside the repo: a relative path.
-    Outside it (the client install): the basename, which is the part that identifies the archive."""
-    path = Path(path)
-    try:
-        return str(path.resolve().relative_to(repo_root.resolve()))
-    except ValueError:
-        return path.name
-```
-
-- Regenerate the tracked reports in WS8; do not hand-edit them.
-
+- [ ] **Step 3: Fix CI; make producers emit repo-relative paths for in-repo files and a **symbolic
+  label** (not a hash) for the out-of-tree client root; rewrite every doc to use `$COA_CLIENT_ROOT`.**
+  Regenerate the tracked reports in WS8 rather than hand-editing them.
 - [ ] **Step 4: Run; commit**
 
 ```bash
 git add .github/workflows/ci.yml coa_client_extract/artifacts.py coa_client_extract/cli.py \
-        tests/test_e0r2_path_hygiene.py
-git commit -m "fix(e0r2): T7.1 — CI runs npm test; tracked reports carry portable paths"
+        docs/ tests/test_e0r2_path_hygiene.py
+git commit -m "fix(e0r2): T7.1 — CI runs npm test; tracked text carries no machine-local paths"
 ```
 
-### Task 7.2: Documentation corrections
+### Task 7.2: Documentation and ROADMAP corrections
 
-**Files:**
-- Modify: `docs/ROADMAP.md` (lines 125, 131, 170, 183, 205, 212, 223, 289, 291),
-  `docs/data/mechanics-schema.md` (lines 7, 22, 38, 175),
-  `docs/superpowers/plans/2026-07-20-m1-14-e0r1-enforce-contract.md` (the T6.2 checkbox at line 188)
+**Files:** `docs/ROADMAP.md`, `docs/data/mechanics-schema.md`,
+`docs/superpowers/plans/2026-07-20-m1-14-e0r1-enforce-contract.md`
 
-- [ ] **Step 1: `docs/ROADMAP.md`** — the M1.8/M1.10B/M1.11D milestone entries are history and stay,
-  but each gains a one-line "superseded by M1.14E0R.1 (AscensionDB runtime deleted)" note. The
-  *forward-looking* claims (line 170 "should link to its `db.ascension.gg` spell page", line 205 the
-  disclaimer, line 212 "Extend AscensionDB scraping") are no longer true and are rewritten to the
-  client-native reality.
-- [ ] **Step 2: `docs/data/mechanics-schema.md`** — line 7 ("many fields are inferred from AscensionDB
-  tooltips") and line 22 (`source_urls`) describe a retired schema; correct them to the three-tier
-  client/Builder/inferred model already documented at line 270. Line 38's audit trio is likewise gone.
+- [ ] **Step 1: `docs/ROADMAP.md`** — M1.8/M1.10B/M1.11D entries are history and stay, each gaining a
+  "superseded by M1.14E0R.1 (AscensionDB runtime deleted)" note. The forward-looking claims (line 170
+  `db.ascension.gg` hotlinks, line 205 disclaimer, line 212 "extend AscensionDB scraping") are rewritten
+  to the client-native reality.
+- [ ] **Step 2: `docs/data/mechanics-schema.md`** — lines 7, 22, 38, 175 describe the retired
+  DB-sourced schema; correct them to the three-tier model already documented at line 270.
 - [ ] **Step 3: E0R.1 tracker line 188** — the T6.2 checkbox claims the record "records
-  icon/readiness/source coverage counts"; readiness and source had no producer. Correct the line to
-  what shipped and point at E0R.2 T4.1.
-- [ ] **Step 4: Commit**
+  icon/readiness/source coverage counts"; readiness and source had no producer. Correct it and point at
+  E0R.2 T4.1.
+- [ ] **Step 4: Add the two deferred guide-product items as explicit ROADMAP entries** (the out-of-scope
+  section says they belong there, so they must actually land there):
+  - *M1.16 — label heuristic build rankings as candidates/hypotheses.* `MetaReportRunner` ranks with
+    `TheoryScorer` and the guide shows "top theorycraft" language; until client mechanics,
+    interpretation, logs, and expert review converge, these are not recommendations.
+  - *M1.16 — report renderable icon coverage separately from source coverage.* Acceptance reports
+    179,749 **source** BLPs; the guide renders only converted assets, so renderable coverage is
+    currently zero. Report source / renderable / CoA-domain / Builder-domain separately, resolve the
+    catalog through the published generation, and cache by `spell_id` or asset reference rather than
+    label.
+- [ ] **Step 5: Commit**
 
 ```bash
 git add docs/ROADMAP.md docs/data/mechanics-schema.md \
         docs/superpowers/plans/2026-07-20-m1-14-e0r1-enforce-contract.md
-git commit -m "docs(e0r2): T7.2 — correct stale AscensionDB claims and the T6.2 coverage checkbox"
+git commit -m "docs(e0r2): T7.2 — correct stale AscensionDB claims; schedule the guide-honesty items"
 ```
 
 ---
@@ -1734,36 +1724,29 @@ git commit -m "docs(e0r2): T7.2 — correct stale AscensionDB claims and the T6.
 
 ### Task 8.1: Re-run recon, regenerate, canonical build, acceptance
 
-**Files:** `reports/client_extract/` (regenerated artifacts), tracker
-
-- [ ] **Step 1: Full local suite, both languages**
+- [ ] **Step 1: Full local suite, both languages, then the exact CI command in a clean environment**
 
 ```bash
-cd /home/archbug/projects/coacodex && python -m pytest -q && npm --prefix coa_scraper test
+python -m pytest -q && npm --prefix coa_scraper test
+python -m venv /tmp/e0r2-clean && /tmp/e0r2-clean/bin/pip install -q -e . pytest
+/tmp/e0r2-clean/bin/pytest -q      # from the repo root; BARE pytest, exactly as CI runs it
 ```
 
-Then reproduce CI's packaging conditions — E0R.1 T6.1 found a defect that only bare `pytest` exposes:
+- [ ] **Step 2: Recon**
 
 ```bash
-python -P -m pytest -q
-```
-
-- [ ] **Step 2: Recon against the real client**
-
-```bash
-export COA_CLIENT_ROOT="/home/archbug/Games/ascension-wow/drive_c/Program Files/Ascension Launcher/resources/ascension-live/Data"
+export COA_CLIENT_ROOT="<the Ascension Data directory>"
 python -m coa_client_extract mechanics-recon --client-root "$COA_CLIENT_ROOT" --out reports/client_extract
 ```
 
-Expect exit 0 (`verified`). **Exit 4 (`review_required`) is a legitimate outcome now that T3.1/T3.2
-scan live** — if a numeric join collapsed to one candidate, stop and adjudicate; do not re-bind
-mechanically to make the hold pass. If the *capture identity* drifted again (a client patch), follow the
-E0R.1 precedent (`d549ac9`): advance only the per-table sha256/header + policy sha256 + Node lock, with
-a script asserting the semantic policy view is byte-identical.
+Expect exit 0. **Exit 4 (`review_required`) is now a legitimate outcome** — T3.2 compares against a
+hash-bound baseline, so a changed candidate set or drifted metrics stops the run. Adjudicate; do not
+re-bind mechanically to make the hold pass. If only the *capture identity* drifted (a client patch),
+follow the E0R.1 precedent (`d549ac9`): advance only the per-table sha256/header + policy sha256 + Node
+lock, with a script asserting the semantic policy view is byte-identical.
 
-- [ ] **Step 3: Regenerate** (~11 min at the previous scale; run in the background and monitor by pid,
-  not by `pgrep -f` — the E0R.1 run matched its own shell command line and reported a false "still
-  running")
+- [ ] **Step 3: Regenerate** (~11 min at the previous scale; background it and monitor by captured pid —
+  `pgrep -f` matched its own shell command line during E0R.1 and reported a false "still running")
 
 ```bash
 python -m coa_client_extract regenerate --client-root "$COA_CLIENT_ROOT" \
@@ -1778,28 +1761,47 @@ python -m coa_client_extract acceptance-summary --dist reports/client_extract \
   --out reports/client_extract/coa_e0r_acceptance_summary.json
 ```
 
-- [ ] **Step 5: Verify the headroom gate is now green**
+- [ ] **Step 5: Read the measured whole-generation bytes out of the record** and confirm ≤75% of
+  `max_whole_generation_bytes`. If over, reduce the remaining redundancy — **do not raise the ceiling.**
 
-```bash
-python -m pytest tests/test_e0r2_headroom.py -q
+### Task 8.2: The headroom gate lands with the record
+
+**Files:** `tests/test_e0r2_headroom.py`, `reports/client_extract/*` — **one commit**
+
+Committing the assertion earlier would leave a knowingly-red test in history, which the global
+constraints forbid. It lands together with the artifact that satisfies it.
+
+```python
+# tests/test_e0r2_headroom.py
+"""E0R.2 T8.2: E0R's exit condition is 'substantial E1 headroom'. 97.42% of ceiling is not headroom,
+and raising the ceiling is not reducing the artifact."""
+import json
+from pathlib import Path
+
+RECORD = Path(__file__).resolve().parents[1] / "reports/client_extract/coa_e0r_acceptance_summary.json"
+TARGET = 0.75
+
+
+def test_the_published_generation_leaves_e1_headroom():
+    budget = json.loads(RECORD.read_text(encoding="utf-8"))["budget"]
+    used = budget["whole_generation_bytes"] / budget["ceilings"]["max_whole_generation_bytes"]
+    assert used <= TARGET, f"generation uses {used:.1%} of ceiling; E1 needs room below {TARGET:.0%}"
 ```
 
-Expected: PASS, with the record showing ≤75% of `max_whole_generation_bytes`. If it is over, the
-remaining redundancy must be reduced — **do not raise the ceiling**.
-
-- [ ] **Step 6: Commit the record and the regenerated reports**
+- [ ] **Step 1: Run the full suite one final time (must be entirely green).**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add reports/client_extract/coa_e0r_acceptance_summary.json \
+git add tests/test_e0r2_headroom.py reports/client_extract/coa_e0r_acceptance_summary.json \
         reports/client_extract/coa_spell_mechanics_recon.json
-git commit -m "feat(e0r2): T8.1 — real-client acceptance record (bound, executed, verified)"
+git commit -m "feat(e0r2): T8.2 — real-client acceptance record and the E1 headroom gate"
 ```
 
-### Task 8.2: Push, update the PR, require green CI
+### Task 8.3: Push, update the PR, require green CI
 
 - [ ] **Step 1: Push** `m1-14-e0r` (including the tracker-docs commit `02e0b7c` held back in E0R.1).
-- [ ] **Step 2: Update PR #1's body** with an E0R.2 section: the seven blockers, the reproduction that
-  is now red, and the measured size reduction.
+- [ ] **Step 2: Update PR #1's body** with an E0R.2 section: the seven blockers, the reproductions that
+  are now red, and the measured size reduction.
 - [ ] **Step 3: Wait for CI green on both the push and the pull_request runs.**
 - [ ] **Step 4: Report to the user. Do NOT merge; do NOT start E1.**
 
@@ -1807,18 +1809,14 @@ git commit -m "feat(e0r2): T8.1 — real-client acceptance record (bound, execut
 
 ## Out of scope, recorded deliberately
 
-- **Description string dictionary.** Measured at ~8 MB of savings (descriptions are 22.4 MB inline and
-  only 35% dedupable). Not worth a string-table child while the other three measures reach 55% of
-  ceiling. Revisit if E1's artifacts push past 70%.
-- **Recon generation-size forecast.** Recon has no basis for one (T3.3); publication measures the real
-  thing exactly.
-- **Actually adjudicating the three numeric joins.** The review's own longer-term item: "obtain
-  controlled local-client/API anchors and actually adjudicate these joins." T3.1/T3.2 make the standing
-  ambiguity *honest and drift-detecting*; they do not resolve it. Resolution needs admissible
-  independent evidence that does not exist today under the anchor-evidence precedence — a controlled
-  local client where a known spell's cast time can be read back, or a Builder payload field that
-  explicitly encodes it. Neither is available, so the joins stay `raw_only` with null cells. This is the
-  E1 blocker to schedule next, not an E0R.2 task.
-- **The two guide-product findings** — heuristic build rankings presented as recommendations, and
-  renderable (vs source) icon coverage. The review states both need not block E0R while the guide is
-  unpublished/experimental. They are M1.16 product scope and belong in the ROADMAP, not this plan.
+- **Description string dictionary.** Measured at ~8 MB of savings (22.4 MB inline, only 35% dedupable).
+  Not worth a string-table child while the other three measures reach 55% of ceiling. Revisit if E1's
+  artifacts push past 70%.
+- **Recon generation-size forecast.** Recon has no basis for one (T3.3); publication measures exactly.
+- **Actually adjudicating the three numeric joins.** T3.1/T3.2 make the standing ambiguity honest and
+  drift-detecting; they do not resolve it. Resolution needs admissible independent evidence that does
+  not exist today under the anchor-evidence precedence — a controlled local client where a known
+  spell's cast time can be read back, or a Builder field that explicitly encodes it. This is the E1
+  blocker to schedule next.
+- **The two guide-product findings.** Not blockers while the guide is unpublished/experimental, but
+  T7.2 lands them as explicit ROADMAP items rather than leaving them in a plan appendix.
