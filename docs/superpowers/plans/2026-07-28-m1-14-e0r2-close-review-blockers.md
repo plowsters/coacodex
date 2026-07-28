@@ -71,8 +71,9 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | Task | Status | Commit |
 |---|---|---|
 | T0.1 Observation vocabularies: shared wire schema, constructor-enforced | pending | |
-| T1.1 Immutable contract **registry** + self-validating loader | pending | |
-| T1.2 Contract staged, identified by revision+sha256, trust-covered | pending | |
+| T0.2 Bind every source domain the contract cites (DBC + Content JSON) | pending | |
+| T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | pending | |
+| T1.2 Reject a tampered, mismatched, or unsupported contract | pending | |
 | T1.3 Node dispatches on the supported-contract hash set | pending | |
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | pending | |
 | T2.2 Per-child shape validation (both languages) | pending | |
@@ -89,9 +90,10 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T5.2 Generator mechanics rows + incremental statistics | pending | |
 | T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
 | T6.1 Kind-aware field descriptors (expand) | pending | |
-| T6.2 v4 spell rows: hoist + intern (migrate + contract, atomic) | pending | |
-| T6.3 Icon v2: normalized assets (migrate + contract, atomic) | pending | |
-| T7.1 CI runs `npm test`; path hygiene over tracked text | pending | |
+| T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | pending | |
+| T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | pending | |
+| T6.4 Cross-revision compatibility matrix | pending | |
+| T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | pending | |
 | T7.2 Documentation + ROADMAP corrections | pending | |
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
 | T8.2 Headroom gate committed with the record | pending | |
@@ -143,7 +145,8 @@ import pytest
 from coa_client_extract.contracts import (DECODED_REASONS, OBSERVATION_STATES, decoded_reason_code,
                                           observation_state_code, load_observation_wire_schema)
 from coa_client_extract.spell_proof import (ObservationError, absent_envelope, make_domain_gated_envelope,
-                                            make_envelope, make_join, make_string, make_string_join)
+                                            make_envelope, make_join, make_string_join,
+                                            make_string_observation)
 
 
 def test_the_vocabularies_are_exactly_what_the_producer_emits():
@@ -174,10 +177,14 @@ def test_every_join_constructor_outcome_is_in_the_vocabulary(resolution, expecte
 
 @pytest.mark.parametrize("factory", [
     lambda: make_envelope(1, kind="int32", proof=_proof(), evidence_ref="/x"),
+    lambda: make_envelope(1, kind="uint32", proof=_proof(), evidence_ref="/x"),
+    lambda: make_envelope(1, kind="float", proof=_proof(), evidence_ref="/x"),
     lambda: absent_envelope(proof=_proof(), evidence_ref="/x", state="unresolved"),
-    lambda: make_domain_gated_envelope(999, kind="bitmask", proof=_proof(), evidence_ref="/x",
+    # `_KINDS` is ("int32", "uint32", "float") — there is no "bitmask" kind; the mask REFINEMENT is the
+    # `refine` callback, not a kind. Passing one raises ValueError before the vocabulary is exercised.
+    lambda: make_domain_gated_envelope(999, kind="uint32", proof=_proof(), evidence_ref="/x",
                                        refine=lambda v: (v, False)),
-    lambda: make_string(0, "n", proof=_proof(), evidence_ref="/x"),
+    lambda: make_string_observation(0, "n", proof=_proof(), evidence_ref="/x"),
     lambda: make_string_join(_string_components(), resolution="resolved"),
 ])
 def test_every_observation_factory_emits_in_vocabulary_values(factory):
@@ -220,10 +227,17 @@ def test_an_unknown_code_fails_closed():
 
 - [ ] **Step 3: Author `observation_wire_schema.json`**
 
+**Correction carried from review round 4 — the wire schema is IMMUTABLE too.** An earlier draft's note
+said codes "may be appended". Appending changes the file's bytes and therefore its hash, which
+invalidates every already-published contract revision that pinned the old digest. Wire schemas live in
+the same immutable-versioned registry discipline as contracts: a new vocabulary entry means
+`coa-observation-wire-v2` as a **new file**, referenced by a **new** contract revision. Generations that
+carry coded observations stage the wire schema they used, exactly as they stage their contract.
+
 ```json
 {
   "schema_version": "coa-observation-wire-v1",
-  "note": "The closed observation vocabularies and their integer wire codes, read by BOTH languages. Order is the wire format: entries may be APPENDED but never reordered or removed without a schema_version bump. Enumerated from every Envelope/StringObservation/JoinObservation construction site — a grep over string literals conflates these with publication_state and with readiness reasons.",
+  "note": "IMMUTABLE. The closed observation vocabularies and their integer wire codes, read by BOTH languages. Never edit this file — a new vocabulary entry means a new coa-observation-wire-vN file referenced by a new contract revision, because editing changes the hash that published contracts pin. Enumerated from every Envelope/StringObservation/JoinObservation construction site; a grep over string literals conflates these with publication_state and with readiness reasons.",
   "states": {"not_applicable": 0, "present": 1, "resolved": 2, "unresolved": 3},
   "decoded_reasons": {"decoded": 0, "index_zero": 1, "non_finite": 2, "not_present": 3,
                       "proof_withheld": 4, "side_row_missing": 5, "value_out_of_domain": 6}
@@ -240,6 +254,133 @@ def test_an_unknown_code_fails_closed():
 git add coa_client_extract/data/observation_wire_schema.json coa_client_extract/contracts.py \
         coa_client_extract/spell_proof.py tests/test_e0r2_vocabularies.py
 git commit -m "feat(e0r2): T0.1 — closed observation vocabularies, shared wire codes, enforced at construction"
+```
+
+### Task 0.2: Bind every source domain the contract will cite
+
+**Files:**
+- Modify: `coa_client_extract/data/spell_layout_v2.json` (`required_tables`, `tables`, `bound.tables`,
+  new `content_sources`), `coa_client_extract/topology.py`, `coa_client_extract/content_json.py`,
+  `coa_scraper/config/spell_layout.lock.json`
+- Test: `tests/test_e0r2_source_bindings.py`
+
+**Correction carried from review round 4 — the cardinality rules cite sources that are not bound, and
+one of them is not a DBC at all.** Verified:
+
+- `topology.py:40` iterates **`policy.required_tables`** and requires `data[:4] == b"WDBC"`. The policy's
+  `required_tables` is `["Spell", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellIcon"]` and
+  `bound.tables` covers exactly those five. **The `CharacterAdvancement*` tables are not bound at all**,
+  so my earlier claim that "recon already opens them" was wrong — extending the binding is a task, not a
+  step inside T2.1.
+- `coa_client_content.jsonl` has **no DBC source whatsoever**. `content_json.read_content_records`
+  reads five JSON files from `$COA_CLIENT_ROOT/Content` (`DEFAULT_FILES`) and **silently `continue`s
+  past any that is missing**. There is no WDBC header and no `record_count`, so
+  `derived_from_source_topology` is not merely unfilled for it — it is inexpressible.
+
+This task exists so that T1.1 can author an immutable contract with **no placeholders**.
+
+**Design — two source kinds, bound differently:**
+
+*DBC sources* join the existing mechanism: add `CharacterAdvancement`, `CharacterAdvancementClassTypes`,
+`CharacterAdvancementTabTypes`, `CharacterAdvancementEssence` and `SkillLineAbility` to
+`required_tables` with their field policies, so `capture_topology` binds their sha256 + 5-field header
+and `topology_matches_bound` covers them.
+
+*The Content JSON source* gets its own rule, `declared_content_derivation`, backed by a new policy block:
+
+```json
+"content_sources": {
+  "directory": "Content",
+  "required_files": {
+    "SpellRankData.json": {"kind": "spell_rank", "sha256": "<captured>", "source_entries": 0},
+    "SpellToStatSuggestionData.json": {"kind": "spell_stat_suggestion", "sha256": "<captured>", "source_entries": 0},
+    "SpellToRoleSuggestionData.json": {"kind": "spell_role_suggestion", "sha256": "<captured>", "source_entries": 0},
+    "ItemVariationData.json": {"kind": "item_variation", "sha256": "<captured>", "source_entries": 0},
+    "CharacterAdvancementData.json": {"kind": "character_advancement", "sha256": "<captured>", "source_entries": 0}
+  }
+}
+```
+
+and the validator requires, per file: present (a missing required file is **blocking**, not a silent
+skip), sha256 matches, parsed entry count matches `source_entries`, and across all files
+`sum(kept) + sum(rejected) == sum(source_entries)` with `sum(kept) == child records`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_e0r2_source_bindings.py
+"""E0R.2 T0.2: every source a cardinality rule cites must be BOUND before the contract can cite it.
+Two gaps: the CharacterAdvancement* DBCs were never in required_tables (so topology never captured
+them), and the Content child has no DBC source at all — it reads five JSON files and silently skips
+missing ones, which is exactly the silent loss this milestone removes."""
+import json
+from pathlib import Path
+
+import pytest
+
+from coa_client_extract.content_json import ContentSourceError, read_content_records
+from coa_client_extract.spell_layout import load_spell_policy
+from coa_client_extract.topology import capture_topology, topology_matches_bound
+
+POLICY = Path(__file__).resolve().parents[1] / "coa_client_extract/data/spell_layout_v2.json"
+
+
+def test_the_ancillary_dbc_sources_are_required_and_bound():
+    doc = json.loads(POLICY.read_text(encoding="utf-8"))
+    expected = {"CharacterAdvancement", "CharacterAdvancementClassTypes",
+                "CharacterAdvancementTabTypes", "CharacterAdvancementEssence", "SkillLineAbility"}
+    assert expected <= set(doc["required_tables"])
+    assert expected <= set(doc["bound"]["tables"])
+    for name in expected:
+        assert doc["bound"]["tables"][name]["header"]["record_count"] > 0
+
+
+def test_topology_capture_covers_every_bound_table(synthetic_backend):
+    policy = load_spell_policy(json.loads(POLICY.read_text(encoding="utf-8")))
+    report = capture_topology(synthetic_backend, policy=policy)
+    assert set(report["tables"]) == set(policy.bound["tables"])
+    assert topology_matches_bound(report, policy.bound) == []
+
+
+def test_a_missing_content_file_is_blocking_not_silently_skipped(tmp_path):
+    """The current reader `continue`s past a missing file, so a client shipping four of five files
+    produces a smaller generation with no signal anywhere."""
+    (tmp_path / "SpellRankData.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ContentSourceError, match="SpellToStatSuggestionData.json"):
+        read_content_records(tmp_path, policy=load_spell_policy(json.loads(POLICY.read_text("utf-8"))))
+
+
+def test_a_content_file_whose_bytes_changed_is_rejected(tmp_path, content_dir):
+    (content_dir / "ItemVariationData.json").write_text('[{"tampered": true}]', encoding="utf-8")
+    with pytest.raises(ContentSourceError, match="sha256"):
+        read_content_records(content_dir, policy=load_spell_policy(json.loads(POLICY.read_text("utf-8"))))
+
+
+def test_the_content_derivation_accounting_closes(content_dir):
+    policy = load_spell_policy(json.loads(POLICY.read_text(encoding="utf-8")))
+    result = read_content_records(content_dir, policy=policy)
+    declared = result.derivation
+    assert declared["kept"] + declared["rejected"] == declared["source_entries"]
+    assert declared["kept"] == len(result.records)
+```
+
+- [ ] **Step 2: Run and confirm failure.**
+
+- [ ] **Step 3: Capture the real values.** Run `mechanics-recon` against the live client with the
+  extended `required_tables` and read the captured headers out of the report; hash the five Content
+  files and count their parsed entries. Write those numbers into `bound.tables` and `content_sources`.
+  **Never invent them** — every count in this task comes from the client.
+
+- [ ] **Step 4: Rehash the policy** with the T2.3 recipe (`compute_policy_sha256` on the loaded JSON —
+  `load_spell_policy` raises on an edited doc) and update `coa_scraper/config/spell_layout.lock.json`.
+
+- [ ] **Step 5: Run the full suite; commit**
+
+```bash
+git add coa_client_extract/data/spell_layout_v2.json coa_client_extract/topology.py \
+        coa_client_extract/content_json.py coa_scraper/config/spell_layout.lock.json \
+        tests/test_e0r2_source_bindings.py
+git commit -m "feat(e0r2): T0.2 — bind the ancillary DBC and Content JSON source domains"
 ```
 
 ---
@@ -263,13 +404,23 @@ so a tampered staged copy is rejected rather than obeyed.
 **This workstream describes the CURRENT schema** (`coa-client-spell-v3`, `coa-client-spell-icons-v1`,
 11 children). WS6 migrates to v4 and updates the contract atomically. Every commit here is green.
 
-### Task 1.1: An immutable contract **registry** and a self-validating loader
+### Task 1.1: Introduce the contract registry, stage it, bind it, and switch — **one atomic commit**
 
 **Files:**
 - Create: `coa_client_extract/data/generation_contracts/e0r-v1.json`,
   `coa_client_extract/data/generation_contracts/index.json`
-- Modify: `coa_client_extract/contracts.py`
+- Modify: `coa_client_extract/contracts.py`, `coa_client_extract/publish.py` (`REQUIRED_CHILDREN`),
+  `coa_client_extract/cli.py` (`regenerate` stages the child and extends `binding`), every fixture that
+  builds a synthetic generation
 - Test: `tests/test_e0r2_generation_contract.py`
+
+**Correction carried from review round 4 — introduction cannot be split from adoption.** The previous
+draft authored a 12-child contract in T1.1, derived `REQUIRED_CHILDREN` from it in T1.1, and only staged
+the twelfth child in T1.2 — so T1.1 would have left the suite **red**, violating the green-commit
+constraint. It also wrote `"source_table": "<from T2.1 Step 3>"` into a file the plan calls immutable
+and then had T2.1 edit it, which the immutability check must reject. Both are fixed the same way: **T0.2
+resolves every source binding first**, so `e0r-v1.json` is authored complete and placeholder-free, and
+introduction + staging + binding + the producer/validator/fixture switch land together.
 
 **Correction carried from review round 3 — a single mutable contract file breaks versioning and
 rollback.** If validation accepts only the contract currently in the working tree, then the moment T6.2
@@ -367,9 +518,19 @@ def test_no_child_uses_a_bare_floor_where_a_source_count_exists():
     assert children["coa_client_spell_icons.jsonl"]["cardinality"]["rule"] == "equals_full_spell_records"
     assert children["coa_client_spell_coa.jsonl"]["cardinality"]["rule"] == "equals_is_coa_full_records"
     for name in ("coa_client_class_types.jsonl", "coa_client_tab_types.jsonl",
-                 "coa_client_essence.jsonl", "coa_client_content.jsonl"):
+                 "coa_client_essence.jsonl"):
         assert children[name]["cardinality"]["rule"] == "derived_from_source_topology", name
     assert children["coa_client_advancement.jsonl"]["cardinality"]["rule"] == "declared_derivation"
+    # Content has no WDBC source at all — five JSON files, bound by T0.2's content_sources block.
+    assert children["coa_client_content.jsonl"]["cardinality"]["rule"] == "declared_content_derivation"
+
+
+def test_no_contract_revision_contains_a_placeholder():
+    """An immutable file with a TODO in it is a file that will be edited."""
+    import re
+    for revision, doc in _all_supported_contracts():
+        blob = json.dumps(doc)
+        assert not re.search(r"<[^>]*(from|TODO|captured|placeholder)[^>]*>", blob), revision
 
 
 @pytest.mark.parametrize("mutate, match", [
@@ -418,24 +579,53 @@ def test_an_unsupported_or_tampered_revision_is_refused():
         load_supported_contract(revision, "0" * 64)
 
 
-def test_a_registry_revision_file_is_never_edited_in_place():
-    """Immutability is the property that keeps old generations resolvable; assert it against git."""
+def test_every_revision_file_still_hashes_to_its_pinned_digest():
+    """PRIMARY immutability check, and the one that always runs. `git log --name-only` was the previous
+    draft's approach; CI uses actions/checkout@v4, which defaults to fetch-depth 1, so that command
+    returns almost nothing and the test would have passed VACUOUSLY in exactly the environment it was
+    meant to guard. Runtime hash pinning needs no history at all."""
+    registry = load_contract_registry()
+    for revision, entry in registry["supported"].items():
+        path = CONTRACTS_DIR / entry["path"]
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        assert generation_contract_sha256(doc) == entry["sha256"], (
+            f"{revision} was edited in place; add a new revision instead of changing a published one")
+        assert doc["revision"] == revision, f"{revision} disagrees with its registry key"
+
+
+def test_no_revision_file_is_modified_relative_to_the_merge_base():
+    """SECONDARY check: catches an edit-plus-rehash, which the hash pin alone cannot see. Requires
+    history, so T7.1 sets fetch-depth: 0 in CI. FAILS (never skips) when the merge base is unavailable —
+    a guard that quietly opts out is the defect this replaces."""
     import subprocess
+    base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"],
+                          capture_output=True, text=True)
+    assert base.returncode == 0, (
+        "merge base unavailable — run with full history (CI: fetch-depth: 0); refusing to pass vacuously")
     changed = subprocess.check_output(
-        ["git", "log", "--format=", "--name-only", "--", "coa_client_extract/data/generation_contracts/"],
-        text=True).split()
-    revisions = [p for p in changed if p.endswith(".json") and not p.endswith("index.json")]
-    assert len(revisions) == len(set(revisions)), (
-        "a contract revision file was modified after it was introduced; add a new revision instead")
+        ["git", "diff", "--name-only", base.stdout.strip(), "--",
+         "coa_client_extract/data/generation_contracts/"], text=True).split()
+    edited = [p for p in changed if not p.endswith("index.json")
+              and p in _paths_supported_before(base.stdout.strip())]
+    assert edited == [], f"published contract revision(s) modified: {edited}"
+
+
+def test_the_registry_itself_is_validated():
+    registry = load_contract_registry()
+    assert registry["current"] in registry["supported"]
+    for revision, entry in registry["supported"].items():
+        assert set(entry) == {"path", "sha256"}
+        assert re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.json", entry["path"]), entry["path"]
+        assert len(entry["sha256"]) == 64
 ```
 
 - [ ] **Step 2: Run and confirm failure.**
 
 - [ ] **Step 3: Author the contract for the CURRENT schema**
 
-Eleven children, matching what `regenerate` emits today. Relational rules for the three spell-domain
-children and the two derived-count JSON children; explicit `min` floors **only** for the five ancillary
-DBC-derived tables, whose source-domain counts are not recorded in the topology binding.
+**Twelve children** — the eleven `regenerate` emits today plus the staged contract itself. Every
+cardinality is relational and every `source_table` names a domain T0.2 actually bound, so the file has
+**no placeholders** and never needs a later edit.
 
 ```json
 {
@@ -483,7 +673,7 @@ DBC-derived tables, whose source-domain counts are not recorded in the topology 
     "coa_client_content.jsonl": {
       "kind": "jsonl", "child_schema_version": "coa-client-content-v1",
       "row_schema_version": "coa-client-content-v1", "optional": false,
-      "cardinality": {"rule": "derived_from_source_topology", "source_table": "<from T2.1 Step 3>"},
+      "cardinality": {"rule": "declared_content_derivation"},
       "shape": "content_row_v1"
     },
     "coa_client_advancement.jsonl": {
@@ -529,7 +719,8 @@ _CHILD_KEYS = {"kind", "child_schema_version", "row_schema_version", "optional",
 _CARDINALITY_KEYS = {"rule", "min", "source_table"}
 _CARDINALITY_RULES = frozenset({
     "reviewed_bound_record_count", "equals_full_spell_records", "equals_is_coa_full_records",
-    "derived_from_source_topology", "declared_derivation", "single_document", "min"})
+    "derived_from_source_topology", "declared_derivation", "declared_content_derivation",
+    "single_document", "min"})
 _SAFE_CHILD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -578,19 +769,33 @@ def validate_generation_contract(doc: dict) -> dict:
         card = spec["cardinality"]
         if not isinstance(card, dict):
             raise ContractError(f"child {name!r} cardinality must be an object")
-        extra_card = set(card) - _CARDINALITY_KEYS
-        if extra_card:
-            raise ContractError(f"child {name!r} cardinality has unexpected key(s) {sorted(extra_card)}")
-        if card.get("rule") not in _CARDINALITY_RULES:
-            raise ContractError(f"child {name!r} cardinality rule {card.get('rule')!r}")
-        if card["rule"] == "min":
-            floor = card.get("min")
+        rule = card.get("rule")
+        if rule not in _CARDINALITY_RULES:
+            raise ContractError(f"child {name!r} cardinality rule {rule!r}")
+        # EXACT per-rule key sets, not merely "no unknown keys": `single_document` carrying a `min` or a
+        # `source_table` is a contradiction that a permissive check would wave through (E0R.2 T1.1).
+        expected_keys = {
+            "reviewed_bound_record_count": {"rule", "source_table"},
+            "derived_from_source_topology": {"rule", "source_table"},
+            "declared_derivation": {"rule", "source_table"},
+            "declared_content_derivation": {"rule"},
+            "equals_full_spell_records": {"rule"},
+            "equals_is_coa_full_records": {"rule"},
+            "single_document": {"rule"},
+            "min": {"rule", "min"},
+        }[rule]
+        if set(card) != expected_keys:
+            raise ContractError(
+                f"child {name!r} cardinality for rule {rule!r} must have exactly {sorted(expected_keys)}, "
+                f"got {sorted(card)}")
+        if rule == "min":
+            floor = card["min"]
             # `isinstance(True, int)` is True in Python — a boolean floor must not silently mean 1.
             if isinstance(floor, bool) or not isinstance(floor, int) or floor < 1:
                 raise ContractError(f"child {name!r} min cardinality needs a positive integer floor")
-        if card["rule"] in ("derived_from_source_topology", "declared_derivation"):
-            if not isinstance(card.get("source_table"), str) or not card["source_table"]:
-                raise ContractError(f"child {name!r} {card['rule']} needs a source_table")
+        if "source_table" in expected_keys:
+            if not isinstance(card["source_table"], str) or not card["source_table"]:
+                raise ContractError(f"child {name!r} {rule} needs a source_table")
     return doc
 
 
@@ -603,31 +808,50 @@ def generation_contract_sha256(doc: dict) -> str:
     ).hexdigest()
 ```
 
-- [ ] **Step 5: Derive `REQUIRED_CHILDREN` from the contract in `publish.py`** so the first test passes:
-  `REQUIRED_CHILDREN = tuple(sorted(load_current_contract()[1]["children"]))`. Because this workstream
-  describes the *current* schema, the derived tuple equals the existing literal and nothing else moves.
+- [ ] **Step 5: Split the required-children concept in `publish.py` — this is what makes the registry
+  operational rather than descriptive.**
 
-- [ ] **Step 6: Run the full suite (must be fully green); commit**
+```python
+# The PRODUCER's target: what regenerate must emit today. Derived from the CURRENT revision.
+CURRENT_REQUIRED_CHILDREN = tuple(sorted(load_current_contract()[1]["children"]))
+# Back-compat alias for existing importers; new code should say which one it means.
+REQUIRED_CHILDREN = CURRENT_REQUIRED_CHILDREN
 
-```bash
-python -m pytest -q
-git add coa_client_extract/data/generation_contracts/e0r-v1.json \
-        coa_client_extract/data/generation_contracts/index.json \
-        coa_client_extract/contracts.py coa_client_extract/publish.py \
-        tests/test_e0r2_generation_contract.py
-git commit -m "feat(e0r2): T1.1 — an immutable contract registry for the current schema"
+
+def required_children_for(contract: dict) -> tuple[str, ...]:
+    """A RESOLVER's requirement comes from the generation's own verified staged contract, never from
+    `current`. Deriving it from `current` would make every generation published under an older revision
+    unresolvable the moment a new revision ships — breaking rollback and the predecessor chain the
+    publish transaction reads (E0R.2 T1.1)."""
+    return tuple(sorted(n for n, s in contract["children"].items() if not s["optional"]))
 ```
 
-### Task 1.2: The contract is staged, hashed into `binding`, and covered by candidate trust
+`validate_candidate_generation` and `resolve_active_generation` both use `required_children_for(contract)`.
+
+- [ ] **Step 6: Stage the contract child and extend `binding` in `regenerate`; migrate every synthetic
+  fixture to the twelve-child shape.** Introduction and adoption are the same commit, so the suite is
+  green at every point.
+
+- [ ] **Step 7: Run the full suite (must be fully green); commit**
+
+```bash
+python -m pytest -q && npm --prefix coa_scraper test
+git add coa_client_extract/data/generation_contracts/e0r-v1.json \
+        coa_client_extract/data/generation_contracts/index.json \
+        coa_client_extract/contracts.py coa_client_extract/publish.py coa_client_extract/cli.py \
+        tests/_e0r2_fixtures.py tests/test_e0r2_generation_contract.py
+git commit -m "feat(e0r2): T1.1 — immutable contract registry, staged, bound, and adopted atomically"
+```
+
+### Task 1.2: Reject a tampered, mismatched, or unsupported contract
 
 **Files:**
-- Modify: `coa_client_extract/cli.py` (`regenerate` — stage the child, extend `binding`),
-  `coa_client_extract/publish.py` (`validate_candidate_generation`)
+- Modify: `coa_client_extract/publish.py` (`validate_candidate_generation`, `resolve_active_generation`)
 - Test: `tests/test_e0r2_contract_binding.py`
 
-> The contract file itself is **not** modified here. `e0r-v1.json` already lists
-> `generation_contract.json` among its children (authored in T1.1) precisely so that this task never has
-> to edit an immutable revision — which the immutability test in T1.1 would catch.
+> Staging and binding happened in T1.1 (atomically with adoption). This task adds the **rejection**
+> paths: the three-way comparison and registry dispatch. Neither task edits a contract revision file —
+> `e0r-v1.json` already lists `generation_contract.json` among its children.
 
 **Design:** the contract revision is staged as `generation_contract.json` (a twelfth child,
 self-describing) and `manifest.binding.generation_contract = {"schema_version": ..., "revision": ...,
@@ -701,9 +925,8 @@ def test_candidate_trust_covers_the_bound_contract_hash(tmp_path):
 
 - [ ] **Step 3: Implement**
 
-Stage the current revision in `regenerate` beside `spell_layout_v2.json`, and add
-`binding["generation_contract"] = {"schema_version": ..., "revision": ..., "sha256": ...}`.
-In `validate_candidate_generation`, before any per-child work:
+In `validate_candidate_generation` (and identically in `resolve_active_generation`, so a *published*
+older-revision generation resolves by the same rules), before any per-child work:
 
 ```python
     staged_path = gen_dir / "generation_contract.json"
@@ -733,8 +956,8 @@ reading the trusted copy means a future parser difference cannot be exploited th
 - [ ] **Step 4: Run the full suite; commit**
 
 ```bash
-git add coa_client_extract/cli.py coa_client_extract/publish.py tests/test_e0r2_contract_binding.py
-git commit -m "feat(e0r2): T1.2 — the contract is staged, bound by revision+hash, and trust-covered"
+git add coa_client_extract/publish.py tests/test_e0r2_contract_binding.py
+git commit -m "fix(e0r2): T1.2 — reject a tampered, mismatched, or unsupported staged contract"
 ```
 
 ### Task 1.3: Node re-derives and compares the bound contract
@@ -862,10 +1085,10 @@ count is published rather than implied. That closes the "one essence row passes"
 a magic number like "21 playable classes" — the client states the number, and the reviewed policy binds
 it.
 
-> `bound.tables` currently covers only the Spell-side tables. T2.1 Step 3 extends it to the ancillary
-> source tables (`CharacterAdvancement`, `…ClassTypes`, `…TabTypes`, `…Essence`, and the content
-> source), taking the values from a real recon run rather than from guesses, and rehashes the policy per
-> T2.3's recipe. The `<from T2.1 Step 3>` placeholder in the T1.1 contract is filled in here.
+> Every source these rules cite was bound in **T0.2** — the ancillary `CharacterAdvancement*` DBCs
+> through `required_tables`/`bound.tables`, and the Content JSON files through `content_sources`. That
+> ordering is deliberate: it lets T1.1 author a placeholder-free immutable contract, and it keeps this
+> task purely about *enforcement*.
 
 The projection equality is *already* enforced exactly by `_cross_child`'s streaming merge-join
 (`projection_is_coa_subset` + `projection_within_domain` compose to an equality). The contract-level
@@ -958,7 +1181,7 @@ def test_a_wellformed_candidate_still_validates(tmp_path):
 
 - [ ] **Step 2: Run and confirm the first five fail.**
 
-- [ ] **Step 3: Establish the trust chain, extend `bound.tables`, then implement
+- [ ] **Step 3: Establish the trust chain, then implement
   `_resolve_cardinality(spec, name, meta, policy, counts)`**
 
 Note the signature takes **`policy`, not `manifest`** — that is the whole correction. Run steps 1–3 of
@@ -966,9 +1189,7 @@ the trust chain first (staged policy == locally supported policy; `binding.polic
 `topology_matches_bound(manifest.binding.topology, policy.bound)` is empty), and only then resolve
 cardinalities against `policy.bound`.
 
-Extend `bound.tables` to the ancillary source tables by reading their real headers from a live recon run
-(`mechanics-recon` already opens them), then rehash the policy per T2.3's recipe and update the lock.
-Fill in the `<from T2.1 Step 3>` placeholder in the contract's content-child `source_table`.
+All source bindings already exist (T0.2), so this task adds no policy content — only the resolver.
 
 The `is_coa` count is accumulated during the streaming pass `_cross_child` already makes — do not add a
 second full read. Reject unregistered children explicitly:
@@ -985,9 +1206,11 @@ second full read. Reject unregistered children explicitly:
 - [ ] **Step 4: Mirror in `generation.mjs`; run both suites; commit**
 
 ```bash
-git add coa_client_extract/publish.py coa_scraper/scripts/lib/generation.mjs \
-        tests/test_e0r2_cardinality.py coa_scraper/tests/generation-contract.test.mjs
-git commit -m "fix(e0r2): T2.1 — relational cardinalities and a child whitelist"
+git add coa_client_extract/publish.py coa_client_extract/spell_layout.py \
+        coa_client_extract/cli.py coa_scraper/scripts/lib/generation.mjs \
+        tests/_e0r2_fixtures.py tests/test_e0r2_cardinality.py \
+        coa_scraper/tests/generation-contract.test.mjs
+git commit -m "fix(e0r2): T2.1 — policy-rooted cardinalities and a child whitelist"
 ```
 
 ### Task 2.2: Per-child shape validation in both languages
@@ -1352,7 +1575,8 @@ def test_the_catalog_producer_never_emits_converted(synthetic_icon_backend):
 
 ```bash
 git add coa_client_extract/contracts.py coa_client_extract/publish.py \
-        coa_scraper/scripts/lib/generation.mjs tests/test_e0r2_converted_prohibited.py
+        coa_client_extract/spell_icons.py coa_scraper/scripts/lib/generation.mjs \
+        tests/test_e0r2_converted_prohibited.py
 git commit -m "fix(e0r2): T2.5 — prohibit converted icon assets until the bundle validator exists"
 ```
 
@@ -1578,7 +1802,13 @@ final mechanics readiness. Two different denominators, two different layers:
   `field_readiness_coverage` with status/reason counts and an exact `fields_considered` denominator.
 - [ ] **Step 2: Run and confirm failure.**
 - [ ] **Step 3: Implement `observation_accumulator()` (single pass, folded into the existing streaming
-  write loop) and the Node-side readiness accumulator (folded into T5.2's incremental statistics).**
+  write loop) and the Node-side readiness accumulator.**
+
+**Correction carried from review round 4 — a green task cannot defer its own implementation.** The
+previous draft said the Node accumulator was "folded into T5.2's incremental statistics" while also
+requiring T4.1 to commit green; T5.2 does not exist yet at that point. Implement it here against the
+**current** `winnerCounts(rows)`-style builder, and let T5.2 fold it into the streaming loop when it
+rewrites that code — a refactor of working, tested code, not a forward reference.
 - [ ] **Step 4: Run both suites; commit**
 
 ```bash
@@ -1657,6 +1887,20 @@ def recon_binding_digest(*, report_schema_version, status, blocking_findings, po
 Built from the recon side out of `source_pins` + `topology`, and from the generation side out of
 `binding.policy_sha256` + `binding.topology`. A key present on one side and absent on the other changes
 the digest, which is the point.
+
+**Correction carried from review round 4 — the identity digest does not attest to the artifact.** By
+construction it covers only the fields that must *match* the generation. Everything else in the recon
+report — the ambiguity scan's candidate metrics, the budget measurements, `proposed_policy_delta`,
+`index_fk` — is outside it, so that content could change with the acceptance record unmoved. Record
+**both**, and commit the report bytes as E0R.1 already did:
+
+- `recon_binding_sha256` — the canonical identity digest above, which is what is *compared*.
+- `recon_report_sha256` — sha256 of the **exact normalized report bytes** that were validated and
+  embedded, which is what is *attested*.
+
+with a probe that mutates a **non-binding** field (a candidate's `distinct_ids`) and asserts
+`recon_binding_sha256` is unchanged while `recon_report_sha256` moves. Two hashes with different jobs;
+neither substitutes for the other.
 
 **Mechanics binding, strengthened:**
 1. The mechanics manifest records `input_generation_id`, `pointer_manifest_sha256`, `policy_sha256`,
@@ -1750,9 +1994,22 @@ def test_a_client_that_started_shipping_an_expected_absent_table_is_refused(tmp_
         run_acceptance(**acceptance_env(tmp_path, recon_expected_absent_ok=False))
 
 
+def test_a_non_binding_recon_edit_moves_the_report_hash_but_not_the_identity_digest(tmp_path):
+    """The two hashes have different jobs. Identity is what must MATCH the generation; the report hash
+    is what the record ATTESTS to. Only recording the first would let candidate metrics, budget
+    measurements or proposed_policy_delta change with the acceptance record unmoved."""
+    base = run_acceptance(**acceptance_env(tmp_path))
+    edited = run_acceptance(**acceptance_env(tmp_path, recon_candidate_distinct_ids=999))
+    assert edited["recon_binding_sha256"] == base["recon_binding_sha256"]
+    assert edited["recon_report_sha256"] != base["recon_report_sha256"]
+
+
 def test_the_record_binds_every_identity(tmp_path):
     record = run_acceptance(**acceptance_env(tmp_path))
     assert record["schema_version"] == "coa-e0r-acceptance-summary-v3"
+    assert len(record["recon_binding_sha256"]) == 64
+    assert len(record["recon_report_sha256"]) == 64
+    assert record["recon_report"]["status"] == "verified"       # the bytes themselves are committed
     assert record["generation_contract"]["revision"]
     assert len(record["generation_contract"]["sha256"]) == 64
     assert len(record["mechanics"]["jsonl_sha256"]) == 64
@@ -1819,7 +2076,9 @@ running sha256, so the incremental digest provably equals a whole-file hash. Bot
 - [ ] **Step 4: Run; commit**
 
 ```bash
-git add coa_scraper/scripts/lib/mechanics-projection.mjs coa_scraper/tests/mechanics-streaming.test.mjs
+git add coa_scraper/scripts/lib/jsonl-stream.mjs coa_scraper/scripts/lib/mechanics-projection.mjs \
+        coa_scraper/scripts/lib/generation.mjs coa_scraper/scripts/build-mechanics-artifacts.mjs \
+        coa_scraper/tests/jsonl-stream.test.mjs coa_scraper/tests/mechanics-streaming.test.mjs
 git commit -m "perf(e0r2): T5.1 — the canonical build streams the projection instead of reading it whole"
 ```
 
@@ -1855,8 +2114,11 @@ proportion to the *projection row count*, measured as an absolute delta against 
 
 - [ ] **Step 1: Write the failing test** — run the **actual** `buildMechanicsArtifact` entry point in an
   isolated subprocess at 10k and 100k projection rows with a fixed ~3,600-spell builder domain; assert
-  `peak_rss_mb` delta `< 150` and that the 100k peak is under a pinned absolute ceiling. Mirror
-  `tests/_streaming_probe.py`'s try/finally temp-dir cleanup — that leak produced a false "memory
+  the `peak_rss_mb` delta is `< 150` **and** that the 100k peak is under
+  `node_peak_rss_mb / 2 == 2048 MB`, derived from the reviewed policy budget rather than invented, and
+  valid only under the `benchmark_env` the manifest pins (the same environment the T4.3 budget
+  measurements are attributed to; a different machine invalidates the absolute number, not the delta).
+  Mirror `tests/_streaming_probe.py`'s try/finally temp-dir cleanup — that leak produced a false "memory
   regression" during E0R.1 when it filled the tmpfs.
 - [ ] **Step 2: Verify the probe is real** by stashing T5.1 locally and watching it fail.
 - [ ] **Step 3: Commit**
@@ -1967,12 +2229,21 @@ trusted copy, never from the staged descriptor. An out-of-range code fails close
 - `coa_client_spell.jsonl` → `coa-client-spell-v4` (producer + both validators)
 - **`coa_client_spell_fields.json` staged as a child** — the descriptor document T6.1 introduced now
   ships *in* the generation, so expansion has a bound source
-- a **new contract revision `e0r-v2`** in the registry adding that child (with its own
-  `shape: "spell_fields_v1"` validator in both languages) and bumping the full child's schema, plus
-  `index.json` moving `current` to `e0r-v2` — `e0r-v1` is **not edited**, so the published v3
-  generation stays resolvable
-- the golden corpus migrated
-- `observation_wire_schema` pinned by the new contract revision
+- **the staged `observation_wire_schema.json`**, since v4 rows carry coded observations and a generation
+  must ship every schema needed to decode it
+- a **new contract revision `e0r-v2`** in the registry adding those children (each with its own
+  `shape` validator in both languages) and bumping the full child's schema, plus `index.json` moving
+  `current` to `e0r-v2` — `e0r-v1` is **not edited**
+- **the v3 decoder and v1 shape validators RETAINED**, and v4 fixtures **added alongside** the v3 golden
+  corpus rather than replacing it
+
+**Correction carried from review round 4 — "migrate the corpus" and "drop dual-encoding" contradict the
+registry.** `e0r-v1` stays in `supported`, so an `e0r-v1` generation must still validate and still
+expand. That is impossible if the v3 decoder is deleted or its fixtures overwritten. Concretely:
+`expand_compact` dispatches on the row's schema version, keeping both paths; the golden corpus gains
+`tests/golden/e0r2_corpus_v4/` **next to** `tests/golden/e0r1_corpus/`; and both shape validators stay
+registered. The dual-encoding *tolerance* T6.1 added inside a single schema is what goes away — a v4 row
+must be v4-encoded — not the ability to read v3 rows.
 
 - [ ] **Step 1: Write the failing test** — round-trip equality per vocabulary member and per cell shape;
   an out-of-range code raises; codes come from `contracts.py` and **not** from the staged descriptor
@@ -1985,6 +2256,13 @@ trusted copy, never from the staged descriptor. An out-of-range code fails close
 - [ ] **Step 4: Run both suites; commit**
 
 ```bash
+git add coa_client_extract/spell_record.py coa_client_extract/cli.py coa_client_extract/publish.py \
+        coa_client_extract/shapes.py coa_scraper/scripts/lib/mechanics-projection.mjs \
+        coa_scraper/scripts/lib/generation.mjs coa_scraper/scripts/lib/shapes.mjs \
+        coa_client_extract/data/generation_contracts/e0r-v2.json \
+        coa_client_extract/data/generation_contracts/index.json \
+        tests/golden/e0r2_corpus_v4 tests/test_e0r2_field_descriptors.py \
+        coa_scraper/tests/descriptors.test.mjs
 git commit -m "perf(e0r2): T6.2 — v4 spell rows: hoist per-field constants, intern vocabularies (-188 MB)"
 ```
 
@@ -2002,10 +2280,47 @@ Explicit model:
 - **Asset row** = one normalized client path.
   `{asset_id, client_path, availability: "source_only" | "missing", source_asset_sha256, source_archive, schema_version}`
   Hash and archive are non-null **iff** `availability == "source_only"`, null **iff** `"missing"`.
-- **Spell row** = `{spell_id, spell_icon_id, asset_ref, readiness, schema_version}`.
-  `asset_ref` is null **iff** the join is unresolved (the old `placeholder`); `readiness` is
-  `"available"` iff `asset_ref` resolves to a `source_only` asset, `"unavailable"` otherwise — and the
-  cross-child check enforces that derivation rather than trusting the stored value.
+- **Association row** = `{spell_id, spell_icon_id, asset_ref, state, decoded_reason, readiness,
+  schema_version}`. `asset_ref` is null **iff no promoted decoded client path exists**; `readiness` is
+  `"available"` iff `asset_ref` resolves to a `source_only` asset — and the cross-child check enforces
+  that derivation rather than trusting the stored value.
+
+**Correction carried from review round 4 — "null iff the join is unresolved" is too narrow, and the
+current schema throws information away.** Verified in `spell_icons.py`: the path is
+`jo.decoded if jo.decoded_reason == "decoded" else None`, so **four** distinct situations collapse into
+one `_placeholder` — `index_zero` (no FK at all → `not_applicable`), `side_row_missing` (nonzero FK, no
+side row → `unresolved`), `proof_withheld`, and `non_finite`. Worse, the producer *constructs* the
+`JoinObservation` for the first two cases at lines 62 and 67 and then **discards it**. Carrying `state`
+and `decoded_reason` onto the association row costs two small interned integers and turns an
+unexplained null into an explained one — "this spell has no icon" and "this spell's icon row is missing
+from the client" stop being the same value.
+
+**The two children, with their exact contract entries** (added by the new `e0r-v3` revision):
+
+```json
+"coa_client_spell_icons.jsonl": {
+  "kind": "jsonl", "child_schema_version": "coa-client-spell-icons-v2",
+  "row_schema_version": "coa-client-spell-icons-v2", "optional": false,
+  "cardinality": {"rule": "equals_full_spell_records"}, "shape": "icon_association_row_v2"
+},
+"coa_client_icon_assets.jsonl": {
+  "kind": "jsonl", "child_schema_version": "coa-client-icon-assets-v1",
+  "row_schema_version": "coa-client-icon-assets-v1", "optional": false,
+  "cardinality": {"rule": "equals_referenced_asset_set"}, "shape": "icon_asset_row_v1"
+}
+```
+
+`equals_referenced_asset_set` is a new relational rule: asset records **==** the number of distinct
+non-null `asset_ref` values in the association child. Combined with the cross-child checks below it
+makes the two children exactly mutually determined.
+
+**Cross-child checks (streaming, in the existing merge-join pass):**
+- association records == full-spell records, in lockstep by ascending `spell_id`
+- asset rows sorted-unique by `asset_id`
+- every non-null `asset_ref` resolves to an asset row (**no dangling**)
+- every asset row is referenced at least once (**no orphans**)
+- `readiness == "available"` **iff** the referenced asset is `source_only`
+- `asset_ref is None` **iff** `decoded_reason != "decoded"`
 - **`asset_id` is deterministic**: `sha256(canonical_path)[:32]` — **128 bits**, where `canonical_path`
   is the client path lowercased with backslashes normalized to forward slashes. Encounter-order
   numbering would make byte-identical inputs produce different generations. The previous draft's 64-bit
@@ -2014,18 +2329,99 @@ Explicit model:
   argument. Cost of the wider id: 14,022 rows × 16 chars ≈ 224 KB.
 
 - [ ] **Step 1: Write the failing test** — a dangling `asset_ref` is rejected; an orphan asset row is
-  rejected; a null `asset_ref` with `readiness: "available"` is rejected; a `missing` asset carrying a
-  hash is rejected; a `source_only` asset without a hash is rejected; `asset_id` is stable across two
-  runs with shuffled input order; `icon_coverage` reports the same `resolved_paths`/`unique_paths`
-  totals as the v1 catalog for identical input.
+  rejected; a null `asset_ref` with `readiness: "available"` is rejected; a non-null `asset_ref` whose
+  `decoded_reason != "decoded"` is rejected; a `missing` asset carrying a hash is rejected; a
+  `source_only` asset without a hash is rejected; the four null causes (`index_zero`,
+  `side_row_missing`, `proof_withheld`, `non_finite`) are **distinguishable** in the emitted rows rather
+  than collapsed; `asset_id` is stable across two runs with shuffled input order; **an injected
+  collision** — two distinct canonical paths forced to the same `asset_id` via a monkeypatched digest —
+  raises rather than silently coalescing two icons into one; `icon_coverage` reports the same
+  `resolved_paths`/`unique_paths` totals as the v1 catalog for identical input.
 - [ ] **Step 2: Run and confirm failure.**
 - [ ] **Step 3: Implement**, accumulating `canonical_path -> asset_id` during the single existing
-  catalog pass (14,022 entries — counter-scale), updating both validators, the contract, the golden
-  corpus, and the `coa_meta` consumer to resolve through the asset table.
+  catalog pass (14,022 entries — counter-scale) and **storing the canonical path itself** on the asset
+  row, so a shuffled input cannot change any row's bytes. Update both validators, add the `e0r-v3`
+  revision, add v2 fixtures alongside the v1 ones, retain the v1 icon shape validator while `e0r-v1`
+  and `e0r-v2` remain supported, and update the `coa_meta` consumer to resolve through the asset table.
 - [ ] **Step 4: Run both suites; commit**
 
 ```bash
-git commit -m "perf(e0r2): T6.3 — icon v2: deterministic normalized assets plus refs (-37 MB)"
+git add coa_client_extract/spell_icons.py coa_client_extract/cli.py coa_client_extract/publish.py \
+        coa_client_extract/shapes.py coa_scraper/scripts/lib/generation.mjs \
+        coa_scraper/scripts/lib/shapes.mjs coa_meta/guide_assets.py \
+        coa_client_extract/data/generation_contracts/e0r-v3.json \
+        coa_client_extract/data/generation_contracts/index.json \
+        tests/golden/e0r2_corpus_v4 tests/test_e0r2_icon_normalization.py \
+        coa_scraper/tests/icon-assets.test.mjs
+git commit -m "perf(e0r2): T6.3 — icon v2: two-child normalized assets with explained nulls (-37 MB)"
+```
+
+### Task 6.4: The compatibility matrix — prove the registry is operational
+
+**Files:**
+- Test: `tests/test_e0r2_cross_revision.py`, `coa_scraper/tests/cross-revision.test.mjs`
+
+**Correction carried from review round 4 — without this the registry is descriptive, not operational.**
+Three revisions now exist and all three are `supported`; nothing yet *proves* an older one still
+resolves.
+
+- [ ] **Step 1: Write the test (it should already pass if T1.1–T6.3 were done correctly; if it fails,
+  the registry promise was never real)**
+
+```python
+# tests/test_e0r2_cross_revision.py
+"""E0R.2 T6.4: the registry promises that a generation published under an older supported revision
+stays independently resolvable — that is what rollback and the publish transaction's predecessor read
+depend on. This is the test that makes the promise operational."""
+import pytest
+
+from coa_client_extract.contracts import load_contract_registry
+from coa_client_extract.publish import ResolveError, resolve_active_generation, validate_candidate_generation
+from tests._e0r2_fixtures import publish_generation_under
+
+
+@pytest.mark.parametrize("revision", ["e0r-v1", "e0r-v2", "e0r-v3"])
+def test_a_generation_of_every_supported_revision_validates_and_resolves(tmp_path, revision):
+    assert revision in load_contract_registry()["supported"]
+    dist = publish_generation_under(tmp_path, revision)
+    resolved = resolve_active_generation(dist)
+    assert resolved["manifest"]["binding"]["generation_contract"]["revision"] == revision
+
+
+@pytest.mark.parametrize("revision, foreign_child", [
+    ("e0r-v1", "coa_client_spell_fields.json"),        # v2 introduced it
+    ("e0r-v1", "coa_client_icon_assets.jsonl"),        # v3 introduced it
+    ("e0r-v2", "coa_client_icon_assets.jsonl"),
+])
+def test_a_generation_carrying_a_child_from_another_revision_is_rejected(tmp_path, revision, foreign_child):
+    gen = publish_generation_under(tmp_path, revision, extra_child=foreign_child, publish=False)
+    with pytest.raises(ResolveError, match="unregistered child"):
+        validate_candidate_generation(gen)
+
+
+@pytest.mark.parametrize("revision, encoding", [("e0r-v1", "v4_coded"), ("e0r-v3", "v3_inline")])
+def test_a_generation_using_another_revisions_encoding_is_rejected(tmp_path, revision, encoding):
+    """A v1 generation must not carry interned cells, and a v3 generation must not carry inline
+    policy_refs — each revision pins exactly one encoding."""
+    gen = publish_generation_under(tmp_path, revision, force_encoding=encoding, publish=False)
+    with pytest.raises(ResolveError, match="schema_version|encoding"):
+        validate_candidate_generation(gen)
+
+
+def test_the_v3_decoder_survives(tmp_path):
+    """The concrete regression this guards: deleting the v3 expansion path during the v4 migration."""
+    from coa_client_extract.spell_record import _expand_compact
+    from tests.golden import golden_v3_cell, golden_v3_expected
+    assert _expand_compact(golden_v3_cell(), _policy(), fields=None) == golden_v3_expected()
+```
+
+The Node twin asserts the same matrix through `validateCandidateByPath`.
+
+- [ ] **Step 2: Run both suites; commit**
+
+```bash
+git add tests/test_e0r2_cross_revision.py coa_scraper/tests/cross-revision.test.mjs
+git commit -m "test(e0r2): T6.4 — cross-revision compatibility matrix over the contract registry"
 ```
 
 ---
@@ -2082,6 +2478,13 @@ def test_ci_runs_the_full_node_suite():
     ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "npm --prefix coa_scraper test" in ci
     assert "run unit-test" not in ci          # unit-test alone skips the validator
+
+
+def test_ci_checks_out_full_history():
+    """actions/checkout@v4 defaults to fetch-depth 1, which makes the contract-immutability
+    merge-base check unable to run at all (T1.1)."""
+    ci = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "fetch-depth: 0" in ci
 ```
 
 - [ ] **Step 2: Run and confirm both fail.**
