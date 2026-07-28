@@ -18,8 +18,11 @@
 | T4.2 | done | `9ce7d9e` |
 | T4.3 | done | `c38ebe8` (policy sha 3e76457c→e206fbb8) |
 | T5.1 | done | `c7dc364` (DB runtime deleted; downloader `--authorize` + diagnostic/-only) |
-| **T5.2** | **next** | readiness status/value/reason truth table |
-| T5.3, T5.4, T6.1–T6.3 | open | — |
+| T5.2 | done | `9299c80` (reason⇔status map + available/verified_empty value rules + no silent omission) |
+| T5.3 | done | `4d4ac27` (numberOrNull null-safe; `spellRows` removed) |
+| T5.4 | done | `5e60513` (no self-granted heuristics; explicit `blocked` sections; `--allow-heuristic`) |
+| **T6.1** | **next** | real CI + clean-env packaging |
+| T6.2, T6.3 | open | — |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
@@ -158,17 +161,20 @@
 
 ### Task 5.2: Complete readiness status/value/reason truth table
 **Files:** Modify `coa_meta/mechanics.py` (`_validate_field_readiness`) and `coa_client_extract/contracts.py` (reason⇔status compatibility map if needed); Test: `tests/test_e0r1_readiness_strict.py`.
-- [ ] Probe (full truth table): `available` requires a present non-null value; `verified_empty` is set-valued only AND requires an actually-empty collection (reject a non-empty map); `not_applicable`/`unavailable`/`ambiguous` require null; each reason_code must be compatible with its status (e.g. `proven_empty`⇒`verified_empty`, `not_extracted`⇏`verified_empty`, `proven_empty`⇏`unavailable`); a required load-bearing field cannot silently omit readiness. Green + commit.
+- [x] Probe (full truth table): `available` requires a present non-null value; `verified_empty` is set-valued only AND requires an actually-empty collection (reject a non-empty map); `not_applicable`/`unavailable`/`ambiguous` require null; each reason_code must be compatible with its status (e.g. `proven_empty`⇒`verified_empty`, `not_extracted`⇏`verified_empty`, `proven_empty`⇏`unavailable`); a required load-bearing field cannot silently omit readiness. Green + commit.
 
 ### Task 5.3: numberOrNull + drop spellRows
 **Files:** Modify `coa_scraper/scripts/build-mechanics-artifacts.mjs`; Test: extend `coa_scraper/tests/mechanics-v2.test.mjs`.
-- [ ] Probe: `numberOrNull(null)===null`; `buildCanonicalMechanics` has no `spellRows` parameter. Green + commit.
+- [x] Probe: `numberOrNull(null)===null`; `buildCanonicalMechanics` has no `spellRows` parameter. Green + commit.
 
 ### Task 5.4: Honest interlock across every quantitative path
 **Files:** Modify `coa_meta/reporting.py` (no auto `allow_heuristic`; canonical returns an explicit `blocked` rotation section), `coa_meta/action_catalog.py`, `coa_meta/rotation_simulation.py`, `coa_meta/simulation.py` (`source:"heuristic"`), `coa_meta/apl_interpreter.py`, combat conversion; add a default-off heuristic command/mode; Test: `tests/test_e0r1_interlock_behavioral.py`.
-- [ ] Probe (behavioral, over action_catalog + rotation_simulation + simulation + apl_interpreter + combat + reporting): a missing load-bearing input **blocks** (canonical returns `blocked`, never a silent heuristic); a verified `0` stays `0`; a verified `1500` stays `1500`; a verified empty cost stays free (`{}`); heuristics require **explicit opt-in** and every heuristic output reports `source: "heuristic"`. Green + commit.
+- [x] Probe (behavioral, over action_catalog + rotation_simulation + simulation + apl_interpreter + combat + reporting): a missing load-bearing input **blocks** (canonical returns `blocked`, never a silent heuristic); a verified `0` stays `0`; a verified `1500` stays `1500`; a verified empty cost stays free (`{}`); heuristics require **explicit opt-in** and every heuristic output reports `source: "heuristic"`. Green + commit.
 
 ---
+
+- T5.2 amendments (`9299c80`): added the `extracted` reason code (nothing could express `available` before) and `contracts.LOAD_BEARING_FIELDS`; the map is asserted total + surjective.
+- T5.4 amendments (`5e60513`): the interlock verdict rides on `status`/`quantitative_source` so a guide's own `source` provenance is not clobbered; `simulate_build` is heuristic BY CONSTRUCTION (invented amounts/costs/cooldowns) so it raises unless authorized and reports `source: "heuristic"`; `--allow-heuristic` is the single default-off authorization.
 
 ## Workstream 6 — Real CI + binding acceptance
 
