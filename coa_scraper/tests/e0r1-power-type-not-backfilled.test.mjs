@@ -6,6 +6,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+// The cross-language round-trip must work from a bare `npm test` too, so point the child interpreter at
+// the repo root rather than depending on the package happening to be pip-installed for whichever
+// python3 is on PATH (E0R.1 T6.1).
+const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+const PY_ENV = { ...process.env, PYTHONPATH: REPO_ROOT };
 import { buildCanonicalMechanics } from "../scripts/build-mechanics-artifacts.mjs";
 
 function withheldRow() {
@@ -51,6 +58,6 @@ test("the withheld-power_type row still round-trips through the Python v2 loader
     "assert r.field_readiness['power_type']['reason_code'] == 'no_static_anchor'",
     "print('ok')",
   ].join("\n");
-  const out = execFileSync("python3", ["-c", py, JSON.stringify(row)], { encoding: "utf8" });
+  const out = execFileSync("python3", ["-c", py, JSON.stringify(row)], { encoding: "utf8", env: PY_ENV });
   assert.match(out, /ok/);
 });

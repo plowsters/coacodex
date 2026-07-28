@@ -1,8 +1,9 @@
 name: CI
 
+# Runs on EVERY branch push and on pull requests. A main-only push filter meant a feature branch could
+# accumulate weeks of work without CI ever executing — E0R.1 T6.1 makes the branch the thing CI guards.
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -20,11 +21,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
+          pip install pytest
 
       - name: Run the synthetic Python suite
-        # pyproject addopts already excludes the `stormlib` + `client` markers (native / real-client
-        # acceptance tiers), which are run locally against a real Ascension install, never in CI.
+        # BARE `pytest` on purpose: `python -m pytest` puts the CWD on sys.path and would mask the
+        # import/packaging defect a fresh clone hits (T6.1). pyproject addopts already excludes the
+        # `stormlib` + `client` markers (native / real-client acceptance tiers), which are run locally
+        # against a real Ascension install, never in CI.
         run: pytest -q
+
+      - name: Run the E0R.1 contract probes explicitly
+        # Named separately so a collection or marker mistake that silently skips the milestone's own
+        # enforcement tests shows up as a red step rather than as a quietly smaller suite.
+        run: pytest -q tests/test_e0r1_*.py
 
       - name: Set up Node
         uses: actions/setup-node@v4
