@@ -11,6 +11,9 @@ def _raw(**over):
                                          "selected_value": ["nature"], "selection_reason": "highest_precedence_eligible",
                                          "warnings": [], "candidates": []}},
         "effects": [{"effect_type": "damage", "period_ms": 3000}],
+        # E0R.1 T5.2: a null load-bearing field must say WHY it is null — never a silent omission.
+        "field_readiness": {f: {"status": "unavailable", "reason_code": "not_extracted"}
+                            for f in ("costs", "cooldown_ms", "gcd_ms")},
     }
     base.update(over)
     return base
@@ -41,6 +44,8 @@ def test_repository_loads_and_round_trips_field_provenance_and_schools(tmp_path)
                                          "selected_value": ["fire", "frost"], "selection_reason": "highest_precedence_eligible",
                                          "warnings": [], "candidates": []}},
         "effects": [{"effect_type": "damage", "tick_interval_ms": 3000}],
+        "field_readiness": {f: {"status": "unavailable", "reason_code": "not_extracted"}
+                            for f in ("costs", "cooldown_ms", "gcd_ms")},
     }
     p = tmp_path / "coa_mechanics.jsonl"
     p.write_text(json.dumps(row) + "\n", encoding="utf-8")

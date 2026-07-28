@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from coa_client_extract.contracts import (
+    LOAD_BEARING_FIELDS,
     READINESS_INVARIANTS,
     READINESS_REASON_CODES,
+    READINESS_REASON_COMPATIBILITY,
     READINESS_STATUSES,
 )
 
@@ -342,9 +344,17 @@ def _number_map_or_none(value: Any) -> dict[str, float] | None:
 
 
 def _validate_field_readiness(fr: Any, value_map: dict[str, Any], source: str) -> dict[str, dict]:
-    """Validate the per-field readiness block against the closed status/reason-code enums and the readiness
-    state machine (contracts.READINESS_INVARIANTS): a value_must_be_null status (unavailable/ambiguous/
-    not_applicable) requires a null value, and verified_empty requires a (possibly empty) set/map value."""
+    """Validate the per-field readiness block as a COMPLETE truth table (E0R.1 T5.2):
+
+    status x value  — `available` requires a present non-null value; `verified_empty` requires an
+                      actually-EMPTY set/map (a non-empty map is a contradiction); the value_must_be_null
+                      statuses (`unavailable`/`ambiguous`/`not_applicable`) require a null value.
+    status x reason — every reason_code must be compatible with its status
+                      (contracts.READINESS_REASON_COMPATIBILITY), e.g. `proven_empty` only ever explains
+                      `verified_empty`, and `not_extracted` can never claim it.
+    omission        — a load-bearing field (costs/cooldown_ms/gcd_ms) that is null MUST carry a readiness
+                      entry; a silent omission is exactly the ambiguity readiness exists to remove.
+    """
     if not isinstance(fr, dict):
         raise MechanicsLoadError(f"{source} field_readiness must be an object")
     out: dict[str, dict] = {}
@@ -356,16 +366,32 @@ def _validate_field_readiness(fr: Any, value_map: dict[str, Any], source: str) -
             raise MechanicsLoadError(f"{source} field_readiness[{fname!r}] bad status {status!r}")
         if reason not in READINESS_REASON_CODES:
             raise MechanicsLoadError(f"{source} field_readiness[{fname!r}] bad reason_code {reason!r}")
+        if status not in READINESS_REASON_COMPATIBILITY[reason]:
+            raise MechanicsLoadError(
+                f"{source} field_readiness[{fname!r}] incompatible reason_code {reason!r} for status "
+                f"{status!r} (compatible: {sorted(READINESS_REASON_COMPATIBILITY[reason])})")
         must_be_null, _blocking, set_valued_only = READINESS_INVARIANTS[status]
         if fname in value_map:
             value = value_map[fname]
             if must_be_null and value is not None:
                 raise MechanicsLoadError(
                     f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires a null value")
-            if set_valued_only and not isinstance(value, dict):
+            if status == "available" and value is None:
                 raise MechanicsLoadError(
-                    f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires a set/map value")
+                    f"{source} field_readiness[{fname!r}] readiness invariant: available requires a value")
+            if set_valued_only:
+                if not isinstance(value, dict):
+                    raise MechanicsLoadError(
+                        f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires a set/map value")
+                if value:
+                    raise MechanicsLoadError(
+                        f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires an EMPTY "
+                        f"collection, got {len(value)} entrie(s)")
         out[fname] = {"status": status, "reason_code": reason}
+    for fname in LOAD_BEARING_FIELDS:
+        if fname in value_map and value_map[fname] is None and fname not in out:
+            raise MechanicsLoadError(
+                f"{source} load-bearing field {fname!r} is null and requires a readiness entry explaining why")
     return out
 
 

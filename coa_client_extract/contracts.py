@@ -11,7 +11,7 @@ from __future__ import annotations
 READINESS_STATUSES = frozenset({"available", "unavailable", "not_applicable", "ambiguous", "verified_empty"})
 READINESS_REASON_CODES = frozenset({
     "pending_e1_operand", "join_ambiguous", "unknown_symbol", "side_row_missing",
-    "index_zero", "no_static_anchor", "not_extracted", "proven_empty",
+    "index_zero", "no_static_anchor", "not_extracted", "proven_empty", "extracted",
 })
 ICON_ASSET_STATUSES = frozenset({"converted", "source_only", "missing", "placeholder"})
 
@@ -33,11 +33,32 @@ BOUND_HEADER_FIELDS = ("magic", "record_count", "field_count", "record_size", "s
 BOUND_SOURCE_FIELDS = ("member", "effective_archive", "patch_chain")
 
 # status -> (value must be null?, blocking?, set-valued-only?) — the readiness state machine (design B3).
+# `available` additionally requires a PRESENT value and `verified_empty` an actually-EMPTY collection;
+# both are enforced by the loader (E0R.1 T5.2) since neither is expressible as a null/set-valued flag.
 READINESS_INVARIANTS = {
     "available": (False, False, False), "verified_empty": (False, False, True),
     "not_applicable": (True, False, False), "unavailable": (True, True, False),
     "ambiguous": (True, True, False),
 }
+
+# reason_code -> the statuses it may accompany (E0R.1 T5.2). A reason is a CLAIM about WHY a field sits
+# in its status; an incompatible pair (`proven_empty` on an `unavailable` field, `not_extracted` on a
+# `verified_empty` one) is a self-contradicting record, not a nuance, and fails closed at load.
+READINESS_REASON_COMPATIBILITY = {
+    "extracted": frozenset({"available"}),                 # the value was read from a proven source
+    "proven_empty": frozenset({"verified_empty"}),         # emptiness itself is the proven fact
+    "not_extracted": frozenset({"unavailable"}),           # never read — says nothing about emptiness
+    "pending_e1_operand": frozenset({"unavailable"}),      # the operand model does not exist yet
+    "no_static_anchor": frozenset({"unavailable"}),        # observed, but not statically authorized
+    "side_row_missing": frozenset({"unavailable"}),        # nonzero FK with no side row (recoverable)
+    "unknown_symbol": frozenset({"unavailable", "ambiguous"}),  # unreadable, or readable >1 way
+    "join_ambiguous": frozenset({"ambiguous"}),            # >1 candidate join survives adjudication
+    "index_zero": frozenset({"not_applicable"}),           # FK 0 == "no reference", not "missing"
+}
+
+# Fields whose null value MUST be explained by a readiness entry — a silent omission is exactly the
+# ambiguity readiness exists to remove (design B5: the quantitative interlock reads these).
+LOAD_BEARING_FIELDS = ("costs", "cooldown_ms", "gcd_ms")
 # The ONLY manifest keys that may differ between the candidate and the final manifest.
 CANDIDATE_MUTABLE_KEYS = frozenset({"publication_state", "validation", "budget"})
 

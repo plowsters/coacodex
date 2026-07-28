@@ -4,8 +4,15 @@ from coa_meta.mechanics import mechanic_from_raw, MechanicsLoadError, MECHANICS_
 
 
 def _rec(**over):
-    base = {"schema_version": "coa-mechanics-v2", "spell_id": 5, "name": "X", "kind": "ability"}
+    # E0R.1 T5.2: every null load-bearing field carries an explicit readiness entry; each test then
+    # varies exactly one field/readiness pair.
+    base = {"schema_version": "coa-mechanics-v2", "spell_id": 5, "name": "X", "kind": "ability",
+            "field_readiness": {f: {"status": "unavailable", "reason_code": "pending_e1_operand"}
+                                for f in ("costs", "cooldown_ms", "gcd_ms")}}
+    fr = dict(base["field_readiness"])
+    fr.update(over.pop("field_readiness", {}))
     base.update(over)
+    base["field_readiness"] = fr
     return base
 
 
@@ -29,10 +36,10 @@ def test_verified_empty_costs_survives():
 
 
 def test_contradictory_readiness_is_rejected():
-    # verified_empty must carry a (possibly empty) set-valued value; costs=None contradicts it.
+    # verified_empty must carry an EMPTY set-valued value; costs=None contradicts it.
     with pytest.raises(MechanicsLoadError, match="readiness invariant"):
         mechanic_from_raw(_rec(costs=None, field_readiness={"costs": {"status": "verified_empty",
-                          "reason_code": "not_extracted"}}))
+                          "reason_code": "proven_empty"}}))
 
 
 def test_bad_status_or_reason_code_is_rejected():
@@ -42,11 +49,15 @@ def test_bad_status_or_reason_code_is_rejected():
         mechanic_from_raw(_rec(field_readiness={"costs": {"status": "unavailable", "reason_code": "made_up"}}))
 
 
-def test_field_readiness_is_optional():
-    # a record with no field_readiness is valid (defaults to {}); costs defaults to null.
-    r = mechanic_from_raw(_rec())
-    assert r.field_readiness == {}
-    assert r.costs is None
+def test_field_readiness_is_required_only_for_null_load_bearing_fields():
+    # E0R.1 T5.2: a record may omit field_readiness entirely ONLY when no load-bearing field is null;
+    # a null costs/cooldown_ms/gcd_ms must explain itself.
+    r = mechanic_from_raw({"schema_version": "coa-mechanics-v2", "spell_id": 5, "name": "X",
+                           "kind": "ability", "costs": {"mana": 30}, "cooldown_ms": 0, "gcd_ms": 1500})
+    assert r.field_readiness == {} and r.costs == {"mana": 30}
+    with pytest.raises(MechanicsLoadError, match="requires a readiness"):
+        mechanic_from_raw({"schema_version": "coa-mechanics-v2", "spell_id": 5, "name": "X",
+                           "kind": "ability"})
 
 
 def test_v1_is_rejected():
