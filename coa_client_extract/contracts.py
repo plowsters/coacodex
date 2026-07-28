@@ -8,6 +8,49 @@ producer/validator without cycles.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+# === the closed OBSERVATION vocabularies (E0R.2 T0.1) ===
+# Distinct from READINESS_* below: an observation state/reason describes ONE decoded cell, a readiness
+# status describes a consumer-facing field. Conflating them is how an earlier draft of this milestone
+# proposed `unknown_symbol` (a readiness reason) as a decoded_reason while MISSING `not_applicable`,
+# which spell_proof emits positionally for every index-zero join.
+#
+# The wire codes live in data/observation_wire_schema.json so BOTH languages read one trusted file
+# rather than Python owning constants Node has to mirror. The file is IMMUTABLE: T6.2 serializes these
+# integers, so a new vocabulary entry means a new coa-observation-wire-vN document referenced by a new
+# generation-contract revision — never an edit, which would break the hash published contracts pin.
+_WIRE_SCHEMA_PATH = Path(__file__).resolve().parent / "data" / "observation_wire_schema.json"
+_WIRE_SCHEMA_CACHE: dict | None = None
+
+
+def load_observation_wire_schema() -> dict:
+    """The shared observation wire schema (vocabularies + integer codes). Cached: it is a frozen data
+    file consulted per cell during compaction."""
+    global _WIRE_SCHEMA_CACHE
+    if _WIRE_SCHEMA_CACHE is None:
+        doc = json.loads(_WIRE_SCHEMA_PATH.read_text(encoding="utf-8"))
+        if doc.get("schema_version") != "coa-observation-wire-v1":
+            raise ValueError(f"observation wire schema bad schema_version {doc.get('schema_version')!r}")
+        _WIRE_SCHEMA_CACHE = doc
+    return _WIRE_SCHEMA_CACHE
+
+
+OBSERVATION_STATES = tuple(sorted(load_observation_wire_schema()["states"]))
+DECODED_REASONS = tuple(sorted(load_observation_wire_schema()["decoded_reasons"]))
+
+
+def observation_state_code(state: str) -> int:
+    """Wire code for an observation state. KeyError (fails closed) for anything out of vocabulary —
+    an uncodeable cell must never round-trip as a default."""
+    return load_observation_wire_schema()["states"][state]
+
+
+def decoded_reason_code(reason: str) -> int:
+    return load_observation_wire_schema()["decoded_reasons"][reason]
+
+
 READINESS_STATUSES = frozenset({"available", "unavailable", "not_applicable", "ambiguous", "verified_empty"})
 READINESS_REASON_CODES = frozenset({
     "pending_e1_operand", "join_ambiguous", "unknown_symbol", "side_row_missing",
