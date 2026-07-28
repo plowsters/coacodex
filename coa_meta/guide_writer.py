@@ -14,7 +14,6 @@ def render_guide_index_html(
     report: MetaReport,
     *,
     entries_path: Path | str,
-    db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
     icon_catalog: dict | None = None,
@@ -22,7 +21,6 @@ def render_guide_index_html(
     site = build_guide_site(
         report,
         entries_path=entries_path,
-        db_tooltips_path=db_tooltips_path,
         asset_root=asset_root,
         builder_layout_root=builder_layout_root,
         icon_catalog=icon_catalog,
@@ -35,7 +33,6 @@ def write_guide_site(
     out_dir: Path | str,
     *,
     entries_path: Path | str,
-    db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
     icon_catalog: dict | None = None,
@@ -44,7 +41,6 @@ def write_guide_site(
     site = build_guide_site(
         report,
         entries_path=entries_path,
-        db_tooltips_path=db_tooltips_path,
         asset_root=asset_root,
         builder_layout_root=builder_layout_root,
         icon_catalog=icon_catalog,

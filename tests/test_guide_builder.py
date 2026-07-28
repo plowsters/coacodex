@@ -61,7 +61,6 @@ def test_build_guide_site_creates_index_and_spec_routes():
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=FIXTURES / "guide_db_tooltips.jsonl",
     )
 
     assert site.index_path == "index.html"
@@ -84,7 +83,6 @@ def test_guide_nodes_include_links_tooltips_and_icons():
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=FIXTURES / "guide_db_tooltips.jsonl",
     )
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)

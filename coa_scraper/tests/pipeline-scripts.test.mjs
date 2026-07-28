@@ -13,14 +13,6 @@ import {
   writeJson
 } from "../scripts/lib/artifacts.mjs";
 import {
-  buildEnrichmentRows,
-  extractLinkedIds,
-  fetchTextWithTimeout,
-  mapWithConcurrency,
-  parsePowerPayload,
-  stripTooltipHtml
-} from "../scripts/lib/ascensiondb.mjs";
-import {
   classifySourceCategory,
   deriveAvailability,
   summarizeMetadataTabs
@@ -34,10 +26,8 @@ import { validateNormalizedArtifacts } from "../scripts/validate-normalized.mjs"
 import { writeArtifactManifest } from "../scripts/write-artifact-manifest.mjs";
 import {
   buildMechanicsArtifact,
-  buildCanonicalMechanics,
-  summarizeMechanicsArtifacts
+  buildCanonicalMechanics
 } from "../scripts/build-mechanics-artifacts.mjs";
-import { buildItemRows } from "../scripts/build-item-artifacts.mjs";
 import { normalizeSchoolMask, normalizePowerType } from "../scripts/lib/mechanics-normalize.mjs";
 import { reconcileField, REASON } from "../scripts/lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "../scripts/lib/mechanics-candidates.mjs";
@@ -160,24 +150,6 @@ function enrichedSpellRow(overrides = {}) {
     ...overrides
   };
 }
-
-const SPELL_POWER_FIXTURE = `$WowheadPower.registerSpell(92117, 0, {
-    "name_enus": "Dream Flowers",
-    "icon": "inv_legion_faction_dreamweavers",
-    "tooltip_enus": "<table><tr><td><span class=\\"q\\"><span style=\\"color: #66DDFF;\\">Level 10 Passive</span><br />Your damaging critical strikes spawn a <a href=\\"?spell=561005\\">Dream Flower</a>.</span></td></tr></table><!--?92117:1:1:80-->",
-    "spells_enus": [],
-    "buff_enus": "",
-    "buffspells_enus": []
-});`;
-
-const EMPTY_SPELL_POWER_FIXTURE = `$WowheadPower.registerSpell(804137, 0, {});`;
-
-const ITEM_POWER_FIXTURE = `$WowheadPower.registerItem(23887, 0, {
-    "name_enus": "Schematic: Rocket Boots Xtreme",
-    "quality": 3,
-    "icon": "inv_boots_09",
-    "tooltip_enus": "<table><tr><td><b class=\\"q3\\">Schematic: Rocket Boots Xtreme</b><br />Requires Level 58<br /><span class=\\"q2\\">Use: <a href=\\"?spell=30556\\">Teaches you how to make Rocket Boots Xtreme.</a></span><br /><span class=\\"q3\\"><a href=\\"?item=23824\\">Rocket Boots Xtreme</a></span></td></tr></table>"
-});`;
 
 test("artifact utilities hash, load, and describe files", () => {
   const dir = tempProject();
@@ -412,126 +384,13 @@ test("manifest writer records builder, validation, artifact hashes, and missing 
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_entries.jsonl" && artifact.sha256));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/build-mechanics-artifacts.mjs" && artifact.missing === true));
   assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_mechanics.jsonl" && artifact.missing === true));
-  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_items.jsonl" && artifact.missing === true));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/icon-assets.mjs" && artifact.missing === true));
-  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_spell_records.jsonl" && artifact.missing === true));
-  assert(manifest.artifacts.some(artifact => artifact.path === "dist/coa_db_asset_records.jsonl" && artifact.missing === true));
-  assert(manifest.artifacts.some(artifact => artifact.path === "reports/coa_ascensiondb_cache_summary.json" && artifact.missing === true));
   assert(manifest.scripts.some(artifact => artifact.path === "scripts/lib/capture-options.mjs" && artifact.missing === true));
+  // E0R.1 T5.1: the DB-era inventory (parser/cache modules, item builder, scraped DB records and
+  // enrichment summaries) is gone from the manifest entirely — not merely reported as missing.
+  const inventoried = [...manifest.scripts, ...manifest.artifacts].map(a => a.path).join("\n");
+  assert.doesNotMatch(inventoried, /ascensiondb|coa_db_|coa_items|build-item|enrichment/);
   assert(manifest.artifacts.some(artifact => artifact.missing === true));
-});
-
-test("AscensionDB parser reads spell power payloads", () => {
-  const parsed = parsePowerPayload(SPELL_POWER_FIXTURE, {
-    kind: "spell",
-    id: 92117,
-    url: "https://db.ascension.gg/?spell=92117&power"
-  });
-
-  assert.equal(parsed.kind, "spell");
-  assert.equal(parsed.id, 92117);
-  assert.equal(parsed.status, "matched");
-  assert.equal(parsed.name, "Dream Flowers");
-  assert.equal(parsed.icon, "inv_legion_faction_dreamweavers");
-  assert.equal(parsed.tooltip_level, 10);
-  assert.deepEqual(parsed.linked_spell_ids, [561005]);
-  assert.deepEqual(parsed.linked_item_ids, []);
-  assert.match(parsed.tooltip_text, /Level 10 Passive/);
-  assert.equal(parsed.provenance.url, "https://db.ascension.gg/?spell=92117&power");
-});
-
-test("AscensionDB parser classifies empty spell registrations", () => {
-  const parsed = parsePowerPayload(EMPTY_SPELL_POWER_FIXTURE, {
-    kind: "spell",
-    id: 804137,
-    url: "https://db.ascension.gg/?spell=804137&power"
-  });
-
-  assert.equal(parsed.kind, "spell");
-  assert.equal(parsed.id, 804137);
-  assert.equal(parsed.status, "empty_registration");
-  assert.equal(parsed.name, null);
-  assert.equal(parsed.tooltip_html, "");
-  assert.deepEqual(parsed.linked_spell_ids, []);
-});
-
-test("AscensionDB parser reads item power payloads", () => {
-  const parsed = parsePowerPayload(ITEM_POWER_FIXTURE, {
-    kind: "item",
-    id: 23887,
-    url: "https://db.ascension.gg/?item=23887&power"
-  });
-
-  assert.equal(parsed.kind, "item");
-  assert.equal(parsed.id, 23887);
-  assert.equal(parsed.status, "matched");
-  assert.equal(parsed.name, "Schematic: Rocket Boots Xtreme");
-  assert.equal(parsed.required_level, 58);
-  assert.deepEqual(parsed.linked_spell_ids, [30556]);
-  assert.deepEqual(parsed.linked_item_ids, [23824]);
-});
-
-test("tooltip utilities strip HTML and extract linked ids", () => {
-  const html = `<span>Requires Level 20</span><a href="?spell=100">Spell</a><a href="?item=200">Item</a>`;
-
-  assert.equal(stripTooltipHtml(html), "Requires Level 20 Spell Item");
-  assert.deepEqual(extractLinkedIds(html, "spell"), [100]);
-  assert.deepEqual(extractLinkedIds(html, "item"), [200]);
-});
-
-test("DB enrichment rows use fetch results and classify name differences", async () => {
-  const entries = [
-    validNode({ entry_id: 1, spell_id: 92117, name: "Dream Flowers" }),
-    validNode({ entry_id: 2, spell_id: 804137, name: "Headhunter's Spear" })
-  ];
-  const responses = new Map([
-    [92117, SPELL_POWER_FIXTURE],
-    [804137, EMPTY_SPELL_POWER_FIXTURE]
-  ]);
-  const fetchPower = async ({ id }) => responses.get(id);
-
-  const rows = await buildEnrichmentRows({
-    entries,
-    kind: "spell",
-    fetchPower,
-    fetchedAt: "2026-07-04T00:00:00.000Z"
-  });
-
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0].status, "matched");
-  assert.equal(rows[0].name_match, true);
-  assert.equal(rows[1].status, "empty_registration");
-  assert.equal(rows[1].name_match, false);
-});
-
-test("DB enrichment utilities bound concurrency and preserve order", async () => {
-  let active = 0;
-  let maxActive = 0;
-  const results = await mapWithConcurrency([1, 2, 3, 4], 2, async value => {
-    active++;
-    maxActive = Math.max(maxActive, active);
-    await new Promise(resolve => setTimeout(resolve, 5));
-    active--;
-    return value * 10;
-  });
-
-  assert.deepEqual(results, [10, 20, 30, 40]);
-  assert.equal(maxActive, 2);
-});
-
-test("DB enrichment fetches time out slow requests", async () => {
-  const fetchImpl = async (_url, { signal }) => new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => {
-      const error = new Error("aborted");
-      error.name = "AbortError";
-      reject(error);
-    });
-  });
-
-  await assert.rejects(
-    () => fetchTextWithTimeout("https://example.test/slow", { fetchImpl, timeoutMs: 1 }),
-    /Timed out after 1ms/
-  );
 });
 
 test("source category distinguishes spec tree, class pool, and unknown nodes", () => {
@@ -596,16 +455,7 @@ test("mechanics artifact builder emits client-derived spell mechanics (no Ascens
     mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
-  const itemPayload = parsePowerPayload(ITEM_POWER_FIXTURE, {
-    kind: "item",
-    id: 23887,
-    url: "https://db.ascension.gg/?item=23887&power",
-    fetchedAt: "2026-07-05T00:00:00.000Z"
-  });
-
   const mechanicsRows = buildCanonicalMechanics({ entries: [entry], spellRows: [], projection });
-  const itemRows = buildItemRows({ itemPayloadRows: [itemPayload] });
-  const summary = summarizeMechanicsArtifacts({ mechanicsRows, itemRows });
 
   assert.equal(mechanicsRows[0].schema_version, "coa-mechanics-v2");
   assert.equal(mechanicsRows[0].spell_id, 92117);
@@ -618,14 +468,6 @@ test("mechanics artifact builder emits client-derived spell mechanics (no Ascens
   assert.equal(mechanicsRows[0].gcd_ms, null);
   assert.equal(mechanicsRows[0].costs, null);
   assert(!mechanicsRows[0].provenance.some((p) => p.source === "ascension_db"));
-  // the item pipeline (parser + buildItemRows) is untouched by the mechanics DB removal
-  assert.equal(itemRows[0].schema_version, "coa-item-v1");
-  assert.equal(itemRows[0].item_id, 23887);
-  assert.equal(itemRows[0].required_level, 58);
-  assert.equal(itemRows[0].icon, "inv_boots_09");
-  assert.deepEqual(itemRows[0].linked_spell_ids, [30556]);
-  assert.equal(summary.mechanics_count, 1);
-  assert.equal(summary.item_count, 1);
 });
 
 test("source level report summarizes metadata tabs and level quality", async () => {

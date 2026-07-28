@@ -2,10 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-// E0R AscensionDB sunset: the db.ascension.gg icon URL templates are removed. With no default templates,
+// E0R AscensionDB sunset: the remote icon URL templates are removed. With no default templates,
 // resolveIconAsset yields a placeholder/missing record unless a caller explicitly injects templates (the
-// opt-in image-download utility, download-spell-icons.mjs, carries its own). No canonical build emits a
-// db.ascension.gg URL.
+// opt-in, --authorize-gated image downloader carries its own). No canonical build emits a remote DB URL.
 export const DEFAULT_ICON_URL_TEMPLATES = [];
 
 export function sanitizeIconToken(iconToken) {

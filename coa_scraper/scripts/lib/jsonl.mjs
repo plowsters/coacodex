@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// Generic JSONL/name helpers, deliberately independent of the (retired) AscensionDB integration so a
-// canonical mechanics build has no import path back to db.ascension.gg. Formerly lived in ascensiondb.mjs.
+// Generic JSONL/name helpers, deliberately independent of the (retired, E0R.1-deleted) AscensionDB
+// integration so a canonical mechanics build has no import path back to the remote DB.
 
 export function readJsonl(filePath) {
   if (!fs.existsSync(filePath)) return [];

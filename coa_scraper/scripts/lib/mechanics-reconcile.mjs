@@ -1,8 +1,8 @@
 import { isPresent } from "./mechanics-normalize.mjs";
 import { normalizeName } from "./jsonl.mjs";
 
-// AscensionDB (db.ascension.gg) has been removed as a canonical reconciliation source (E0R). The tiers
-// are now client DBC, the verified Builder, and last-resort inference — no `ascension_db`.
+// AscensionDB has been removed as a canonical reconciliation source (E0R). The tiers are now client
+// DBC, the verified Builder, and last-resort inference — no `ascension_db`.
 export const TIERS = Object.freeze(["client_dbc", "verified_builder", "inferred"]);
 
 export const REASON = Object.freeze({

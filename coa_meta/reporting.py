@@ -919,7 +919,6 @@ def render_html_report(
     report: MetaReport,
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
-    db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
     icon_catalog: dict | None = None,
 ) -> str:
@@ -929,8 +928,7 @@ def render_html_report(
         return render_guide_index_html(
             report,
             entries_path=entries_path,
-            db_tooltips_path=db_tooltips_path,
-            asset_root=getattr(asset_resolver, "asset_root", None),
+                asset_root=getattr(asset_resolver, "asset_root", None),
             builder_layout_root=builder_layout_root,
             icon_catalog=icon_catalog,
         )
@@ -1103,7 +1101,6 @@ def write_report_outputs(
     formats: tuple[str, ...] = ("json", "md", "html"),
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
-    db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
     icon_catalog: dict | None = None,
     write_backend_trust: bool = False,
@@ -1128,7 +1125,6 @@ def write_report_outputs(
                         report,
                         output_dir,
                         entries_path=entries_path,
-                        db_tooltips_path=db_tooltips_path,
                         asset_root=getattr(asset_resolver, "asset_root", None),
                         builder_layout_root=builder_layout_root,
                         icon_catalog=icon_catalog,

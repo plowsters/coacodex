@@ -15,7 +15,7 @@ from .guide_models import (
     GuideSpec,
 )
 from .guide_tree import build_guide_tree, build_guide_tree_panel
-from .guide_tooltips import build_node_tooltip, load_db_tooltip_rows
+from .guide_tooltips import build_node_tooltip
 from .leveling_path import build_leveling_path
 from .reporting import MetaReport, slugify_key
 from .repository import TalentRepository
@@ -54,14 +54,12 @@ def build_guide_site(
     report: MetaReport,
     *,
     entries_path: Path | str,
-    db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
     icon_catalog: dict | None = None,
 ) -> GuideSite:
     data = report.to_dict()
     repository = TalentRepository.from_entries(entries_path)
-    db_rows = load_db_tooltip_rows(db_tooltips_path)
     builder_layouts = load_builder_tree_layouts(builder_layout_root) if builder_layout_root else None
     assets = GuideAssetCatalog(icon_catalog=icon_catalog, asset_root=asset_root)
     tooltips = {}
@@ -78,7 +76,7 @@ def build_guide_site(
         ]
         guide_nodes = []
         for node in sorted(relevant_nodes, key=lambda item: (item.tab_name != "Class", item.row, item.col, item.name)):
-            tooltip = build_node_tooltip(node, db_rows)
+            tooltip = build_node_tooltip(node)
             tooltips[tooltip.tooltip_id] = tooltip
             # Client-native: icons resolve ONLY from the client icon catalog by spell_id (no DB icon name,
             # no cached DB asset path).

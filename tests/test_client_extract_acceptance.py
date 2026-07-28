@@ -197,7 +197,7 @@ def test_805775_client_wins_and_db_gate_matches_observed(client_mechanics_dir):
                if l.strip() and json.loads(l).get("id") == 805775), None)
     assert db is not None, "805775 must be present in coa_db_spell_tooltips.jsonl to exercise the identity gate"
 
-    # EXACT port of Node's normalizeName (lib/ascensiondb.mjs): lowercase, non-alphanumeric runs → single
+    # EXACT port of Node's normalizeName (lib/jsonl.mjs): lowercase, non-alphanumeric runs → single
     # space, trim. Must match byte-for-byte or the test could assert the wrong gate branch.
     def norm(s): return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
     if norm(db.get("name")) != norm("Adrenal Venom"):

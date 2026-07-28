@@ -463,7 +463,7 @@ def _action_icon(action: CatalogAction | None) -> str | None:
 
 
 def _db_url(action: CatalogAction | None, apl_action: APLAction | None) -> None:
-    # E0R AscensionDB sunset: rotation actions no longer link out to db.ascension.gg.
+    # E0R AscensionDB sunset: rotation actions no longer link out to the remote DB.
     return None
 
 

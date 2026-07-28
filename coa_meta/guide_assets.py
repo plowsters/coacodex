@@ -9,7 +9,7 @@ class GuideAssetCatalog:
     """Resolves spell icons ONLY from the client-native coa-client-spell-icons-v1 catalog (keyed by
     spell_id). A `converted` row — a client BLP converted to a browser-renderable bundle asset — renders
     that asset (`source="client_icon"`); a `source_only`/`missing`/absent row renders a placeholder. It
-    NEVER constructs a db.ascension.gg URL and NEVER falls through to a generic asset_root search that
+    NEVER constructs a remote DB URL and NEVER falls through to a generic asset_root search that
     could resurrect a cached AscensionDB image (E0R AscensionDB sunset)."""
 
     def __init__(self, icon_catalog: dict | None = None, asset_root: Path | str | None = None):

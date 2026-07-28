@@ -220,19 +220,6 @@ function recordConfidence(fp) {
   return anyClient ? "medium" : "low";
 }
 
-export function summarizeMechanicsArtifacts({ mechanicsRows, itemRows }) {
-  const kinds = countBy(mechanicsRows, row => row.kind);
-  const confidence = countBy(mechanicsRows, row => row.confidence);
-  return {
-    schema_version: "coa-mechanics-artifact-summary-v1",
-    generated_at: new Date().toISOString(),
-    mechanics_count: mechanicsRows.length,
-    item_count: itemRows.length,
-    mechanic_kind_counts: kinds,
-    mechanic_confidence_counts: confidence
-  };
-}
-
 function inferEffects({ entry, tooltipText, spellRow, schools = [], durationMs = null }) {
   const tags = entry?.tags || [];
   const school = schools.length === 1 ? schools[0] : (schools.length ? "" : inferSchool(tooltipText));
@@ -322,26 +309,9 @@ function inferSchool(text) {
   return match ? match[1].toLowerCase() : "";
 }
 
-export function sourceUrls(row) {
-  const urls = [
-    row?.source_url,
-    row?.provenance?.url,
-    ...(Array.isArray(row?.source_urls) ? row.source_urls : [])
-  ].filter(Boolean);
-  return [...new Set(urls)];
-}
-
 export function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function countBy(rows, keyFn) {
-  return rows.reduce((acc, row) => {
-    const key = keyFn(row) || "unknown";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
 }
 
 function sha256File(p) { return crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex"); }
