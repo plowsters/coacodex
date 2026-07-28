@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -121,7 +122,6 @@ def regenerate(
     # `coa_attribution.is_coa` is NEVER the `spell_id >= 100000` id floor (that is `id_range` provenance
     # only — it tags ~139k enemy/NPC/aura/dev spells and would distort the projection, closure, coverage).
     # --- advancement pipeline: read the CoA advancement graph, attribute spells, and prove parity ---
-    import hashlib
     from .class_types import resolve_class_types, resolve_tab_types, assert_playable_cardinality
     from .advancement import read_advancement, validate_semantics
     from .attribution import attribute, derive_coa_skill_lines, build_skill_line_index
@@ -503,7 +503,6 @@ def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mecha
 
     A record OF a clean run — never part of the commit it attests to.
     """
-    import hashlib
 
     from .publish import ResolveError, resolve_active_generation
 

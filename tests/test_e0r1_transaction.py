@@ -146,3 +146,27 @@ def test_abort_releases_the_publish_lock(tmp_path):
     t.start()
     assert done.wait(10), "publish lock leaked by the aborted publisher"
     assert resolve_active_generation(tmp_path)["generation_id"] == gw_b.generation_id
+
+
+def test_parity_report_is_written_on_a_successful_regenerate(tmp_path):
+    """E0R.1 T6.3 regression: `_write_parity_report` hashes five DBC members + the builder entries, and
+    the ONLY prior coverage fed it malformed JSON — which raises before reaching those lines. A real
+    regenerate with VALID builder entries therefore hit `NameError: name 'hashlib' is not defined` after
+    an hour of extraction, aborting the publication (correctly, but only at the very last gate)."""
+    client_root = _client(tmp_path)
+    out = tmp_path / "out"
+    entries = tmp_path / "coa_entries.jsonl"
+    entries.write_text(json.dumps({
+        "schema_version": "coa-normalized-v1", "build_slug": "voljin-alpha", "entry_id": 1,
+        "spell_id": 805775, "name": "Adrenal Venom", "class_name": "Venomancer", "tab_name": "Stalking",
+    }) + "\n", encoding="utf-8")
+
+    manifest = _regenerate(client_root, out, tmp_path, builder_entries_path=str(entries))
+
+    assert manifest["publication_state"] == "published"
+    report = json.loads((out / "coa_builder_parity_report.json").read_text(encoding="utf-8"))
+    pins = report["provenance"]
+    assert len(pins["source_dbc_sha256"]) == 5                       # every hashed member is present
+    assert all(len(v) == 64 for v in pins["source_dbc_sha256"].values())
+    assert len(pins["builder_entries_sha256"]) == 64
+    assert pins["builder_record_count"] == 1
