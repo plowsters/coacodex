@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -169,3 +170,39 @@ def test_summary_round_trips_to_disk(tmp_path):
                                        build_mechanics=_build_mechanics(), out=out)
     assert json.loads(out.read_text(encoding="utf-8")) == summary
     assert summary["schema_version"] == "coa-e0r-acceptance-summary-v2"
+
+
+def test_the_measured_build_runs_in_the_scraper_dir_with_an_absolute_pointer(tmp_path, monkeypatch):
+    """T6.3 regression: `run_measured_build_mechanics` spawns the build with cwd=<scraper dir>, so a
+    pointer path that was relative to the CALLER's cwd (e.g. `reports/client_extract/...`) resolved
+    against the wrong directory and the canonical build exited 2 — the acceptance run failed for a
+    path-resolution reason, not a contract one."""
+    from coa_client_extract.cli import run_measured_build_mechanics
+
+    captured = {}
+
+    class _Proc:
+        returncode, stdout, stderr = 0, "", ""
+
+    def fake_run(cmd, cwd=None, env=None, capture_output=None, text=None):
+        captured["cmd"] = cmd
+        captured["cwd"] = cwd
+        return _Proc()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    scraper = tmp_path / "coa_scraper"
+    scraper.mkdir()
+    monkeypatch.chdir(tmp_path)
+    pointer = tmp_path / "reports" / "client_extract" / "coa_client_extract.pointer.json"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text("{}", encoding="utf-8")
+
+    run_measured_build_mechanics(Path("coa_scraper"),
+                                 Path("reports/client_extract/coa_client_extract.pointer.json"),
+                                 builder_entries=Path("dist/coa_entries.jsonl"), out_dir=Path("dist"))
+
+    flag = captured["cmd"].index("--client-extract-pointer")
+    assert Path(captured["cmd"][flag + 1]).is_absolute(), captured["cmd"][flag + 1]
+    assert Path(captured["cmd"][flag + 1]) == pointer.resolve()
+    # the scraper-relative inputs stay relative — they are resolved against the subprocess cwd
+    assert "dist/coa_entries.jsonl" in captured["cmd"]

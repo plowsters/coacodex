@@ -61,6 +61,10 @@ reports/client_extract/coa_client_extract_manifest.json
 coa_scraper/dist/coa_client_extract_manifest.json
 reports/client_extract/coa_spell_mechanics_recon.json
 coa_scraper/dist/coa_spell_mechanics_recon.json
+# The Builder parity report embeds client node samples (ids/names) — client-derived, never committed.
+# Its provenance pins + verdict ride in the tracked coa_e0r_acceptance_summary.json instead.
+reports/client_extract/coa_builder_parity_report.json
+coa_scraper/dist/coa_builder_parity_report.json
 
 # M1.14D client-derived WoW constants — regenerate from your own client (never committed).
 # The tracked reports/client_extract/wow_class_axis_adjudication.json is NOT ignored.

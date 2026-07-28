@@ -579,6 +579,10 @@ def run_measured_build_mechanics(scraper_dir: Path, pointer_path: Path, *, build
     import time
 
     scraper_dir = Path(scraper_dir)
+    # The build runs with cwd=<scraper dir>, so the pointer — which the caller names relative to ITS OWN
+    # cwd (e.g. reports/client_extract/...) — must be absolute or it resolves against the wrong directory
+    # and the canonical build exits 2. `builder_entries`/`out_dir` are deliberately scraper-relative.
+    pointer_path = Path(pointer_path).resolve()
     cmd = [node, "--import", "./scripts/network-trap.mjs", "scripts/build-mechanics-artifacts.mjs",
            "--builder-entries", str(builder_entries),
            "--client-extract-pointer", str(pointer_path),
