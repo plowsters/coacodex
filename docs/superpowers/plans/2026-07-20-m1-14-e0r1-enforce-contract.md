@@ -23,7 +23,7 @@
 | T5.4 | done | `5e60513` (no self-granted heuristics; explicit `blocked` sections; `--allow-heuristic`) |
 | T6.1 | done | `0911dc0` (branch-push CI; `tests/__init__.py` fixes bare-`pytest` collection) |
 | T6.2 | done | `0fe1758` (binding acceptance writer + runnable network trap; stale E0 tests retired) |
-| **T6.3** | **in progress** | re-bind `d549ac9` + parity fix `bfa7364` landed; recon **verified**; regenerate rerunning |
+| T6.3 | done | `2846990` — acceptance recorded, pushed, draft PR [#1](https://github.com/plowsters/coacodex/pull/1) open; **CI green required before any merge; do NOT merge** |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Client-tier debt CLEARED: the `elapsed_s=600` breach is resolved by T4.3's reviewed 1200s policy ceiling (real-client rerun proves it at T6.3); the two stale `tests/test_e0_client_recon.py` tests were retired at T6.2 with their surviving assertions migrated into `test_e0r_client.py`.
@@ -202,10 +202,19 @@
    defect on a path no synthetic test covered (the only parity test fed it malformed JSON, which
    raises earlier). The transaction behaved correctly: candidate abandoned without a manifest, live
    pointer untouched. Fixed + regression-probed in `bfa7364`.
-5. Regenerate re-run → acceptance-summary (executed, trap-verified) → commit → single push → draft PR.
+5. Regenerate re-run → **published** generation `a9663d1b` (predecessor `682b8c09`): strict V3,
+   validation {python, node}, within budget. `python_elapsed_s = 670.8` — T4.3's reviewed 1200 s
+   ceiling PROVEN by the real run (the old hard-coded 600 s is what breached in W3).
+6. First acceptance-summary refused with exit 5 (`build-mechanics failed exit_code=2`): the runner
+   handed a caller-relative pointer path to a subprocess running in `coa_scraper/`. The refusal was
+   correct — a failed build can never be accepted. Fixed + probed in `2846990`.
+7. Acceptance recorded (`coa-e0r-acceptance-summary-v2`): recon verified + committed inline and
+   hash-bound; build EXECUTED under the trap with **0 network attempts**, pointer_only derived;
+   real coverage 179,774/208,447 resolved icon paths; all 11 children pinned.
+8. Pushed once (`aaf19ac..2846990`); draft PR #1 opened against `main`. **Not merged.**
 
-- [ ] Local gates first: full synthetic suites green in a clean env; stop the launcher; re-run recon (must be `verified` under the E0R.1 state machine + all-four-join adjudication); run the full acceptance (regenerate + measured pointer-only build-mechanics) that COMMITS the recon report + binds it; confirm strict-V3 published + within budget + real coverage.
-- [ ] Commit the recon report + acceptance summary; **push `m1-14-e0r` once**; open a **draft PR** against `main` (this triggers the branch/PR CI). Require the GitHub check **green before any merge**; a follow-up corrective push is allowed ONLY for a remote-environment-only defect. **Do NOT merge** (E1 + merge are separate).
+- [x] Local gates first: full synthetic suites green in a clean env; stop the launcher; re-run recon (must be `verified` under the E0R.1 state machine + all-four-join adjudication); run the full acceptance (regenerate + measured pointer-only build-mechanics) that COMMITS the recon report + binds it; confirm strict-V3 published + within budget + real coverage.
+- [x] Commit the recon report + acceptance summary; **push `m1-14-e0r` once**; open a **draft PR** against `main` (this triggers the branch/PR CI). Require the GitHub check **green before any merge**; a follow-up corrective push is allowed ONLY for a remote-environment-only defect. **Do NOT merge** (E1 + merge are separate).
 
 ---
 
