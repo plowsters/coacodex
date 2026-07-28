@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tempfile
 from datetime import date
@@ -459,40 +460,107 @@ def _load_content_entries(path: Path) -> list[dict]:
     return payload if isinstance(payload, list) else payload.get("data", [])
 
 
-def write_acceptance_summary(dist: Path, manifest: dict, *, recon_status: str, benchmark_env_id: str,
-                             build_mechanics: dict, out: Path | None = None) -> dict:
-    """The schema-stable curated E0R acceptance record: pins the exact client build, generation identity,
-    manifest + policy digests, extractor commit, per-child {sha256, byte_length, records}, the three-part
-    regenerate budget, the canonical (pointer-only) build-mechanics measurement, the benchmark env, and the
-    recon status. A record OF a clean run — never part of the commit it attests to."""
+class AcceptanceError(RuntimeError):
+    """An acceptance record was requested for a run that is not acceptable. E0R.1 T6.2: the summary is a
+    BINDING attestation, so every claim in it must come from a resolved generation, a committed recon
+    report, and an executed build — never from a caller's assertion."""
+
+
+def _normalized_json(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _require_executed_build_mechanics(build_mechanics: dict) -> dict:
+    """The canonical build must have RUN, under the network trap, pointer-only, and succeeded. Each fact is
+    a measurement the acceptance run produced; a caller cannot simply assert them."""
+    if not isinstance(build_mechanics, dict) or build_mechanics.get("executed") is not True:
+        raise AcceptanceError(
+            "build_mechanics must be an executed measurement (executed=True with the command, exit code, "
+            "network-trap result and pointer-only evidence), not a caller-asserted boolean")
+    if build_mechanics.get("exit_code") != 0:
+        raise AcceptanceError(f"build-mechanics failed (exit_code={build_mechanics.get('exit_code')!r})")
+    attempts = build_mechanics.get("network_attempts")
+    if attempts is None or attempts != 0:
+        raise AcceptanceError(f"build-mechanics made {attempts!r} network attempt(s) under the trap; a "
+                              "canonical build must be network-free")
+    if build_mechanics.get("pointer_only") is not True:
+        raise AcceptanceError("build-mechanics was not pointer-only; a canonical build reads ONLY the "
+                              "published generation pointer")
+    return dict(build_mechanics)
+
+
+def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mechanics: dict,
+                             benchmark_env_id: str = "local", out: Path | None = None) -> dict:
+    """The schema-stable curated E0R acceptance record (v2). Every claim is derived, never accepted:
+
+    * the generation is RESOLVED here (strict V3 / published / both-language validation / within budget),
+      so a caller cannot hand in a fabricated manifest or its own publication verdict;
+    * the recon report is read from disk, COMMITTED into the record in normalized form, bound by its
+      sha256, and required to be `verified`;
+    * `pointer_only`, the network-trap result and the runtime measurement come from the EXECUTED
+      build-mechanics run;
+    * icon / readiness / source coverage counts ride along from the authoritative manifest.
+
+    A record OF a clean run — never part of the commit it attests to.
+    """
     import hashlib
+
+    from .publish import ResolveError, resolve_active_generation
+
+    dist = Path(dist)
+    try:
+        resolved = resolve_active_generation(dist)
+    except ResolveError as exc:
+        raise AcceptanceError(f"no acceptable published generation: {exc}") from exc
+    manifest = resolved["manifest"]
+
+    report_path = Path(recon_report_path)
+    if not report_path.is_file():
+        raise AcceptanceError(f"recon report not found: {report_path}")
+    try:
+        recon_report = json.loads(report_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise AcceptanceError(f"recon report is not valid JSON: {exc}") from exc
+    recon_status = recon_report.get("status")
+    if recon_status != "verified":
+        raise AcceptanceError(f"recon status is {recon_status!r}; acceptance requires a verified recon")
+    normalized_report = _normalized_json(recon_report)
+
+    measured = _require_executed_build_mechanics(build_mechanics)
+
     children = {name: {"sha256": meta.get("sha256"), "byte_length": meta.get("byte_length"),
-                       "records": meta.get("records")}
+                       "records": meta.get("records"), "schema_version": meta.get("schema_version")}
                 for name, meta in (manifest.get("children") or {}).items()}
     binding = manifest.get("binding") or {}
-    manifest_sha256 = None
-    pointer = Path(dist) / "coa_client_extract.pointer.json"
-    if pointer.is_file():
-        try:
-            manifest_sha256 = json.loads(pointer.read_text(encoding="utf-8")).get("manifest_sha256")
-        except (ValueError, OSError):
-            manifest_sha256 = None
-    if manifest_sha256 is None:
-        manifest_sha256 = hashlib.sha256(
-            (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        ).hexdigest()
+    pointer = dist / "coa_client_extract.pointer.json"
+    manifest_sha256 = json.loads(pointer.read_text(encoding="utf-8")).get("manifest_sha256")
+
     summary = {
-        "schema_version": "coa-e0r-acceptance-summary-v1",
+        "schema_version": "coa-e0r-acceptance-summary-v2",
         "client_build": manifest.get("client_build"),
         "generation_id": manifest.get("generation_id"),
+        "predecessor_generation_id": manifest.get("predecessor_generation_id"),
+        "manifest_schema_version": manifest.get("schema_version"),
         "manifest_sha256": manifest_sha256,
+        "candidate_trust_sha256": manifest.get("candidate_trust_sha256"),
+        "publication_state": manifest.get("publication_state"),
+        "validation": manifest.get("validation"),
+        "budget": manifest.get("budget"),
         "policy_sha256": binding.get("policy_sha256"),
         "extractor_commit": manifest.get("extractor_commit") or _extractor_commit(),
         "benchmark_env_id": benchmark_env_id,
+        "benchmark_env": manifest.get("benchmark_env"),
         "children": children,
-        "budget": manifest.get("budget"),
+        "coverage": {
+            "icon": manifest.get("icon_coverage") or {},
+            "readiness": manifest.get("readiness_coverage") or {},
+            "source": manifest.get("source_coverage") or {},
+        },
         "recon_status": recon_status,
-        "build_mechanics": build_mechanics,
+        "recon_report_path": str(report_path),
+        "recon_report_sha256": hashlib.sha256(normalized_report.encode("utf-8")).hexdigest(),
+        "recon_report": recon_report,
+        "build_mechanics": measured,
         "generated_at": date.today().isoformat(),
     }
     if out is not None:
@@ -500,20 +568,71 @@ def write_acceptance_summary(dist: Path, manifest: dict, *, recon_status: str, b
     return summary
 
 
-def _parse_gnu_time(text: str) -> dict:
-    """Parse `/usr/bin/time -v` output for elapsed wall time (Elapsed (wall clock)) and peak RSS (Maximum
-    resident set size, KiB on Linux) -> {elapsed_s, peak_rss_mb}."""
-    import re
-    elapsed_s = None
-    peak_rss_mb = None
-    m = re.search(r"Elapsed \(wall clock\) time.*?:\s*([0-9:.]+)", text)
-    if m:
-        parts = [float(p) for p in m.group(1).split(":")]
-        elapsed_s = parts[-1] + (parts[-2] * 60 if len(parts) >= 2 else 0) + (parts[-3] * 3600 if len(parts) >= 3 else 0)
-    m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
-    if m:
-        peak_rss_mb = round(int(m.group(1)) / 1024, 1)
-    return {"elapsed_s": elapsed_s, "peak_rss_mb": peak_rss_mb}
+def run_measured_build_mechanics(scraper_dir: Path, pointer_path: Path, *, builder_entries: Path,
+                                 out_dir: Path, node: str = "node") -> dict:
+    """EXECUTE the canonical, pointer-only build under the runnable network trap and MEASURE it (E0R.1
+    T6.2). Returns the evidence the acceptance summary requires: the exact command, its exit code, the
+    trap's attempt count, the pointer-only derivation (read back out of the emitted mechanics manifest,
+    not from the flags we passed), and the runtime measurement."""
+    import resource
+    import subprocess
+    import tempfile
+    import time
+
+    scraper_dir = Path(scraper_dir)
+    cmd = [node, "--import", "./scripts/network-trap.mjs", "scripts/build-mechanics-artifacts.mjs",
+           "--builder-entries", str(builder_entries),
+           "--client-extract-pointer", str(pointer_path),
+           "--out", str(out_dir)]
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
+        trap_log = Path(handle.name)
+    env = {**os.environ, "COA_NETWORK_TRAP_LOG": str(trap_log)}
+    before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    started = time.monotonic()
+    proc = subprocess.run(cmd, cwd=scraper_dir, env=env, capture_output=True, text=True)
+    elapsed_s = round(time.monotonic() - started, 3)
+    after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+
+    try:
+        trap = json.loads(trap_log.read_text(encoding="utf-8"))
+        network_attempts = int(trap.get("attempts"))
+    except (OSError, ValueError, TypeError):
+        network_attempts = None                      # unproven trap -> the writer refuses
+    finally:
+        trap_log.unlink(missing_ok=True)
+
+    # pointer_only is DERIVED from what the build recorded about its own inputs: a canonical run reads the
+    # projection children out of the resolved generation and names no legacy fixed-path/DB input.
+    pointer_only = None
+    mech_manifest = Path(out_dir)
+    if not mech_manifest.is_absolute():
+        mech_manifest = scraper_dir / mech_manifest
+    mech_manifest = mech_manifest / "coa_mechanics.manifest.json"
+    if proc.returncode == 0 and mech_manifest.is_file():
+        try:
+            emitted = json.loads(mech_manifest.read_text(encoding="utf-8"))
+            inputs = emitted.get("inputs") or {}
+            gen_dir = str(Path(pointer_path).parent)
+            pointer_only = bool(
+                emitted.get("canonical") is True
+                and emitted.get("fallback_authorized") is not True
+                and inputs.get("db_spell_tooltips") in (None, "")
+                and str((inputs.get("projection") or {}).get("path") or "").startswith(gen_dir)
+            )
+        except (OSError, ValueError):
+            pointer_only = None
+
+    return {
+        "executed": True,
+        "command": cmd,
+        "cwd": str(scraper_dir),
+        "exit_code": proc.returncode,
+        "network_attempts": network_attempts,
+        "pointer_only": pointer_only,
+        "elapsed_s": elapsed_s,
+        "peak_rss_mb": round(max(after - before, after) / 1024, 1),
+        "stderr_tail": proc.stderr[-2000:] if proc.stderr else "",
+    }
 
 
 def _icon_member_name(client_path: str) -> str:
@@ -653,10 +772,13 @@ def main(argv: list[str] | None = None) -> int:
 
     acc = sub.add_parser("acceptance-summary", help="write the curated E0R acceptance record from a published generation")
     acc.add_argument("--dist", required=True, type=Path)
-    acc.add_argument("--recon-status", default="verified")
+    acc.add_argument("--recon-report", required=True, type=Path,
+                     help="the mechanics-recon report to COMMIT into the record; must be status=verified")
+    acc.add_argument("--scraper-dir", type=Path, default=Path("coa_scraper"),
+                     help="where the canonical build-mechanics run is executed under the network trap")
+    acc.add_argument("--builder-entries", type=Path, default=Path("dist/coa_entries.jsonl"))
+    acc.add_argument("--mechanics-out", type=Path, default=Path("dist"))
     acc.add_argument("--benchmark-env-id", default="local")
-    acc.add_argument("--build-mechanics-time", default=None,
-                     help="a /usr/bin/time -v capture of the canonical pointer-only build-mechanics run")
     acc.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
 
@@ -706,17 +828,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"mechanics-recon: {status} ({len(report['blocking_findings'])} blocking)", file=sys.stderr)
         return _RECON_EXIT.get(status, 1)
     if args.command == "acceptance-summary":
-        from .publish import resolve_active_generation, ResolveError
+        # The canonical build is EXECUTED here, under the trap, and its measurement is what the record
+        # binds — the command never accepts a caller's word for pointer-only/network-free (T6.2).
+        measured = run_measured_build_mechanics(
+            args.scraper_dir, Path(args.dist) / "coa_client_extract.pointer.json",
+            builder_entries=args.builder_entries, out_dir=args.mechanics_out)
         try:
-            manifest = resolve_active_generation(args.dist)["manifest"]
-        except ResolveError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 3
-        bm = {"pointer_only": True}
-        if args.build_mechanics_time and Path(args.build_mechanics_time).is_file():
-            bm.update(_parse_gnu_time(Path(args.build_mechanics_time).read_text(encoding="utf-8")))
-        write_acceptance_summary(args.dist, manifest, recon_status=args.recon_status,
-                                 benchmark_env_id=args.benchmark_env_id, build_mechanics=bm, out=args.out)
+            write_acceptance_summary(args.dist, recon_report_path=args.recon_report,
+                                     build_mechanics=measured,
+                                     benchmark_env_id=args.benchmark_env_id, out=args.out)
+        except AcceptanceError as exc:
+            print(f"error: acceptance refused: {exc}", file=sys.stderr)
+            return 5
         print(f"acceptance-summary: wrote {args.out}", file=sys.stderr)
         return 0
     return 1

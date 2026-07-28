@@ -5,6 +5,7 @@ bounded (sub-linear) growth as the record count scales. The spell ids are staged
 so the ascending sorted-unique cross-child contract also proves the writer's sort survived streaming."""
 import json
 import resource
+import shutil
 import struct
 import sys
 import tempfile
@@ -52,11 +53,20 @@ def _backend(n: int) -> FakeArchiveBackend:
 
 def main() -> None:
     n = int(sys.argv[1])
+    tmp = Path(tempfile.mkdtemp(prefix=f"t41-{n}-"))
+    try:
+        _probe(n, tmp)
+    finally:
+        # A 100k-row generation is ~300MB; leaking one per run filled /tmp and then produced a FALSE
+        # failure ("Disk quota exceeded") that looked like a memory regression. Always clean up.
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _probe(n: int, tmp: Path) -> None:
     from coa_client_extract.cli import regenerate
     from coa_client_extract.publish import resolve_active_generation
     from tests.test_client_extract_cli import _bound_spell_policy, _client, _synthetic_layouts
 
-    tmp = Path(tempfile.mkdtemp(prefix=f"t41-{n}-"))
     client_root = _client(tmp)
     out = tmp / "out"
     policy = _bound_spell_policy(_backend(n), client_root)

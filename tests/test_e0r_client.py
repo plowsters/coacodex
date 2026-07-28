@@ -29,6 +29,18 @@ def test_real_recon_produces_e0r_report(recon_report):
     assert recon_report["schema_version"] == "coa-spell-mechanics-recon-v1"
 
 
+def test_real_recon_repins_the_reviewed_layout_cells(recon_report):
+    # Migrated from the retired E0-era tests/test_e0_client_recon.py (E0R.1 T6.2): the committed,
+    # client-bound policy re-discovers its anchors at exactly the reviewed cells on the live client, and
+    # the inline-effects topology (no SpellEffect / SpellCooldowns table) still holds.
+    proof = recon_report["layout_proof"]
+    assert proof["power_type"]["discovered_cell"] == 41
+    assert proof["power_type"]["matches_policy"] is True
+    assert proof["school_mask"]["discovered_cell"] == 225
+    assert proof["name"]["discovered_cell"] == 136
+    assert recon_report["blocking_findings"] == []
+
+
 def test_real_recon_power_type_decode_is_withheld(recon_report):
     # power_type is not authorized: no static negative anchor was supplied, so the recon records
     # no_static_anchor and never claims a verified reading (value 7 stays withheld per-value).
