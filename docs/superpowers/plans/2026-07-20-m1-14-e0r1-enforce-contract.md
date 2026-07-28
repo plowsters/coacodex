@@ -17,8 +17,9 @@
 | T4.1 | done | `d83a91f` |
 | T4.2 | done | `9ce7d9e` |
 | T4.3 | done | `c38ebe8` (policy sha 3e76457c→e206fbb8) |
-| **T5.1** | **next** | AscensionDB exact per-file disposition |
-| T5.2–T5.4, T6.1–T6.3 | open | — |
+| T5.1 | done | `c7dc364` (DB runtime deleted; downloader `--authorize` + diagnostic/-only) |
+| **T5.2** | **next** | readiness status/value/reason truth table |
+| T5.3, T5.4, T6.1–T6.3 | open | — |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
@@ -152,7 +153,8 @@
 - `coa_scraper/scripts/download-spell-icons.mjs`: **keep** — the ONLY non-test file that may contain the hostname; require an explicit `--authorize` flag, write only under a `diagnostic/` dir, and it must never be importable by canonical guide generation.
 - `coa_scraper/scripts/README-regeneration.md` (+ any op docs): **rewrite** to the pointer-only client-native pipeline.
 - Test: `tests/test_e0r1_sunset_complete.py`, extend `coa_scraper/tests/no-ascensiondb.test.mjs`.
-- [ ] Probe: no runtime (non-test, non-downloader) file imports `ascensiondb` or contains `db.ascension.gg`; `guide_tooltips` emits neither an `ascension_db` source nor a DB URL; no CLI exposes a DB input; the downloader refuses to run without `--authorize` and only writes under the diagnostic dir. Green + commit.
+- [x] Probe: no runtime (non-test, non-downloader) file imports `ascensiondb` or contains `db.ascension.gg`; `guide_tooltips` emits neither an `ascension_db` source nor a DB URL; no CLI exposes a DB input; the downloader refuses to run without `--authorize` and only writes under the diagnostic dir. Green + commit.
+- Executed (`c7dc364`): all three modules `git rm`'d (with their tests/fixtures and the dead `sourceUrls`/`summarizeMechanicsArtifacts`/`countBy` helpers whose only caller was the item builder); `guide_tooltips` rewritten client-native and `db_tooltips_path` stripped from `guide_builder`/`guide_writer`/`reporting`/`cli`; downloader double-gated (`--authorize` **and** a `diagnostic/`-only `--out`); `README-regeneration.md` rewritten pointer-only; `docs/data/mechanics-schema.md` corrected to the shipped three-tier model; `docs/data/ascensiondb-cache-schema.md` deleted (it documented a removed module); the artifact-manifest inventory regenerated without the DB-era paths.
 
 ### Task 5.2: Complete readiness status/value/reason truth table
 **Files:** Modify `coa_meta/mechanics.py` (`_validate_field_readiness`) and `coa_client_extract/contracts.py` (reason⇔status compatibility map if needed); Test: `tests/test_e0r1_readiness_strict.py`.
