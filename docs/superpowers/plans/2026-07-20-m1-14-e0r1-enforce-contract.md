@@ -23,7 +23,7 @@
 | T5.4 | done | `5e60513` (no self-granted heuristics; explicit `blocked` sections; `--allow-heuristic`) |
 | T6.1 | done | `0911dc0` (branch-push CI; `tests/__init__.py` fixes bare-`pytest` collection) |
 | T6.2 | done | `0fe1758` (binding acceptance writer + runnable network trap; stale E0 tests retired) |
-| **T6.3** | **next** | real-client acceptance → push → draft PR → CI-before-merge (do NOT merge) |
+| **T6.3** | **in progress** | re-bind `d549ac9` + parity fix `bfa7364` landed; recon **verified**; regenerate rerunning |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
 - Client-tier debt CLEARED: the `elapsed_s=600` breach is resolved by T4.3's reviewed 1200s policy ceiling (real-client rerun proves it at T6.3); the two stale `tests/test_e0_client_recon.py` tests were retired at T6.2 with their surviving assertions migrated into `test_e0r_client.py`.
@@ -189,6 +189,21 @@
 - [x] Fix + green + commit (`0fe1758`): schema `coa-e0r-acceptance-summary-v2`; new `run_measured_build_mechanics` + the runnable `coa_scraper/scripts/network-trap.mjs`; `pointer_only` derived from the emitted mechanics manifest. Stale E0-era tests retired (assertions migrated into `test_e0r_client.py`), and the T4.1 RSS probe's ~300MB-per-run temp leak fixed (it had filled /tmp and produced a false failure).
 
 ### Task 6.3: Real-client acceptance, then push → draft PR → CI-before-merge
+
+**Run log (2026-07-28):**
+1. Clean-env bare `pytest` (the exact CI invocation) green; launcher confirmed not running.
+2. First recon → `review_required` (0 blocking): the live install had drifted (Spell.dbc only,
+   `7763bb51`→`c8cd440d`, 208444→208447 records; field_count/record_size unchanged). The
+   client-binding hold working as designed. Mechanical re-bind `d549ac9` (capture identity ONLY —
+   the script asserts the semantic policy view is byte-identical); policy sha `e206fbb8`→`7ef96cec`
+   with the Node lock in lockstep.
+3. Second recon → **`verified`**, real exit code 0.
+4. First real regenerate aborted at the parity gate with `NameError: hashlib` — a genuine T3.4-era
+   defect on a path no synthetic test covered (the only parity test fed it malformed JSON, which
+   raises earlier). The transaction behaved correctly: candidate abandoned without a manifest, live
+   pointer untouched. Fixed + regression-probed in `bfa7364`.
+5. Regenerate re-run → acceptance-summary (executed, trap-verified) → commit → single push → draft PR.
+
 - [ ] Local gates first: full synthetic suites green in a clean env; stop the launcher; re-run recon (must be `verified` under the E0R.1 state machine + all-four-join adjudication); run the full acceptance (regenerate + measured pointer-only build-mechanics) that COMMITS the recon report + binds it; confirm strict-V3 published + within budget + real coverage.
 - [ ] Commit the recon report + acceptance summary; **push `m1-14-e0r` once**; open a **draft PR** against `main` (this triggers the branch/PR CI). Require the GitHub check **green before any merge**; a follow-up corrective push is allowed ONLY for a remote-environment-only defect. **Do NOT merge** (E1 + merge are separate).
 
