@@ -21,11 +21,12 @@
 | T5.2 | done | `9299c80` (reason⇔status map + available/verified_empty value rules + no silent omission) |
 | T5.3 | done | `4d4ac27` (numberOrNull null-safe; `spellRows` removed) |
 | T5.4 | done | `5e60513` (no self-granted heuristics; explicit `blocked` sections; `--allow-heuristic`) |
-| **T6.1** | **next** | real CI + clean-env packaging |
-| T6.2, T6.3 | open | — |
+| T6.1 | done | `0911dc0` (branch-push CI; `tests/__init__.py` fixes bare-`pytest` collection) |
+| T6.2 | done | `0fe1758` (binding acceptance writer + runnable network trap; stale E0 tests retired) |
+| **T6.3** | **next** | real-client acceptance → push → draft PR → CI-before-merge (do NOT merge) |
 
 - Deferred inside T3.1b/T3.3 (documented): deep icon-bundle **tar contents/internal-manifest/hash** verification — no converter emits a `converted` bundle yet, so only the converted→bundle-required guard + id/path agreement are enforced; revisit at the conversion milestone.
-- Known pre-existing client-tier failures (triaged 2026-07-21, none from E0R.1 WS3/WS4 work): real regenerate breaches `elapsed_s=600` (~700s; T4.3's driving evidence); `tests/test_e0_client_recon.py` ×2 are stale E0-era tests superseded by `test_e0r_client.py` (migrate/retire in T6.2/T6.3).
+- Client-tier debt CLEARED: the `elapsed_s=600` breach is resolved by T4.3's reviewed 1200s policy ceiling (real-client rerun proves it at T6.3); the two stale `tests/test_e0_client_recon.py` tests were retired at T6.2 with their surviving assertions migrated into `test_e0r_client.py`.
 
 ## Global Constraints
 
@@ -180,12 +181,12 @@
 
 ### Task 6.1: Real CI + clean-env packaging
 **Files:** Modify `.github/workflows/ci.yml` (trigger on branch push + PR; `python -m pytest` + `npm test`; run the probe tests), `pyproject.toml` (clean-env collection: make `pytest -q` importable — add a `conftest.py`/`rootdir` sys.path shim or package the fixtures); Test: `tests/test_e0r1_clean_env_collect.py` (asserts a clean `pytest -q` collects).
-- [ ] Probe + fix. Green + commit.
+- [x] Probe + fix. Green + commit. Reproduced the live defect in a throwaway venv: bare `pytest` (what CI runs) failed collection with `ModuleNotFoundError: No module named 'tests'`; `tests/__init__.py` fixes it, CI now triggers on every branch push, and the Node→Python round-trips pin PYTHONPATH so `npm run unit-test` passes standalone.
 
 ### Task 6.2: Binding acceptance writer (commits the recon report; executed booleans)
 **Files:** Modify `coa_client_extract/cli.py` (`write_acceptance_summary` + `acceptance-summary` subcommand: take a recon-report PATH, hash it, assert `status=="verified"`; run the network-trap + a real `--client-extract-pointer` build to derive `pointer_only`); Test: `tests/test_e0r1_acceptance_binding.py`.
-- [ ] Probe: the summary **commits the normalized recon report itself** (not only its hash) and binds its hash; asserts the recon `status=="verified"`; reads strict-V3/published/validation/budget from the RESOLVED manifest (rejects a caller-supplied status/pointer_only); records icon/readiness/source **coverage** counts; `pointer_only` + the network-trap result come from **executed commands**, not caller booleans.
-- [ ] Fix + green + commit.
+- [x] Probe: the summary **commits the normalized recon report itself** (not only its hash) and binds its hash; asserts the recon `status=="verified"`; reads strict-V3/published/validation/budget from the RESOLVED manifest (rejects a caller-supplied status/pointer_only); records icon/readiness/source **coverage** counts; `pointer_only` + the network-trap result come from **executed commands**, not caller booleans.
+- [x] Fix + green + commit (`0fe1758`): schema `coa-e0r-acceptance-summary-v2`; new `run_measured_build_mechanics` + the runnable `coa_scraper/scripts/network-trap.mjs`; `pointer_only` derived from the emitted mechanics manifest. Stale E0-era tests retired (assertions migrated into `test_e0r_client.py`), and the T4.1 RSS probe's ~300MB-per-run temp leak fixed (it had filled /tmp and produced a false failure).
 
 ### Task 6.3: Real-client acceptance, then push → draft PR → CI-before-merge
 - [ ] Local gates first: full synthetic suites green in a clean env; stop the launcher; re-run recon (must be `verified` under the E0R.1 state machine + all-four-join adjudication); run the full acceptance (regenerate + measured pointer-only build-mechanics) that COMMITS the recon report + binds it; confirm strict-V3 published + within budget + real coverage.
