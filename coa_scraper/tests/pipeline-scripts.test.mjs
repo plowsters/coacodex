@@ -127,30 +127,6 @@ function writeValidationFixture(dir, nodeOverrides = {}) {
   return { dist, reports };
 }
 
-function enrichedSpellRow(overrides = {}) {
-  return {
-    kind: "spell",
-    id: 92117,
-    entry_id: 123,
-    builder_name: "Test Node",
-    status: "matched",
-    name: "Test Node",
-    name_match: true,
-    icon: "inv_test",
-    tooltip_html: "<span>Level 10 Passive</span>",
-    tooltip_text: "Level 10 Passive",
-    tooltip_level: 10,
-    required_level: 10,
-    linked_spell_ids: [],
-    linked_item_ids: [],
-    provenance: {
-      url: "https://db.ascension.gg/?spell=92117&power",
-      fetched_at: "2026-07-04T00:00:00Z"
-    },
-    ...overrides
-  };
-}
-
 test("artifact utilities hash, load, and describe files", () => {
   const dir = tempProject();
   const file = path.join(dir, "data.json");
@@ -455,7 +431,7 @@ test("mechanics artifact builder emits client-derived spell mechanics (no Ascens
     mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
-  const mechanicsRows = buildCanonicalMechanics({ entries: [entry], spellRows: [], projection });
+  const mechanicsRows = buildCanonicalMechanics({ entries: [entry], projection });
 
   assert.equal(mechanicsRows[0].schema_version, "coa-mechanics-v2");
   assert.equal(mechanicsRows[0].spell_id, 92117);
@@ -642,7 +618,7 @@ test("buildCanonicalMechanics: one row per spell_id, client field wins, schools 
   }];
   const entryA = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const entryB = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
-  const rows = buildCanonicalMechanics({ entries: [entryA, entryB], spellRows: [], projection });
+  const rows = buildCanonicalMechanics({ entries: [entryA, entryB], projection });
   assert.equal(rows.length, 1);
   const r = rows[0];
   assert.equal(r.spell_id, 92117);
@@ -666,8 +642,8 @@ test("buildCanonicalMechanics: output is input-node-order-independent (canonical
   }];
   const a = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const b = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["dot"] };
-  const forward = buildCanonicalMechanics({ entries: [a, b], spellRows: [], projection });
-  const reversed = buildCanonicalMechanics({ entries: [b, a], spellRows: [], projection });
+  const forward = buildCanonicalMechanics({ entries: [a, b], projection });
+  const reversed = buildCanonicalMechanics({ entries: [b, a], projection });
   assert.equal(JSON.stringify(forward), JSON.stringify(reversed));
   assert.deepEqual(forward[0].raw.tags, ["damage", "dot"]); // set-like union, sorted, under raw
 });
@@ -868,7 +844,7 @@ test("buildMechanicsArtifact: absent projection without flag fails closed (write
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mech-"));
   assert.throws(() => buildMechanicsArtifact({
     entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X" }],
-    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: false,
+    projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: false,
   }), /projection/i);
   assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.jsonl")), false);
 });
@@ -877,7 +853,7 @@ test("buildMechanicsArtifact: absent projection + fallback writes degraded, cano
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mech-"));
   const out = buildMechanicsArtifact({
     entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
-    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
+    projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
   });
   assert.equal(out.canonical, false);
   assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
@@ -895,7 +871,7 @@ test("acceptance: manifest binds the EXACT generated projection sha; canonical t
   const projSha = crypto.createHash("sha256").update(fs.readFileSync(proj)).digest("hex");
   const out = buildMechanicsArtifact({
     entries: [{ spell_id: 42, entry_id: 1, entry_type: "Ability", name: "S42", damage_schools: [], resources: [] }],
-    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+    projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
     inputs: { projection_path: proj, projection_manifest_path: man, reconciler_commit: "deadbeef" },
   });
   assert.equal(out.canonical, true);
@@ -915,7 +891,7 @@ test("acceptance: fallback does NOT modify a pre-existing canonical artifact", (
   fs.writeFileSync(canonical, "SENTINEL-CANONICAL\n");
   buildMechanicsArtifact({
     entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
-    spellRows: [], projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
+    projectionPath: "/no.jsonl", manifestPath: "/no.json", outDir: dir, allowFallback: true,
   });
   assert.equal(fs.readFileSync(canonical, "utf8"), "SENTINEL-CANONICAL\n"); // untouched
   assert.equal(fs.existsSync(path.join(dir, "coa_mechanics.fallback.jsonl")), true);
@@ -927,7 +903,7 @@ test("acceptance: a canonical build emits no ascension_db provenance (DB removed
   const { proj, man } = writeProjectionFixture(dir, [rec]);
   buildMechanicsArtifact({
     entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "S7", damage_schools: [], resources: [] }],
-    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+    projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
   });
   const row = JSON.parse(fs.readFileSync(path.join(dir, "coa_mechanics.jsonl"), "utf8").trim());
   assert.equal(row.cooldown_ms ?? null, null);
@@ -947,7 +923,7 @@ test("acceptance: kind_disagreements counts a real Builder kind disagreement (Ab
   const entryB = { spell_id: 100, entry_id: 2, entry_type: "Talent", name: "S100", damage_schools: [], resources: [] };
   const out = buildMechanicsArtifact({
     entries: [entryA, entryB],
-    spellRows: [], projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
+    projectionPath: proj, manifestPath: man, outDir: dir, allowFallback: false,
   });
   assert.equal(out.manifest.counts.kind_disagreements, 1);
 });
@@ -1030,7 +1006,7 @@ test("build via resolved generation pointer produces a canonical mechanics row",
   const resolved = resolveGeneration(dir);
   const out = buildMechanicsArtifact({
     entries: [{ spell_id: 92117, entry_id: 1, entry_type: "Ability", name: "S92117", damage_schools: [], resources: [] }],
-    spellRows: [], projectionPath: resolved.children["coa_client_spell_coa.jsonl"],
+    projectionPath: resolved.children["coa_client_spell_coa.jsonl"],
     manifestPath: resolved.children["coa_client_spell_projection.manifest.json"], outDir: dir, allowFallback: false,
   });
   assert.equal(out.canonical, true);

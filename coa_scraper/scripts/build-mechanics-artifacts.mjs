@@ -31,9 +31,10 @@ const CLIENT_FIELDS = ["cast_time_ms", "duration_ms", "range_yards", "schools", 
 const DB_ONLY_FIELDS = ["cooldown_ms", "gcd_ms", "costs"];
 const KIND_BEHAVIOR_ORDER = { pet_action: 0, cooldown: 1, ability: 2, debuff: 3, passive: 4 };
 
-// Canonical mechanics from the CLIENT projection + the verified Builder only — no AscensionDB. `spellRows`
-// is retained in the signature (kept for callers) but is no longer a reconciliation source.
-export function buildCanonicalMechanics({ entries, spellRows = [], projection = [] }) {
+// Canonical mechanics from the CLIENT projection + the verified Builder only. E0R.1 T5.3 removed the
+// vestigial `spellRows` input: the DB-era scraped rows were retired as a reconciliation source, and an
+// accepted-but-ignored parameter is a standing invitation to smuggle unproven data back in.
+export function buildCanonicalMechanics({ entries, projection = [] }) {
   const clientById = new Map(projection.map((r) => [Number(r.spell_id), r]));
 
   const bySpell = new Map();
@@ -86,7 +87,7 @@ export function buildCanonicalMechanics({ entries, spellRows = [], projection = 
     // plus the tooltip — never one arbitrary node — so output is input-order-independent.
     const mergedTags = [...new Set(nodes.flatMap((n) => n.tags || []))].sort();
     const mergedEntry = { tags: mergedTags, description_text: builderTooltip };
-    const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: null, schools, durationMs: selected.duration_ms ?? null });
+    const effects = inferEffects({ entry: mergedEntry, tooltipText, schools, durationMs: selected.duration_ms ?? null });
     fieldProvenance.effects = effectsProvenance({ effects, tooltip: tooltipMeta });
 
     // power_type is null-honest: the client decode is withheld (T1.3) and the Builder resources inference
@@ -220,11 +221,11 @@ function recordConfidence(fp) {
   return anyClient ? "medium" : "low";
 }
 
-function inferEffects({ entry, tooltipText, spellRow, schools = [], durationMs = null }) {
+function inferEffects({ entry, tooltipText, schools = [], durationMs = null }) {
   const tags = entry?.tags || [];
   const school = schools.length === 1 ? schools[0] : (schools.length ? "" : inferSchool(tooltipText));
-  const resolvedDuration = durationMs ?? numberOrNull(spellRow?.duration_ms) ?? inferDurationMs(tooltipText);
-  const periodMs = numberOrNull(spellRow?.period_ms);
+  const resolvedDuration = durationMs ?? inferDurationMs(tooltipText);
+  const periodMs = null;                       // no per-spell tick source survives; E1 supplies it
   const amount = inferAmount(tooltipText);
   if (tags.includes("heal") || /\bheal/i.test(tooltipText)) {
     return [
@@ -309,7 +310,13 @@ function inferSchool(text) {
   return match ? match[1].toLowerCase() : "";
 }
 
+// E0R.1 T5.3: unknown stays unknown. `Number(null)`/`Number("")`/`Number([])` are all 0 in JS, so a
+// bare Number() coercion silently turns a missing value into a REAL zero — the exact missing-is-default
+// defect this milestone exists to remove. Only an actual number (or a numeric string) converts.
 export function numberOrNull(value) {
+  if (value === null || value === undefined || typeof value === "boolean") return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -359,20 +366,20 @@ function gitHeadCommit() {
   }
 }
 
-export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {}, policyPath = null }) {
+export function buildMechanicsArtifact({ entries, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {}, policyPath = null }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
   const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds, policyPath });
 
   if (loaded.absent) {
     if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
-    const rows = buildCanonicalMechanics({ entries, spellRows, projection: [] });
+    const rows = buildCanonicalMechanics({ entries, projection: [] });
     // A degraded build writes ONLY the coa_mechanics.fallback.* files. It NEVER writes the canonical
     // filename — MechanicsRepository reads the JSONL directly and would ingest degraded bytes as
     // canonical regardless of a canonical:false marker. There is no override.
     return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
   }
 
-  const rows = buildCanonicalMechanics({ entries, spellRows, projection: loaded.projection });
+  const rows = buildCanonicalMechanics({ entries, projection: loaded.projection });
   return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
 }
 
@@ -473,7 +480,7 @@ if (isCliEntryPoint()) {
   const entries = readJsonl(entriesPath);
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
-      entries, spellRows: [], projectionPath, manifestPath: projManifestPath, outDir,
+      entries, projectionPath, manifestPath: projManifestPath, outDir,
       allowFallback, policyPath,
       inputs: {
         builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },

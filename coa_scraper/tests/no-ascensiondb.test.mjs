@@ -59,7 +59,6 @@ test("canonical build makes NO network request and emits no ascension_db provena
   try {
     const rows = buildCanonicalMechanics({
       entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
-      spellRows: [],
       projection: [{ spell_id: 1, name: "X", mechanics: {}, raw: {}, coa_attribution: { is_coa: true } }],
     });
     const blob = JSON.stringify(rows);
