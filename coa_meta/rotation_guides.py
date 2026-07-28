@@ -254,6 +254,7 @@ def _empty_result(candidate_id: str) -> RotationSimulationResult:
 
     return RotationSimulationResult(
         source=candidate_id,
+        source_kind="unavailable",       # no simulation ran at all
         duration_ms=0,
         events=tuple(),
         resources={},

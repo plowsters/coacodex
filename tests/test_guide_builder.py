@@ -199,6 +199,7 @@ def test_guide_build_cards_include_simulated_rotation_guide_when_available():
             simulate_rotations=True,
             rotation_duration_ms=10_000,
             rotation_candidates=8,
+            allow_heuristic=True,     # E0R.1 T5.4: estimates are opt-in; without it the card is blocked
         )
     ).run()
     site = build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl")

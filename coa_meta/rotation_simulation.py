@@ -47,6 +47,10 @@ class ActionUsage:
 @dataclass(frozen=True)
 class RotationSimulationResult:
     source: str
+    # E0R.1 T5.4: how this result was produced. "verified" = every action carried proven load-bearing
+    # data; "heuristic" = the caller explicitly authorized invented estimates. A consumer never has to
+    # infer which it is holding.
+    source_kind: str
     duration_ms: int
     events: tuple[RotationEvent, ...]
     resources: dict[str, float]
@@ -81,9 +85,12 @@ def simulate_apl(
     config: RotationSimulationConfig,
 ) -> RotationSimulationResult:
     # Fail closed before running a single quantitative tick unless heuristic estimates are explicitly
-    # authorized — a null gcd/cooldown/costs must never be silently defaulted (design B5).
+    # authorized — a null gcd/cooldown/costs must never be silently defaulted (design B5). Authorization
+    # is a caller decision, never self-granted from the data being missing (E0R.1 T5.4).
+    readiness = action_catalog.quantitative_readiness
     if not config.allow_heuristic:
         action_catalog.assert_quantitative_ready()
+    source_kind = "verified" if readiness["ready"] else "heuristic"
     state = _MutableState(
         time_ms=0,
         resources=dict(config.initial_resources),
@@ -163,8 +170,11 @@ def simulate_apl(
         for key, times in usage.items()
     }
 
+    if source_kind == "heuristic":
+        state.warnings.insert(0, "quantitative_heuristic_authorized")
     return RotationSimulationResult(
         source=config.source,
+        source_kind=source_kind,
         duration_ms=config.duration_ms,
         events=tuple(events),
         resources=dict(state.resources),
