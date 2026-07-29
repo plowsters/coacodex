@@ -98,7 +98,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T7.2 Documentation + ROADMAP corrections | **done** | `219e118` — M1.8/M1.10B/M1.11D marked superseded; the four forward-looking DB promises rewritten to the client-native reality; mechanics-schema.md now declares v2 (its own E0R section already said the loader rejects v1) and drops the `raw` audit trio + `linked_item_ids` no producer emits; the E0R.1 T6.2 coverage overclaim annotated in place and pointed at T4.1/T4.3; both guide-honesty items landed as real M1.16 entries; 1078 Py + 339 Node |
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | **done** | recon `verified` 0 blocking (3m19s, no baseline drift); regenerate published `069a9b18` under e0r-v3 (15m41s); acceptance exit 0 with the canonical build at 0 network attempts, pointer_only, 2.05s / 182.5 MB peak. **Found + fixed a real defect** (`08680d5`): a decoded-but-EMPTY icon path — 23,657 rows — was emitted as an unexplained null; 1088 Py + 343 Node |
 | T8.2 Headroom gate committed with the record | **done** | `61fbc6d` — 312,827,065 / 536,870,912 = **58.27%** of ceiling (was 97.42%); the gate pins the denominator so raising the ceiling cannot satisfy it; recon report NOT force-added (gitignored transactional output, embedded verbatim in the record) |
-| T8.3 Push, PR update, CI green | pending | |
+| T8.3 Push, PR update, CI green | **done** | pushed `2846990..fe12180`; PR #1 retitled and given the E0R.2 section; **both CI runs green** (push + pull_request) on `fe12180`. CI caught two T0.2 tests reading a gitignored `gen-*/manifest.json` — green locally forever, never once run in CI; repointed at the committed record (`fe12180`) and re-verified in a tracked-files-only clone. Draft, MERGEABLE, **NOT merged** |
 
 ### Execution notes (deviations from the plan as written, with reasons)
 
@@ -368,6 +368,13 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   and the acceptance record embeds the complete report verbatim (byte-equal to the file on disk, with
   `recon_report_sha256` matching), which is what "the summary commits the recon report itself, not only
   its hash" always meant. The plan's `git add` line predates that ignore rule.
+- **T8.3: a green local suite is not a green CI suite, and a clean VENV is not a clean CHECKOUT.**
+  T0.2 shipped two reconciliations that read `reports/client_extract/gen-*/manifest.json` — a gitignored
+  path. They passed on every local run, including bare `pytest` in a fresh venv, and failed the instant
+  CI ran them, because CI checks out only tracked files. They also pinned a generation id that T8.1 had
+  already superseded. Both now read the committed acceptance record. The reproduction that would have
+  caught this is a `git clone` of the branch: **verify against tracked files only, not against a clean
+  interpreter.**
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
