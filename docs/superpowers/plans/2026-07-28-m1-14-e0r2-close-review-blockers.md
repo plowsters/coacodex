@@ -86,7 +86,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | **done** | `df8bca7` — `recon_budget` replaces `three_part_budget`; `DEFAULT_BUDGET` deleted; ceilings come from the reviewed policy or the run is refused; 908 Py + 247 Node |
 | T4.1 `observation_coverage` + `field_readiness_coverage` producers | **done** | `f55e1d1` — Python accumulator folded into the existing per-row hook (counters + `__slots__`), Node readiness coverage over an explicit rows x fields denominator; 918 Py + 255 Node |
 | T4.2 One internally-executed acceptance command | **done** | `7daf338` — `run_acceptance` folds the executor inside, `write_acceptance_summary` deleted, record -> v3; refuses before spending a build; 933 Py + 255 Node |
-| T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | pending | |
+| T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | **done** | `7f87f13` — `recon_binding_sha256` (one canonical identity, computed from both sides) beside `recon_report_sha256`; pointer re-read on BOTH identities after the build; mechanics input-identity binding emitted by Node and re-derived here; emitted JSONL hashed+counted against the Builder domain; coverage fails closed and readiness/source now come from the build's own manifest; 962 Py + 259 Node |
 | T5.1 Streaming projection consumption | pending | |
 | T5.2 Generator mechanics rows + incremental statistics | pending | |
 | T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
@@ -241,7 +241,27 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 - **FOUND, deferred to T4.3:** the acceptance record's `coverage.readiness` and `coverage.source` read
   from the GENERATION manifest, which has never carried them — they are mechanics-manifest facts, so
   both have always been `{}` in every real record. T4.1's split is what made this visible. T4.3 binds
-  them from the executed build's own manifest.
+  them from the executed build's own manifest. **CLOSED in `7f87f13`**, and all four coverage blocks now
+  fail closed rather than defaulting to `{}` — the state that hid this for a whole milestone.
+- **T4.3: two hashes, two jobs, and neither substitutes for the other.** `recon_binding_sha256` is the
+  identity that must MATCH the generation; `recon_report_sha256` is the artifact the record ATTESTS to.
+  The identity digest deliberately excludes the scan metrics, the budget measurements and
+  `proposed_policy_delta`, so a probe mutates a candidate's `distinct_ids` and requires the report hash
+  to move while the identity does not.
+- **T4.3: the generation side of the digest states the REQUIRED recon status, not the report's own.**
+  `status="verified"` and `blocking_findings=[]` are asserted by the generation side, so a doctored
+  status cannot pass alone — the findings it was doctored to hide are inside the digest too.
+- **T4.3 fixture correction:** the plan's tests call `run_acceptance` with no executor substitution,
+  which only works if something really writes the mechanics artifacts. `tests/_fake_node_build.py` is
+  handed to the writer AS the `node` binary, so the real measurement path (argv, cwd, trap log,
+  `pointer_only` derived from the emitted manifest) runs while the scenario decides only what the build
+  emits — and "a publish landed during the build" is simulated where it really happens, inside the
+  build. A substituted executor writes nothing and can only ever reach the measurement gate.
+- **T4.3 real-schema note for T8.1:** the committed recon report at
+  `reports/client_extract/coa_spell_mechanics_recon.json` predates T0.2, so its `topology.tables` holds
+  5 tables where the reviewed policy now requires 10. Both sides call the same
+  `verify_source_topology(policy, …)`, so the re-run in T8.1 produces all 10 and the digests agree; the
+  stale report on disk would NOT bind, which is the gate behaving correctly.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
