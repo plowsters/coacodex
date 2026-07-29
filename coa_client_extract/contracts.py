@@ -252,7 +252,13 @@ READINESS_REASON_CODES = frozenset({
     "pending_e1_operand", "join_ambiguous", "unknown_symbol", "side_row_missing",
     "index_zero", "no_static_anchor", "not_extracted", "proven_empty", "extracted",
 })
-ICON_ASSET_STATUSES = frozenset({"converted", "source_only", "missing", "placeholder"})
+# E0R.2 T2.5: `converted` (and its icon bundle) is PROHIBITED in this schema. It promised tar path
+# containment, per-entry bundle-manifest verification, and per-asset content hashes checked against the
+# catalog; E0R.1 shipped only an existence test for the bundle child, and no producer ever emitted the
+# status. An unverifiable status with no producer is not a feature. Reintroducing it requires ALL THREE
+# of those checks in the SAME change, plus a producer — until then no producer may emit it and no
+# validator may accept it.
+ICON_ASSET_STATUSES = frozenset({"source_only", "missing", "placeholder"})
 
 # The manifest fields candidate_trust_sha256 covers: everything a consumer trusts EXCEPT the
 # post-validation /validation and /budget results (which legitimately differ candidate->final).

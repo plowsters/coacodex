@@ -26,7 +26,9 @@ def test_enums_are_closed_frozensets():
     assert isinstance(READINESS_STATUSES, frozenset)
     assert {"available", "unavailable", "not_applicable", "ambiguous", "verified_empty"} == READINESS_STATUSES
     assert "pending_e1_operand" in READINESS_REASON_CODES
-    assert ICON_ASSET_STATUSES == frozenset({"converted", "source_only", "missing", "placeholder"})
+    # E0R.2 T2.5: `converted` is prohibited until its bundle validator (tar containment, bundle
+    # manifest, content hashes) exists — it was an unverifiable status with no producer.
+    assert ICON_ASSET_STATUSES == frozenset({"source_only", "missing", "placeholder"})
 
 
 def test_trust_critical_excludes_validation_and_budget():

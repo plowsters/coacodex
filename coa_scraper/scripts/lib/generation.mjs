@@ -8,7 +8,11 @@ import { SHAPES, ShapeError, installContractValidator } from "./shapes.mjs";
 
 export class GenerationResolveError extends Error {}
 
-const ICON_ASSET_STATUSES = new Set(["converted", "source_only", "missing", "placeholder"]);
+// E0R.2 T2.5: `converted` (and its icon bundle) is PROHIBITED in this schema — it promised tar path
+// containment, per-entry bundle-manifest verification and per-asset content hashes, of which E0R.1
+// shipped only an existence test for the bundle child, and nothing ever produced the status.
+// Reintroducing it requires all three checks plus a producer, in the same change.
+const ICON_ASSET_STATUSES = new Set(["source_only", "missing", "placeholder"]);
 
 const POINTER_SCHEMA = "coa-client-extract-pointer-v1";
 const POINTER_NAME = "coa_client_extract.pointer.json";
@@ -500,23 +504,20 @@ function identityAgrees(frow, prow) {
   }
 }
 
-// Icon id/path agreement + bundle consistency (mirrors Python publish._icon_bundle): a valid asset_status,
-// a placeholder (unresolved join) has a null client_path while a resolved status carries one, and only a
-// `converted` row may reference a bundle asset.
+// Icon id/path agreement (mirrors Python publish._verify_icon_row): a valid asset_status, and a
+// placeholder (unresolved join) has a null client_path while a resolved status carries one. E0R.2 T2.5:
+// `converted` is no longer admissible and neither is `converted_ref`.
 function verifyIconRow(r) {
   if (!ICON_ASSET_STATUSES.has(r.asset_status)) {
-    throw new GenerationResolveError(`icon asset_status ${JSON.stringify(r.asset_status)} not in ${[...ICON_ASSET_STATUSES]}`);
+    throw new GenerationResolveError(`icon asset_status ${JSON.stringify(r.asset_status)} not in ${[...ICON_ASSET_STATUSES].sort()} (converted assets are prohibited until their bundle validator exists)`);
   }
-  if (r.asset_status !== "converted" && r.converted_ref) {
-    throw new GenerationResolveError(`icon ${r.spell_id}: non-converted row carries a converted_ref`);
-  }
-  if (r.asset_status === "converted" && !r.converted_ref) {
-    throw new GenerationResolveError(`icon ${r.spell_id}: converted row missing converted_ref`);
+  if (r.converted_ref) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: carries a converted_ref, but converted assets are prohibited until the bundle validator (tar containment, bundle manifest, content hashes) exists`);
   }
   if (r.asset_status === "placeholder" && r.client_path != null) {
     throw new GenerationResolveError(`icon id/path: placeholder spell ${r.spell_id} carries a client_path`);
   }
-  if ((r.asset_status === "source_only" || r.asset_status === "converted") && r.client_path == null) {
+  if (r.asset_status === "source_only" && r.client_path == null) {
     throw new GenerationResolveError(`icon id/path: ${r.asset_status} spell ${r.spell_id} missing client_path`);
   }
 }
@@ -529,7 +530,6 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
   const full = new Cursor(fullRows, "full");
   const proj = new Cursor(projRows, "projection");
   const icons = new Cursor(iconRows, "icons");
-  let anyConverted = false;
   let fullCount = 0, isCoaCount = 0;
   while (full.row !== null) {
     fullCount += 1;
@@ -544,7 +544,6 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
       throw new GenerationResolveError(`icons_agree: icon row spell_id ${icons.row.spell_id} != full ${sid}`);
     }
     verifyIconRow(icons.row);
-    anyConverted = anyConverted || icons.row.asset_status === "converted";
     icons.advance();
     if (proj.row !== null && proj.row.spell_id < sid) {
       throw new GenerationResolveError(`projection_within_domain: ${proj.row.spell_id} outside is_coa domain`);
@@ -576,9 +575,9 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
   if (icons.row !== null) {
     throw new GenerationResolveError(`icons_agree: trailing icon row ${icons.row.spell_id} beyond the full domain`);
   }
-  if (anyConverted && !("coa_client_spell_icons.bundle.tar" in (manifest.children || {}))) {
-    throw new GenerationResolveError("icon bundle required: a converted row exists but no bundle child is registered");
-  }
+  // E0R.2 T2.5: the converted->bundle-required check lived here and only asserted that a bundle child
+  // EXISTED. `converted` is prohibited outright now, which makes the branch unreachable rather than
+  // weakly guarded.
   // Tallies the cursors derived themselves, so the contract can cross-check them against the
   // manifest-registered record counts (E0R.2 T2.1).
   return { full: fullCount, is_coa: isCoaCount };

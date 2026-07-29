@@ -94,9 +94,11 @@ def iter_icon_catalog(spell_view, side_views, *, policy, asset_resolver):
 
 def icon_coverage(rows) -> dict:
     """Honest resolved-icon coverage over a catalog stream (single pass — never materializes the rows;
-    E0R.1 T4.1). A `resolved_path` is a row that carries a proven client_path (asset_status source_only/
-    converted/missing); a `placeholder` is an unresolved join. Assets split into present
-    (source_only/converted) vs missing (proven path, absent member)."""
+    E0R.1 T4.1). A `resolved_path` is a row that carries a proven client_path (asset_status
+    source_only/missing); a `placeholder` is an unresolved join. Assets split into present
+    (source_only) vs missing (proven path, absent member).
+
+    E0R.2 T2.5: `converted` was in both branches below and in no producer — see ICON_ASSET_STATUSES."""
     spells = resolved = present = missing = placeholders = 0
     unique_paths: set[str] = set()
     for r in rows:
@@ -104,7 +106,7 @@ def icon_coverage(rows) -> dict:
         if r.get("client_path"):
             resolved += 1
             unique_paths.add(r["client_path"])
-            if r["asset_status"] in ("source_only", "converted"):
+            if r["asset_status"] == "source_only":
                 present += 1
             elif r["asset_status"] == "missing":
                 missing += 1

@@ -189,14 +189,17 @@ export const SHAPES = {
     const where = "icon_row_v1";
     obj(row, where);
     keys(row, { required: ["schema_version", "spell_id", "spell_icon_id", "asset_status", "client_path", "readiness"],
-                optional: ["source_archive", "source_asset_sha256", "converted_ref"], where });
+                // E0R.2 T2.5: `converted_ref` left this list with `converted` itself. The status
+                // vocabulary is checked semantically (verifyIconRow), symmetrically with Python; here
+                // the key simply has no admissible use.
+                optional: ["source_archive", "source_asset_sha256"], where });
     if (row.schema_version !== "coa-client-spell-icons-v1") fail(`${where}.schema_version`, row.schema_version);
     int(row.spell_id, `${where}.spell_id`);
     int(row.spell_icon_id, `${where}.spell_icon_id`, { nullable: true });
     str(row.asset_status, `${where}.asset_status`);
     str(row.client_path, `${where}.client_path`, { nullable: true });
     str(row.readiness, `${where}.readiness`);
-    for (const key of ["source_archive", "source_asset_sha256", "converted_ref"]) {
+    for (const key of ["source_archive", "source_asset_sha256"]) {
       if (key in row) str(row[key], `${where}.${key}`, { nullable: true });
     }
     return row;

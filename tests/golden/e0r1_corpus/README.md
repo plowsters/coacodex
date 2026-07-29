@@ -50,8 +50,8 @@ carried, so the consumer's domain check asked nothing of any real row.
 |------|--------|----------|
 | `valid_icon` (×3) | ✅ | — source_only + placeholder baselines |
 | `placeholder_with_path` | ❌ | a placeholder must have a null `client_path` |
-| `converted_without_ref` | ❌ | a converted row must carry a `converted_ref` |
-| `source_only_with_converted_ref` | ❌ | a non-converted row must not carry a `converted_ref` |
+| `converted_without_ref` | ❌ | E0R.2 T2.5: `converted` is not an admissible `asset_status` at all (the case name is the retired rule it was written for) |
+| `source_only_with_converted_ref` | ❌ | E0R.2 T2.5: `converted_ref` is not an admissible key on any status — the shape rejects it, and `_verify_icon_row`/`verifyIconRow` restate the prohibition behind that |
 | `trailing_icon_beyond_domain` | ❌ | icon row `spell_id` beyond the full-table domain (trailing/extra) |
 
 The valid full/projection/icon baselines share spell ids `{1,2,3}`, so `expand_compact(full.raw) ==

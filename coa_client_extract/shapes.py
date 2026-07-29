@@ -234,7 +234,10 @@ def icon_row_v1(row):
     _obj(row, where)
     _keys(row, required=("schema_version", "spell_id", "spell_icon_id", "asset_status", "client_path",
                          "readiness"),
-          optional=("source_archive", "source_asset_sha256", "converted_ref"), where=where)
+          # E0R.2 T2.5: `converted_ref` left this list with `converted` itself. The status vocabulary is
+          # checked semantically (publish._verify_icon_row / Node verifyIconRow), symmetrically in both
+          # languages; here the key simply has no admissible use.
+          optional=("source_archive", "source_asset_sha256"), where=where)
     if row["schema_version"] != "coa-client-spell-icons-v1":
         _fail(f"{where}.schema_version", f"{row['schema_version']!r}")
     _int(row["spell_id"], f"{where}.spell_id")
@@ -242,7 +245,7 @@ def icon_row_v1(row):
     _str(row["asset_status"], f"{where}.asset_status")
     _str(row["client_path"], f"{where}.client_path", allow_null=True)
     _str(row["readiness"], f"{where}.readiness")
-    for key in ("source_archive", "source_asset_sha256", "converted_ref"):
+    for key in ("source_archive", "source_asset_sha256"):
         if key in row:
             _str(row[key], f"{where}.{key}", allow_null=True)
     return row

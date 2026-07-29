@@ -49,17 +49,20 @@ def test_placeholder_icon_with_client_path_fails(tmp_path):
 
 
 def test_converted_icon_without_converted_ref_fails(tmp_path):
+    # E0R.2 T2.5 retired the rule this corpus case was written for (`converted` needs a converted_ref)
+    # in favour of a stronger one: `converted` is not an admissible status at all.
     icons = _pick("icons.jsonl", "valid_icon")
     icons[0] = _pick("icons.jsonl", "converted_without_ref")[0]
-    # converted also requires the bundle child; either way it must fail.
     with pytest.raises(ResolveError, match="converted"):
         validate_staged(_candidate(tmp_path, icons=icons))
 
 
 def test_source_only_icon_with_converted_ref_fails(tmp_path):
+    # Likewise: a bundle reference is unverifiable on ANY status, so it is rejected structurally (the
+    # shape has no such key) before the semantic gate restates it.
     icons = _pick("icons.jsonl", "valid_icon")
     icons[0] = _pick("icons.jsonl", "source_only_with_converted_ref")[0]
-    with pytest.raises(ResolveError, match="non-converted row carries a converted_ref"):
+    with pytest.raises(ResolveError, match="converted_ref"):
         validate_staged(_candidate(tmp_path, icons=icons))
 
 

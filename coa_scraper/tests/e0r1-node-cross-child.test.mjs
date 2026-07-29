@@ -23,17 +23,20 @@ test("placeholder icon carrying a client_path FAILS (id/path agreement)", () => 
   assert.throws(run({ icons }), /placeholder spell 2 carries a client_path/);
 });
 
-test("a converted icon row without a converted_ref FAILS", () => {
+test("a converted icon row FAILS (E0R.2 T2.5: the status is prohibited outright)", () => {
+  // The corpus case is named for the retired rule (a converted row needs a converted_ref); the stronger
+  // rule that replaced it rejects the status itself, so the row still fails.
   const icons = corpus.validIcons();
   icons[0] = corpus.pick(corpus.icons, "converted_without_ref")[0];
-  // converted also requires the bundle child; either way it must fail.
   assert.throws(run({ icons }), /converted/);
 });
 
 test("a source_only icon row carrying a converted_ref FAILS", () => {
+  // A bundle reference is unverifiable on ANY status: the shape has no such key, and verifyIconRow
+  // restates the prohibition behind it.
   const icons = corpus.validIcons();
   icons[0] = corpus.pick(corpus.icons, "source_only_with_converted_ref")[0];
-  assert.throws(run({ icons }), /non-converted row carries a converted_ref/);
+  assert.throws(run({ icons }), /converted_ref/);
 });
 
 // --- exact icon domain (trailing / extra / missing) ---

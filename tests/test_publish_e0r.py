@@ -147,10 +147,13 @@ def test_valid_candidate_passes_cross_child(tmp_path):
     assert "coa_client_spell.jsonl" in active["children"]
 
 
-def test_icon_bundle_required_when_any_converted(tmp_path):
+def test_a_converted_icon_row_is_rejected_outright(tmp_path):
+    # E0R.2 T2.5: this used to assert that a converted row REQUIRED a bundle child — an existence test
+    # that verified nothing about the bundle. The status is prohibited now, so the generation is refused
+    # whether or not a bundle is registered.
     gen = _stage(tmp_path, icons=[_icon(1, asset_status="converted",
                                         converted_ref="icons.tar#a.png")])
-    with pytest.raises(ResolveError, match="icon bundle required"):
+    with pytest.raises(ResolveError, match="converted"):
         validate_staged(gen)
 
 

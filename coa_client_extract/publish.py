@@ -373,19 +373,22 @@ def _identity_agrees(frow, prow) -> None:
 
 
 def _verify_icon_row(r: dict) -> None:
-    """Icon id/path agreement (mirrors Node verifyIconRow): a valid asset_status, a placeholder
-    (unresolved join) has a null client_path while a resolved status carries one, and converted_ref
-    exists iff the row is `converted`."""
+    """Icon id/path agreement (mirrors Node verifyIconRow): a valid asset_status, and a placeholder
+    (unresolved join) has a null client_path while a resolved status carries one.
+
+    E0R.2 T2.5: `converted` is no longer an admissible status and `converted_ref` is no longer an
+    admissible key — see ICON_ASSET_STATUSES for what reintroducing them requires."""
     status = r.get("asset_status")
     if status not in ICON_ASSET_STATUSES:
-        raise ResolveError(f"icon asset_status {status!r} not in {ICON_ASSET_STATUSES}")
-    if status != "converted" and r.get("converted_ref"):
-        raise ResolveError(f"icon {r.get('spell_id')}: non-converted row carries a converted_ref")
-    if status == "converted" and not r.get("converted_ref"):
-        raise ResolveError(f"icon {r.get('spell_id')}: converted row missing converted_ref")
+        raise ResolveError(f"icon asset_status {status!r} not in {sorted(ICON_ASSET_STATUSES)} "
+                           "(converted assets are prohibited until their bundle validator exists)")
+    if r.get("converted_ref"):
+        raise ResolveError(
+            f"icon {r.get('spell_id')}: carries a converted_ref, but converted assets are prohibited "
+            "until the bundle validator (tar containment, bundle manifest, content hashes) exists")
     if status == "placeholder" and r.get("client_path") is not None:
         raise ResolveError(f"icon id/path: placeholder spell {r.get('spell_id')} carries a client_path")
-    if status in ("source_only", "converted") and r.get("client_path") is None:
+    if status == "source_only" and r.get("client_path") is None:
         raise ResolveError(f"icon id/path: {status} spell {r.get('spell_id')} missing client_path")
 
 
@@ -395,7 +398,7 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
     v3 dialects (full=compact `raw`, projection=rich `field_observations`), identity/mechanics/attribution
     agreement, the compact_raw_expands_to_envelope EQUALITY (expand(full.raw) == projection.field_observations),
     the icon catalog as EXACTLY the full domain (lockstep 1:1 — a missing, orphan, or trailing icon row
-    fails), per-row icon id/path agreement, converted->bundle-required, and sorted-unique ids."""
+    fails), per-row icon id/path agreement, and sorted-unique ids."""
     if policy is None:
         policy = load_spell_policy(
             json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
@@ -413,7 +416,6 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
     full = _Cursor(_shaped("coa_client_spell.jsonl"), "full")
     proj = _Cursor(_shaped("coa_client_spell_coa.jsonl"), "projection")
     icons = _Cursor(_shaped("coa_client_spell_icons.jsonl"), "icons")
-    any_converted = False
     full_count = is_coa_count = 0
     while full.row is not None:
         full_count += 1
@@ -425,7 +427,6 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
         if icons.row["spell_id"] != sid:
             raise ResolveError(f"icons_agree: icon row spell_id {icons.row['spell_id']} != full {sid}")
         _verify_icon_row(icons.row)
-        any_converted = any_converted or icons.row.get("asset_status") == "converted"
         icons.advance()
         if proj.row is not None and proj.row["spell_id"] < sid:
             raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
@@ -456,8 +457,10 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
         raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
     if icons.row is not None:
         raise ResolveError(f"icons_agree: trailing icon row {icons.row['spell_id']} beyond the full domain")
-    if any_converted and "coa_client_spell_icons.bundle.tar" not in children:
-        raise ResolveError("icon bundle required: a converted row exists but no bundle child is registered")
+    # E0R.2 T2.5: the converted->bundle-required check lived here. It only asserted that a bundle child
+    # EXISTED — no tar path containment, no bundle manifest, no content hashes — so it never verified the
+    # thing it was named after. `converted` is prohibited outright now (see ICON_ASSET_STATUSES), which
+    # makes the whole branch unreachable rather than weakly guarded.
     # Tallies the cursors derived themselves, so the contract can cross-check them against the
     # manifest-registered record counts (E0R.2 T2.1).
     return {"full": full_count, "is_coa": is_coa_count}
