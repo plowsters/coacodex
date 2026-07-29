@@ -26,7 +26,7 @@ from coa_client_extract.contracts import (CONTRACTS_DIR, ContractError,
 from coa_client_extract.publish import (CURRENT_REQUIRED_CHILDREN, REQUIRED_CHILDREN, ResolveError,
                                         required_children_for, validate_candidate_generation)
 
-from tests._e0r2_fixtures import stage_minimal_generation
+from tests._e0r2_fixtures import stage_minimal_generation, validate_staged
 
 _DIR_REL = "coa_client_extract/data/generation_contracts"
 _REGISTRY_REL = f"{_DIR_REL}/index.json"
@@ -292,11 +292,11 @@ def test_an_optional_child_is_not_required():
 def test_a_candidate_without_the_staged_contract_is_rejected(tmp_path):
     gen_dir = stage_minimal_generation(tmp_path, drop_contract=True)
     with pytest.raises(ResolveError, match=GENERATION_CONTRACT_CHILD):
-        validate_candidate_generation(gen_dir)
+        validate_staged(gen_dir)
 
 
 def test_a_complete_candidate_with_the_staged_contract_passes(tmp_path):
-    resolved = validate_candidate_generation(stage_minimal_generation(tmp_path))
+    resolved = validate_staged(stage_minimal_generation(tmp_path))
     assert set(resolved["children"]) == set(CURRENT_REQUIRED_CHILDREN)
 
 
@@ -305,7 +305,7 @@ def test_a_staged_contract_outside_the_registry_is_rejected(tmp_path):
     against the trusted registry would let a tampered contract declare its own (empty) requirements."""
     gen_dir = stage_minimal_generation(tmp_path, contract_mutate=lambda d: d.update(revision="e0r-v99"))
     with pytest.raises(ResolveError, match="unsupported"):
-        validate_candidate_generation(gen_dir)
+        validate_staged(gen_dir)
 
 
 def test_a_tampered_staged_contract_is_rejected(tmp_path):
@@ -315,10 +315,10 @@ def test_a_tampered_staged_contract_is_rejected(tmp_path):
 
     gen_dir = stage_minimal_generation(tmp_path, contract_mutate=_drop_a_child)
     with pytest.raises(ResolveError, match="sha256"):
-        validate_candidate_generation(gen_dir)
+        validate_staged(gen_dir)
 
 
 def test_a_structurally_broken_staged_contract_is_rejected(tmp_path):
     gen_dir = stage_minimal_generation(tmp_path, contract_mutate=lambda d: d.update(children="nope"))
     with pytest.raises(ResolveError, match="contract"):
-        validate_candidate_generation(gen_dir)
+        validate_staged(gen_dir)

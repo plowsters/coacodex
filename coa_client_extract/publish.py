@@ -13,8 +13,9 @@ from .contracts import (CANDIDATE_MUTABLE_KEYS, ContractError, GENERATION_CONTRA
                         GENERATION_CONTRACT_SCHEMA, ICON_ASSET_STATUSES, generation_contract_sha256,
                         load_current_contract, load_supported_contract, validate_generation_contract)
 from .manifest import build_manifest_v3
-from .spell_layout import load_spell_policy
+from .spell_layout import compute_policy_sha256, load_spell_policy
 from .spell_record import _expand_compact as _expand_cell
+from .topology import topology_matches_bound
 
 POINTER_SCHEMA = "coa-client-extract-pointer-v1"
 POINTER_NAME = "coa_client_extract.pointer.json"
@@ -294,19 +295,23 @@ def _verify_icon_row(r: dict) -> None:
         raise ResolveError(f"icon id/path: {status} spell {r.get('spell_id')} missing client_path")
 
 
-def _cross_child(gen_dir: Path, children: dict) -> None:
+def _cross_child(gen_dir: Path, children: dict, policy=None) -> dict:
     """Streaming merge-join over ascending spell_id across the three spell children (design A5) — cursors
     only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain, the disjoint
     v3 dialects (full=compact `raw`, projection=rich `field_observations`), identity/mechanics/attribution
     agreement, the compact_raw_expands_to_envelope EQUALITY (expand(full.raw) == projection.field_observations),
     the icon catalog as EXACTLY the full domain (lockstep 1:1 — a missing, orphan, or trailing icon row
     fails), per-row icon id/path agreement, converted->bundle-required, and sorted-unique ids."""
-    policy = load_spell_policy(json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
+    if policy is None:
+        policy = load_spell_policy(
+            json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
     full = _Cursor(_read_jsonl(gen_dir / "coa_client_spell.jsonl"), "full")
     proj = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_coa.jsonl"), "projection")
     icons = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"), "icons")
     any_converted = False
+    full_count = is_coa_count = 0
     while full.row is not None:
+        full_count += 1
         sid = full.row["spell_id"]
         # The icon catalog advances in LOCKSTEP with the full table: exactly one icon row per full row,
         # so an orphan icon (below/between full ids) is a mismatch, never silently skipped.
@@ -326,6 +331,7 @@ def _cross_child(gen_dir: Path, children: dict) -> None:
             raise ResolveError(f"full_is_compact: spell {sid} full row carries field_observations (rich dialect)")
         expanded = _expand_full_raw(sid, full.row["raw"], policy)
         is_coa = full.row.get("coa_attribution", {}).get("is_coa") is True
+        is_coa_count += 1 if is_coa else 0
         if is_coa:
             if proj.row is None or proj.row["spell_id"] != sid:
                 raise ResolveError(f"projection_is_coa_subset: {sid} missing from projection")
@@ -346,6 +352,9 @@ def _cross_child(gen_dir: Path, children: dict) -> None:
         raise ResolveError(f"icons_agree: trailing icon row {icons.row['spell_id']} beyond the full domain")
     if any_converted and "coa_client_spell_icons.bundle.tar" not in children:
         raise ResolveError("icon bundle required: a converted row exists but no bundle child is registered")
+    # Tallies the cursors derived themselves, so the contract can cross-check them against the
+    # manifest-registered record counts (E0R.2 T2.1).
+    return {"full": full_count, "is_coa": is_coa_count}
 
 
 def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
@@ -375,6 +384,182 @@ def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
             raise ResolveError(f"child {name!r} missing schema_version")
         resolved[name] = child_path
     return resolved
+
+
+DEFAULT_LOCK_PATH = Path(__file__).resolve().parents[1] / "coa_scraper" / "config" / "spell_layout.lock.json"
+
+
+def _supported_policy_sha256(lock_path: Path | None) -> str:
+    """The digest of the policy this validator LOCALLY supports, read from the committed lock — the same
+    artifact the Node boundary checks. A candidate cannot supply it (E0R.2 T2.1)."""
+    path = Path(lock_path) if lock_path is not None else DEFAULT_LOCK_PATH
+    try:
+        lock = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ResolveError(f"policy lock unreadable: {exc}") from exc
+    sha = lock.get("sha256")
+    if not isinstance(sha, str) or len(sha) != 64:
+        raise ResolveError(f"policy lock {str(path)!r} carries no usable sha256")
+    return sha
+
+
+def _trusted_policy(gen_dir: Path, manifest: dict, lock_path: Path | None):
+    """The reviewed policy the cardinality rules are resolved against, established in three steps so a
+    failure names which link broke (E0R.2 T2.1).
+
+    Deriving a child's expected count from `manifest.binding.topology` is CIRCULAR: a malformed candidate
+    sets that count to 1, writes one row, recomputes `candidate_trust_sha256`, and satisfies the
+    equality. The count has to come from something the validator trusts independently of the candidate.
+    """
+    staged_path = gen_dir / "spell_layout_v2.json"
+    if not staged_path.is_file():
+        raise ResolveError("required child 'spell_layout_v2.json' missing; the generation is unbound")
+    try:
+        staged = json.loads(staged_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ResolveError(f"staged policy child is not valid JSON: {exc}") from exc
+
+    # 1. the staged policy IS the locally supported policy (recomputed, never self-declared).
+    actual = compute_policy_sha256(staged)
+    supported = _supported_policy_sha256(lock_path)
+    if actual != supported:
+        raise ResolveError(
+            f"staged policy {actual[:16]} is not the supported policy {supported[:16]}: a candidate "
+            "cannot bring its own policy and be believed")
+    # 2. the manifest binds that same policy.
+    bound_sha = (manifest.get("binding") or {}).get("policy_sha256")
+    if bound_sha != actual:
+        raise ResolveError(
+            f"binding.policy_sha256 {str(bound_sha)[:16]} != the staged policy child {actual[:16]}")
+    try:
+        policy = load_spell_policy(staged)
+    except Exception as exc:                                   # SpellPolicyError and friends
+        raise ResolveError(f"staged policy child rejected: {exc}") from exc
+    if policy.bound is None:
+        raise ResolveError(
+            "staged policy is unbound (bound: null): it was never proven against a client capture, so "
+            "the generation has no provable source domain")
+    # 3. the recorded topology IS the reviewed bound, facet for facet.
+    mismatch = topology_matches_bound((manifest.get("binding") or {}).get("topology") or {}, policy.bound)
+    if mismatch:
+        raise ResolveError(f"binding.topology does not match the reviewed bound: {mismatch}")
+    return policy
+
+
+def _source_record_count(policy, table: str, child: str) -> int:
+    tables = policy.bound["tables"]
+    if table not in tables:
+        raise ResolveError(
+            f"child {child!r} cites source table {table!r}, which the reviewed policy does not bind; "
+            "its cardinality cannot be evaluated")
+    return tables[table]["header"]["record_count"]
+
+
+def _declared(manifest: dict, child: str, keys: set[str]) -> dict:
+    declared = ((manifest.get("binding") or {}).get("derivations") or {}).get(child)
+    if not isinstance(declared, dict) or set(declared) != keys:
+        raise ResolveError(
+            f"child {child!r} needs a binding.derivations entry with exactly {sorted(keys)}, got "
+            f"{sorted(declared) if isinstance(declared, dict) else type(declared).__name__}")
+    for key in keys - {"source"}:
+        value = declared[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ResolveError(f"child {child!r} derivation {key} must be a non-negative integer")
+    return declared
+
+
+def _assert_single_document(gen_dir: Path, name: str) -> None:
+    """A JSON child must PARSE as exactly one document.
+
+    `_scan_child` registers `records: 1` for every non-JSONL child unconditionally — it hashes bytes and
+    counts nothing — so a record-count comparison alone can never fail here and the rule would be
+    decorative. Two concatenated documents hash and byte-count perfectly consistently; only parsing
+    catches them. This is also the only thing that checks a JSON child is well-formed at all before a
+    consumer reads it."""
+    try:
+        json.loads((gen_dir / name).read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ResolveError(
+            f"single_document: child {name!r} is not a single JSON document ({exc})") from exc
+
+
+def _resolve_cardinality(name: str, spec: dict, records: int, policy, manifest: dict,
+                         counts: dict, gen_dir: Path | None = None) -> None:
+    """Enforce ONE child's contract cardinality against the REVIEWED POLICY (E0R.2 T2.1).
+
+    `counts` carries the numbers the streaming merge-join derived independently (full rows, is_coa rows,
+    icon rows); rules that need them are resolved after `_cross_child` runs.
+    """
+    rule = spec["cardinality"]["rule"]
+    if rule == "single_document":
+        if records != 1:
+            raise ResolveError(f"single_document: child {name!r} carries {records} records, not 1")
+        if gen_dir is not None:
+            _assert_single_document(gen_dir, name)
+    elif rule == "min":
+        if records < spec["cardinality"]["min"]:
+            raise ResolveError(
+                f"min: child {name!r} carries {records} records, below the floor "
+                f"{spec['cardinality']['min']}")
+    elif rule in ("reviewed_bound_record_count", "derived_from_source_topology"):
+        expected = _source_record_count(policy, spec["cardinality"]["source_table"], name)
+        if records != expected:
+            raise ResolveError(
+                f"{rule}: child {name!r} carries {records} records but the reviewed bound for "
+                f"{spec['cardinality']['source_table']!r} states {expected}")
+    elif rule == "declared_derivation":
+        table = spec["cardinality"]["source_table"]
+        declared = _declared(manifest, name, {"source", "kept", "rejected"})
+        if declared["source"] != table:
+            raise ResolveError(
+                f"declared_derivation: child {name!r} derivation names source {declared['source']!r}, "
+                f"but the contract states {table!r}")
+        expected = _source_record_count(policy, table, name)
+        if declared["kept"] + declared["rejected"] != expected:
+            raise ResolveError(
+                f"declared_derivation: child {name!r} accounting does not close — kept "
+                f"{declared['kept']} + rejected {declared['rejected']} != reviewed source {expected}")
+        if declared["kept"] != records:
+            raise ResolveError(
+                f"declared_derivation: child {name!r} declares {declared['kept']} kept but carries "
+                f"{records} records")
+    elif rule == "declared_content_derivation":
+        declared = _declared(manifest, name, {"source", "source_entries", "kept", "rejected"})
+        if declared["source"] != "content_json":
+            raise ResolveError(
+                f"declared_content_derivation: child {name!r} derivation names source "
+                f"{declared['source']!r}, not 'content_json'")
+        reviewed = sum(f["source_entries"] for f in policy.content_sources["required_files"].values())
+        if declared["source_entries"] != reviewed:
+            raise ResolveError(
+                f"declared_content_derivation: child {name!r} declares {declared['source_entries']} "
+                f"source entries but the reviewed content_sources state {reviewed}")
+        if declared["kept"] + declared["rejected"] != reviewed:
+            raise ResolveError(
+                f"declared_content_derivation: child {name!r} accounting does not close — kept "
+                f"{declared['kept']} + rejected {declared['rejected']} != reviewed source {reviewed}")
+        if declared["kept"] != records:
+            raise ResolveError(
+                f"declared_content_derivation: child {name!r} declares {declared['kept']} kept but "
+                f"carries {records} records")
+    elif rule == "equals_full_spell_records":
+        if records != counts["full"]:
+            raise ResolveError(
+                f"equals_full_spell_records: child {name!r} carries {records} records but the full "
+                f"spell child carries {counts['full']}")
+    elif rule == "equals_is_coa_full_records":
+        if records != counts["is_coa"]:
+            raise ResolveError(
+                f"equals_is_coa_full_records: child {name!r} carries {records} records but the full "
+                f"child holds {counts['is_coa']} is_coa spells")
+    else:                                                      # pragma: no cover - validate() gates this
+        raise ResolveError(f"child {name!r} cardinality rule {rule!r} has no resolver")
+
+
+# Rules whose expectation is derived by the streaming merge-join, so they are resolved AFTER it. They
+# cross-check two independently-derived numbers (the manifest-registered record count against the
+# cursor's own tally); the merge-join itself remains the authoritative row-level enforcement.
+_CROSS_CHILD_RULES = frozenset({"equals_full_spell_records", "equals_is_coa_full_records"})
 
 
 def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
@@ -433,10 +618,15 @@ def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
         raise ResolveError(f"generation_contract: {exc}") from exc
 
 
-def validate_candidate_generation(gen_dir: Path) -> dict:
+def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = None) -> dict:
     """Validate a staged CANDIDATE generation by path (not via the pointer): the manifest is a candidate,
-    every REQUIRED_CHILDREN is present and per-child valid, the streaming cross-child merge-join holds,
-    and the icon bundle is present iff any converted row exists. Raises ResolveError on any failure."""
+    the staged contract agrees three ways, every child the contract requires is present and per-child
+    valid, no child is present that the contract does not register, every child's CARDINALITY holds
+    against the reviewed policy, the streaming cross-child merge-join holds, and the icon bundle is
+    present iff any converted row exists. Raises ResolveError on any failure.
+
+    `lock_path` names the policy lock that says which policy this validator locally supports; production
+    uses the committed lock, which is also the artifact the Node boundary checks."""
     gen_dir = Path(gen_dir)
     manifest_path = gen_dir / MANIFEST_NAME
     if not manifest_path.is_file():
@@ -450,10 +640,31 @@ def validate_candidate_generation(gen_dir: Path) -> dict:
     # and an unbound/unsupported generation should fail as that rather than as an unrelated child error.
     contract = _staged_contract(gen_dir, manifest)
     resolved = _validate_children_by_path(gen_dir, manifest)
+    registered = set(contract["children"])
     for name in required_children_for(contract):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the candidate generation")
-    _cross_child(gen_dir, manifest.get("children", {}))
+    # The contract is a WHITELIST. candidate_trust_sha256 AUTHENTICATES an added child — it covers
+    # `children`, so a child added to both the manifest and the directory is perfectly self-consistent —
+    # but authenticating is not rejecting. Unregistered files on disk are caught too: a consumer that
+    # globs the directory would otherwise read something no contract describes.
+    for name in sorted(set(resolved) | {p.name for p in gen_dir.iterdir() if p.is_file()}):
+        if name not in registered and name not in _RESERVED:
+            raise ResolveError(
+                f"unregistered child {name!r}: the contract is a whitelist, and candidate trust "
+                "authenticates an added child rather than rejecting it")
+
+    policy = _trusted_policy(gen_dir, manifest, lock_path)
+    children_meta = manifest.get("children", {})
+    # Cardinalities that do not depend on the merge-join first, so a truncated generation fails fast.
+    for name, spec in contract["children"].items():
+        if spec["cardinality"]["rule"] not in _CROSS_CHILD_RULES and name in children_meta:
+            _resolve_cardinality(name, spec, children_meta[name]["records"], policy, manifest, {},
+                                 gen_dir)
+    counts = _cross_child(gen_dir, children_meta, policy)
+    for name, spec in contract["children"].items():
+        if spec["cardinality"]["rule"] in _CROSS_CHILD_RULES and name in children_meta:
+            _resolve_cardinality(name, spec, children_meta[name]["records"], policy, manifest, counts)
     return {"gen_dir": gen_dir, "manifest": manifest, "children": resolved}
 
 

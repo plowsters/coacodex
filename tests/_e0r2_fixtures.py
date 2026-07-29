@@ -1,21 +1,107 @@
 """Shared E0R.2 generation-fixture helpers.
 
-Every synthetic generation now carries a TWELFTH child — `generation_contract.json`, the immutable
-registry revision the generation was produced under — plus the `binding.generation_contract` that
-identifies it by revision and canonical digest. Seven test modules build candidates; keeping the staging
-in one place is what stops them drifting apart as WS6 adds revisions (T1.1).
+Every synthetic generation carries a TWELFTH child — `generation_contract.json`, the immutable registry
+revision it was produced under — plus the `binding.generation_contract` that identifies it by revision
+and canonical digest (T1.1/T1.2).
+
+T2.1 adds the second half: a generation now has to satisfy POLICY-ROOTED cardinalities, so a fixture
+must stage a policy that actually binds a source domain. `bind_policy_doc` gives a synthetic policy a
+structured `bound` SIZED TO WHAT THE FIXTURE STAGES, and `topology_report_for` builds the matching
+`binding.topology`. Violations are then introduced by breaking that correspondence on purpose — which is
+the only way a negative test can be about the rule rather than about the fixture.
 """
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+from pathlib import Path
 
 from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
                                           generation_contract_sha256, load_current_contract)
 from coa_client_extract.publish import GenerationWriter
+from coa_client_extract.spell_layout import compute_policy_sha256
 
-from tests._spell_fixtures import v2_policy
+CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
 
+# The ancillary CoA tables the contract's cardinality rules name. Bound TOPOLOGY-ONLY (no `fields`),
+# exactly as T0.2 bound them in the real policy.
+ANCILLARY_TABLES = ("CharacterAdvancement", "CharacterAdvancementClassTypes",
+                    "CharacterAdvancementTabTypes", "CharacterAdvancementEssence")
+ANCILLARY_CHILD_FOR = {
+    "CharacterAdvancementClassTypes": "coa_client_class_types.jsonl",
+    "CharacterAdvancementTabTypes": "coa_client_tab_types.jsonl",
+    "CharacterAdvancementEssence": "coa_client_essence.jsonl",
+}
+CLIENT_BUILD = "3.3.5a+fixture"
+
+
+def _fake_table_binding(name: str, record_count: int) -> dict:
+    """A deterministic per-table bound entry. The digest is derived from the table name so two fixtures
+    never collide, and `topology_report_for` reproduces it exactly — the point of the pair is that the
+    reviewed bound and the reported topology agree, not that either is a real capture."""
+    return {
+        "sha256": hashlib.sha256(f"fixture:{name}".encode()).hexdigest(),
+        "header": {"magic": "WDBC", "record_count": record_count, "field_count": 2,
+                   "record_size": 8, "string_block_size": 1},
+        "source": {"member": f"DBFilesClient\\{name}.dbc", "effective_archive": "common.MPQ",
+                   "patch_chain": []},
+    }
+
+
+def bind_policy_doc(doc: dict, *, spell_records: int, ancillary_records: dict | None = None,
+                    content_entries: int = 2) -> dict:
+    """Return a copy of `doc` with the ancillary tables added and a structured `bound` sized to what the
+    caller stages. Rehashed, so it loads.
+
+    A policy with `bound: None` cannot state a source domain, and a generation produced from one has no
+    provable cardinality — which is why the validator refuses it outright rather than skipping the rules.
+    """
+    ancillary_records = {**{t: 2 for t in ANCILLARY_TABLES}, **(ancillary_records or {})}
+    doc = copy.deepcopy(doc)
+    for name in ANCILLARY_TABLES:
+        doc["tables"].setdefault(name, {"expected_field_count": 2, "key_cell": 0, "unique": True})
+    doc["required_tables"] = sorted(doc["tables"])
+    doc["expected_absent"] = []
+    counts = {name: ancillary_records.get(name, 1) for name in doc["tables"]}
+    counts["Spell"] = spell_records
+    doc["bound"] = {"client_build": CLIENT_BUILD, "expected_absent": [],
+                    "tables": {name: _fake_table_binding(name, counts[name]) for name in doc["tables"]}}
+    doc["content_sources"] = {
+        "directory": "Content",
+        # No file is read here — only `source_entries` is load-bearing, because it is what
+        # `declared_content_derivation` roots the Content child's expected count in.
+        "required_files": {"SpellRankData.json": {
+            "kind": "spell_rank", "sha256": "0" * 64, "source_entries": content_entries}},
+    }
+    doc.pop("sha256", None)
+    doc["sha256"] = compute_policy_sha256(doc)
+    return doc
+
+
+def topology_report_for(doc: dict) -> dict:
+    """The `binding.topology` a producer would have recorded for this bound policy — matching it
+    facet-for-facet, so `topology_matches_bound` is empty."""
+    bound = doc["bound"]
+    return {
+        "client_build": bound["client_build"],
+        "tables": {name: {"sha256": t["sha256"], "header": t["header"],
+                          "member": t["source"]["member"],
+                          "effective_archive": t["source"]["effective_archive"],
+                          "patch_chain": t["source"]["patch_chain"],
+                          "key_unique": True, "dense": True}
+                   for name, t in bound["tables"].items()},
+        "expected_absent_ok": True, "expected_absent_set": list(bound.get("expected_absent", [])),
+        "blocking": [],
+    }
+
+
+def policy_binding(doc: dict) -> dict:
+    """The `binding` fragment a producer records for a reviewed policy (T2.1's trust-chain legs 2 and 3)."""
+    return {"policy_sha256": doc["sha256"], "topology": topology_report_for(doc)}
+
+
+# --- the generation contract (T1.1/T1.2) ---
 
 def generation_contract_binding(contract=None) -> dict:
     """The `binding` fragment identifying the staged contract. A producer records it so a consumer can
@@ -48,45 +134,164 @@ def stage_generation_contract(gw: GenerationWriter, *, mutate=None, contract=Non
     return revision, doc
 
 
-def stage_minimal_generation(root, *, drop_contract: bool = False, contract_mutate=None,
-                             contract=None, bind_override=None, drop_binding: bool = False):
-    """A complete-but-empty staged CANDIDATE: every required child present, the three spell children
-    empty so the cross-child merge-join is trivially satisfied, and a real policy child so `_cross_child`
-    can load it. Returns the generation directory.
+# --- the golden corpus baseline ---
 
-    This shape is exactly the one that passed both validators at 02e0b7c while carrying zero spells —
-    it stays useful here precisely because WS2 is what makes it stop passing.
+def corpus_rows(name: str, *cases: str) -> list[dict]:
+    """Corpus rows for the given cases, stripped of the corpus labels."""
+    rows = [json.loads(line) for line in (CORPUS / name).read_text().splitlines() if line.strip()]
+    return [{k: v for k, v in r.items() if k not in ("case", "golden_accept")}
+            for r in rows if r["case"] in cases]
 
-    Contract knobs, each isolating ONE leg of the three-way check (T1.2):
-      * `contract`      — stage and bind an explicit (revision, doc) instead of `current`
-      * `contract_mutate` — tamper the STAGED copy; the binding follows it, so the registry leg fires
-      * `bind_override` — desynchronize the binding from the staged copy, so the binding leg fires
-      * `drop_binding` / `drop_contract` — omit the binding block / the child entirely
+
+def corpus_policy_doc() -> dict:
+    return json.loads((CORPUS / "policy.json").read_text())
+
+
+def _ancillary_rows(schema_version: str, count: int) -> list[dict]:
+    """Placeholder ancillary rows. Their CONTENT is not validated until T2.2's shapes; what matters here
+    is that a fixture can stage a count the policy's bound actually states."""
+    return [{"schema_version": schema_version, "row": i} for i in range(count)]
+
+
+def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
+                    ancillary_counts=None, advancement_kept=2, advancement_source=3,
+                    content_entries=2,
+                    # --- contract knobs (T1.2), each isolating one leg of the three-way check ---
+                    drop_contract=False, contract_mutate=None, contract=None, bind_override=None,
+                    drop_binding=False,
+                    # --- cardinality knobs (T2.1), each breaking ONE correspondence on purpose ---
+                    truncate_full_to=None, truncate_icons_to=None, drop_projection_rows=0,
+                    truncate_child=None, extra_child=None, duplicate_json_document=None,
+                    advancement_derivation=None, content_derivation=None, drop_derivations=False,
+                    forge_manifest_topology_record_count=None, forge_staged_policy_bound_record_count=None,
+                    forge_manifest_policy_sha256=None, unbind_staged_policy=False):
+    """A COMPLETE staged candidate whose policy is sized to what it stages, so the honest case validates
+    and each knob breaks exactly one rule. Returns the generation directory.
+
+    The three spell children come from the shared golden corpus (the same rows Node validates), so the
+    cross-child merge-join has real work to do rather than being trivially satisfied by empty files.
     """
+    full = corpus_rows("full_rows.jsonl", "valid_full") if full is None else full
+    proj = corpus_rows("projection_rows.jsonl", "valid") if proj is None else proj
+    icons = corpus_rows("icons.jsonl", "valid_icon") if icons is None else icons
+    ancillary_counts = {**{t: 2 for t in ANCILLARY_TABLES}, **(ancillary_counts or {})}
+    ancillary_counts["CharacterAdvancement"] = advancement_source
+
+    base = corpus_policy_doc() if policy_doc is None else policy_doc
+    policy = bind_policy_doc(base, spell_records=len(full), ancillary_records=ancillary_counts,
+                             content_entries=content_entries)
+
+    # Violations are applied AFTER the policy is sized, so each one breaks the correspondence rather
+    # than the fixture never having established it.
+    staged_policy = copy.deepcopy(policy)
+    if forge_staged_policy_bound_record_count is not None:
+        staged_policy["bound"]["tables"]["Spell"]["header"]["record_count"] = \
+            forge_staged_policy_bound_record_count
+        staged_policy["sha256"] = compute_policy_sha256(
+            {k: v for k, v in staged_policy.items() if k != "sha256"})
+    if unbind_staged_policy:
+        staged_policy["bound"] = None
+        staged_policy["sha256"] = compute_policy_sha256(
+            {k: v for k, v in staged_policy.items() if k != "sha256"})
+
+    if truncate_full_to is not None:
+        full = full[:truncate_full_to]
+    if truncate_icons_to is not None:
+        icons = icons[:truncate_icons_to]
+    if drop_projection_rows:
+        proj = proj[:-drop_projection_rows]
+
+    ancillary_rows = {
+        "coa_client_content.jsonl": _ancillary_rows("coa-client-content-v1", content_entries),
+        "coa_client_advancement.jsonl": _ancillary_rows("coa-client-advancement-v1", advancement_kept),
+    }
+    for table, child in ANCILLARY_CHILD_FOR.items():
+        ancillary_rows[child] = _ancillary_rows(
+            f"coa-client-{child[len('coa_client_'):-len('.jsonl')].replace('_', '-')}-v1",
+            ancillary_counts[table])
+    if truncate_child is not None:
+        name, keep = truncate_child
+        ancillary_rows[name] = ancillary_rows[name][:keep]
+
     gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell.jsonl", [], schema_version="coa-client-spell-v3")
-    gw.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", [], schema_version="coa-client-spell-icons-v1")
+    write_lock(gw.root, policy)      # the HONEST policy: a forged staged copy is caught against this
+    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
+    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
     gw.add_json("coa_client_spell_projection.manifest.json",
                 {"schema_version": "coa-client-spell-projection-manifest-v3"},
                 schema_version="coa-client-spell-projection-manifest-v3")
-    for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl",
-                 "coa_client_class_types.jsonl", "coa_client_tab_types.jsonl",
-                 "coa_client_essence.jsonl"):
-        gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+    for name, rows in ancillary_rows.items():
+        gw.add_jsonl(name, rows, schema_version=f"fixture-{name}")
     gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                 schema_version="coa-client-archive-plan-v1")
-    gw.add_json("spell_layout_v2.json", json.loads(json.dumps(v2_policy().doc)),
-                schema_version="coa-spell-layout-v2")
-    binding: dict = {}
+    gw.add_json("spell_layout_v2.json", staged_policy, schema_version="coa-spell-layout-v2")
+
+    binding: dict = dict(policy_binding(policy))
+    if forge_staged_policy_bound_record_count is not None or unbind_staged_policy:
+        binding["policy_sha256"] = staged_policy["sha256"]      # the binding follows the staged copy
+    if forge_manifest_topology_record_count is not None:
+        binding["topology"] = copy.deepcopy(binding["topology"])
+        binding["topology"]["tables"]["Spell"]["header"]["record_count"] = \
+            forge_manifest_topology_record_count
+    if forge_manifest_policy_sha256 is not None:
+        binding["policy_sha256"] = forge_manifest_policy_sha256
+    binding["derivations"] = {
+        "coa_client_advancement.jsonl": advancement_derivation if advancement_derivation is not None else
+        {"source": "CharacterAdvancement", "kept": advancement_kept,
+         "rejected": advancement_source - advancement_kept},
+        "coa_client_content.jsonl": content_derivation if content_derivation is not None else
+        {"source": "content_json", "source_entries": content_entries, "kept": content_entries,
+         "rejected": 0},
+    }
+    if drop_derivations:
+        binding.pop("derivations")
+
     if not drop_contract:
         staged = stage_generation_contract(gw, mutate=contract_mutate, contract=contract)
-        binding = generation_contract_binding(staged)
+        binding.update(generation_contract_binding(staged))
     elif contract is not None:
-        binding = generation_contract_binding(contract)
+        binding.update(generation_contract_binding(contract))
     if bind_override is not None:
-        binding = {"generation_contract": bind_override}
+        binding["generation_contract"] = bind_override
     if drop_binding:
-        binding = {}
+        binding.pop("generation_contract", None)
+
+    if duplicate_json_document is not None:
+        # Two concatenated documents, registered HONESTLY: `_scan_child` counts every non-JSONL child as
+        # exactly one record regardless of content, so the manifest stays perfectly self-consistent and
+        # only parsing catches the second document.
+        path = gw.gen_dir / duplicate_json_document
+        body = path.read_bytes()
+        path.write_bytes(body + body)
+        gw._children[duplicate_json_document]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        gw._children[duplicate_json_document]["byte_length"] = path.stat().st_size
+
     gw.publish_candidate(base_manifest={}, binding=binding)
+
+    if extra_child is not None:
+        name, body = extra_child
+        (gw.gen_dir / name).write_bytes(body)          # on disk but NOT registered: the whitelist case
     return gw.gen_dir
+
+
+def write_lock(root, policy_doc: dict) -> Path:
+    """Write the policy lock beside a generation root. The lock is what 'locally supported' means for
+    both languages — the honest policy's digest, which a candidate cannot supply."""
+    path = Path(root) / "spell_layout.lock.json"
+    path.write_text(json.dumps({"schema_version": "coa-spell-layout-lock-v1",
+                                "sha256": policy_doc["sha256"]}), encoding="utf-8")
+    return path
+
+
+def validate_staged(gen_dir, **kwargs):
+    """Validate a fixture-staged candidate against the lock the fixture wrote. The fixture's synthetic
+    policy is what is 'locally supported' for a test, exactly as the committed lock is in production."""
+    from coa_client_extract.publish import validate_candidate_generation
+
+    return validate_candidate_generation(gen_dir, lock_path=gen_dir.parent / "spell_layout.lock.json",
+                                         **kwargs)
+
+
+# Back-compat alias: T1.1/T1.2 built "a complete candidate" through this name.
+stage_minimal_generation = stage_candidate

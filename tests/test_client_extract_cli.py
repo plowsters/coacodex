@@ -222,6 +222,22 @@ def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
     assert resolved["manifest"]["binding"]["policy_sha256"] == policy.sha256
     assert resolved["manifest"]["binding"]["topology"]["client_build"] == "3.3.5a+patch-C"
 
+    # E0R.2 T2.1: the contract's cardinality rules resolved against the REVIEWED policy, non-vacuously —
+    # 23 class types is the source table's own record count, not a floor anyone guessed.
+    children, bound = resolved["manifest"]["children"], policy.bound["tables"]
+    for child, table in (("coa_client_spell.jsonl", "Spell"),
+                         ("coa_client_class_types.jsonl", "CharacterAdvancementClassTypes"),
+                         ("coa_client_tab_types.jsonl", "CharacterAdvancementTabTypes"),
+                         ("coa_client_essence.jsonl", "CharacterAdvancementEssence")):
+        assert children[child]["records"] == bound[table]["header"]["record_count"], child
+    assert children["coa_client_class_types.jsonl"]["records"] == 23
+    derivations = resolved["manifest"]["binding"]["derivations"]
+    adv = derivations["coa_client_advancement.jsonl"]
+    assert adv["kept"] + adv["rejected"] == bound["CharacterAdvancement"]["header"]["record_count"]
+    assert adv["kept"] == children["coa_client_advancement.jsonl"]["records"]
+    content = derivations["coa_client_content.jsonl"]
+    assert content["kept"] + content["rejected"] == content["source_entries"] == 1
+
     gen_dir = resolved["gen_dir"]
     # --- the client-DBC spell child is now the compact v3 row (identity + mechanics + coa_attribution) ---
     spell = json.loads((gen_dir / "coa_client_spell.jsonl").read_text().splitlines()[0])

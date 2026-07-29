@@ -335,7 +335,10 @@ def regenerate(
     parity_sha = None
     try:
         # === validate the candidate BY PATH in BOTH Python and Node, before the pointer flips ===
-        validate_candidate_generation(gw.gen_dir)                 # per-child + streaming cross-child merge-join
+        # Per-child integrity + the contract's whitelist and cardinality rules + the streaming cross-child
+        # merge-join. The lock is the SAME artifact the Node boundary checks, so both trust boundaries
+        # agree on which policy is locally supported (E0R.2 T2.1).
+        validate_candidate_generation(gw.gen_dir, lock_path=node_lock_path)
         node_elapsed_s = node_peak_rss_mb = None
         if validate_with_node:
             node_started = _time.monotonic()

@@ -13,14 +13,21 @@ from coa_client_extract.publish import (
 from coa_client_extract.spell_record import iter_spell_records, project_v3_row
 from coa_client_extract.spell_icons import iter_icon_catalog
 from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_views, icon_side_views
-from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+from tests._e0r2_fixtures import (ANCILLARY_TABLES, bind_policy_doc, generation_contract_binding,
+                                  policy_binding, stage_generation_contract, validate_staged,
+                                  write_lock)
 
 
 def _resolver(path):
     return {"bytes": b"BLP:" + path.encode(), "archive": "patch-T.MPQ", "member": path, "patch_chain": []}
 
 
-def _stage_full_generation(root: Path) -> GenerationWriter:
+def _stage_full_generation(root: Path):
+    """Stage (but do not publish) a full generation, returning (writer, binding).
+
+    E0R.2 T2.1: the staged policy gets a reviewed `bound` sized to what is staged here (one spell, empty
+    ancillary children) and the lock is written beside the generation, so the candidate validator's
+    policy trust chain and cardinality rules have something real to resolve against."""
     prov = {"effective_archive": "patch-T.MPQ"}
     # 805775 is the authoritatively-attributed CoA spell (id_range: high is only provenance).
     full = sorted(iter_spell_records(spell_dbc(), side_views(), policy=v2_policy(), provenance=prov,
@@ -41,16 +48,23 @@ def _stage_full_generation(root: Path) -> GenerationWriter:
         gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
     gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                 schema_version="coa-client-archive-plan-v1")
-    gw.add_json("spell_layout_v2.json", v2_policy().doc, schema_version="coa-spell-layout-v2")
-    stage_generation_contract(gw)
-    return gw
+    policy_doc = bind_policy_doc(v2_policy().doc, spell_records=len(full),
+                                 ancillary_records={t: 0 for t in ANCILLARY_TABLES}, content_entries=0)
+    write_lock(gw.root, policy_doc)
+    gw.add_json("spell_layout_v2.json", policy_doc, schema_version="coa-spell-layout-v2")
+    staged = stage_generation_contract(gw)
+    binding = {**policy_binding(policy_doc), **generation_contract_binding(staged), "derivations": {
+        "coa_client_advancement.jsonl": {"source": "CharacterAdvancement", "kept": 0, "rejected": 0},
+        "coa_client_content.jsonl": {"source": "content_json", "source_entries": 0, "kept": 0,
+                                     "rejected": 0}}}
+    return gw, binding
 
 
 def test_transactional_v3_generation_resolves_in_python_and_node(tmp_path):
     dist = tmp_path / "dist"
-    gw = _stage_full_generation(dist)
-    candidate = gw.publish_candidate(base_manifest={}, binding=generation_contract_binding())
-    validate_candidate_generation(gw.gen_dir)                       # Python candidate validation by path
+    gw, binding = _stage_full_generation(dist)
+    candidate = gw.publish_candidate(base_manifest={}, binding=binding)
+    validate_staged(gw.gen_dir)                       # Python candidate validation by path
     final = gw.finalize_and_publish(candidate_manifest=candidate,
                                     validation={"python": True, "node": True}, budget={"within_budget": True})
     assert final["publication_state"] == "published"
@@ -68,8 +82,8 @@ def test_transactional_v3_generation_resolves_in_python_and_node(tmp_path):
 def test_node_rejects_a_candidate_generation(tmp_path):
     # A candidate (never finalized) writes NO pointer -> Node has no active generation to resolve.
     dist = tmp_path / "dist"
-    gw = _stage_full_generation(dist)
-    gw.publish_candidate(base_manifest={}, binding=generation_contract_binding())
+    gw, binding = _stage_full_generation(dist)
+    gw.publish_candidate(base_manifest={}, binding=binding)
     r = subprocess.run(["node", "coa_scraper/scripts/lib/generation.mjs", str(dist)],
                        capture_output=True, text=True)
     assert r.returncode != 0
@@ -79,9 +93,9 @@ def test_build_mechanics_consumes_the_v3_generation_through_the_pointer(tmp_path
     # The canonical Node consumer resolves the published v3 generation via the pointer, re-verifies the
     # projection rows against the staged policy child, and emits coa-mechanics-v2 (cooldown/gcd/costs null).
     dist = tmp_path / "dist"
-    gw = _stage_full_generation(dist)
-    candidate = gw.publish_candidate(base_manifest={}, binding=generation_contract_binding())
-    validate_candidate_generation(gw.gen_dir)
+    gw, binding = _stage_full_generation(dist)
+    candidate = gw.publish_candidate(base_manifest={}, binding=binding)
+    validate_staged(gw.gen_dir)
     gw.finalize_and_publish(candidate_manifest=candidate, validation={"python": True, "node": True},
                             budget={"within_budget": True})
 

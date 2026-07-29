@@ -31,7 +31,7 @@ from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_
 from coa_client_extract.publish import (MANIFEST_NAME, ResolveError, candidate_trust_sha256,
                                         validate_candidate_generation)
 
-from tests._e0r2_fixtures import stage_minimal_generation
+from tests._e0r2_fixtures import stage_minimal_generation, validate_staged
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +75,7 @@ def test_the_contract_is_staged_as_a_child_and_bound_in_the_manifest(tmp_path):
 
 def test_a_valid_generation_still_passes(tmp_path):
     """The rejection matrix below is only meaningful if the honest case is accepted."""
-    assert validate_candidate_generation(stage_minimal_generation(tmp_path))["manifest"]
+    assert validate_staged(stage_minimal_generation(tmp_path))["manifest"]
 
 
 # --- leg 2: the staged child must match the binding ---
@@ -88,7 +88,7 @@ def test_a_staged_contract_that_differs_from_the_bound_hash_is_rejected(tmp_path
         bind_override={"schema_version": GENERATION_CONTRACT_SCHEMA, "revision": doc["revision"],
                        "sha256": "0" * 64})
     with pytest.raises(ResolveError, match="generation_contract"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_binding_naming_a_different_revision_than_the_staged_child_is_rejected(tmp_path):
@@ -100,7 +100,7 @@ def test_a_binding_naming_a_different_revision_than_the_staged_child_is_rejected
         bind_override={"schema_version": GENERATION_CONTRACT_SCHEMA, "revision": "e0r-v99",
                        "sha256": generation_contract_sha256(doc)})
     with pytest.raises(ResolveError, match="revision"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_binding_with_the_wrong_schema_version_is_rejected(tmp_path):
@@ -110,7 +110,7 @@ def test_a_binding_with_the_wrong_schema_version_is_rejected(tmp_path):
         bind_override={"schema_version": "coa-generation-contract-v99", "revision": doc["revision"],
                        "sha256": generation_contract_sha256(doc)})
     with pytest.raises(ResolveError, match="schema_version"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 @pytest.mark.parametrize("bound", [
@@ -124,13 +124,13 @@ def test_a_binding_with_the_wrong_schema_version_is_rejected(tmp_path):
 def test_an_incomplete_binding_is_rejected(tmp_path, bound):
     gen = stage_minimal_generation(tmp_path, bind_override=bound)
     with pytest.raises(ResolveError, match="generation_contract"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_generation_with_no_binding_block_at_all_is_rejected(tmp_path):
     gen = stage_minimal_generation(tmp_path, drop_binding=True)
     with pytest.raises(ResolveError, match="generation_contract"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 # --- leg 3: registry membership, dispatched by hash ---
@@ -140,7 +140,7 @@ def test_a_generation_bound_to_an_unsupported_contract_is_rejected(tmp_path):
     gen = stage_minimal_generation(tmp_path,
                                    contract_mutate=lambda d: d.update(revision="made-up-v9"))
     with pytest.raises(ResolveError, match="unsupported"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_staged_contract_edited_under_a_supported_revision_is_rejected(tmp_path):
@@ -148,7 +148,7 @@ def test_a_staged_contract_edited_under_a_supported_revision_is_rejected(tmp_pat
     gen = stage_minimal_generation(
         tmp_path, contract_mutate=lambda d: d["children"].pop("coa_client_essence.jsonl"))
     with pytest.raises(ResolveError, match="sha256"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_structurally_broken_staged_contract_is_rejected_before_dispatch(tmp_path):
@@ -157,14 +157,14 @@ def test_a_structurally_broken_staged_contract_is_rejected_before_dispatch(tmp_p
     gen = stage_minimal_generation(tmp_path,
                                    contract_mutate=lambda d: d["children"].update(bad="nope"))
     with pytest.raises(ResolveError, match="spec must be an object"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 def test_a_staged_contract_that_is_not_json_is_rejected(tmp_path):
     gen = stage_minimal_generation(tmp_path)
     (gen / GENERATION_CONTRACT_CHILD).write_text("{not json", encoding="utf-8")
     with pytest.raises(ResolveError, match="not valid JSON"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 # --- candidate trust covers the binding ---
@@ -177,7 +177,7 @@ def test_candidate_trust_covers_the_bound_contract_hash(tmp_path):
     manifest["binding"]["generation_contract"]["sha256"] = "0" * 64
     _rewrite_manifest(gen, manifest)
     with pytest.raises(ResolveError, match="candidate_trust_sha256"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
 
 
 # --- the property the whole design exists for: an OLDER supported revision still resolves ---
@@ -218,7 +218,7 @@ def test_a_generation_under_a_NON_CURRENT_but_supported_revision_still_validates
     assert load_current_contract()[0] == "e0r-v2"          # the generation below is NOT under `current`
 
     gen = stage_minimal_generation(tmp_path / "dist", contract=("e0r-v1", v1))
-    resolved = validate_candidate_generation(gen)
+    resolved = validate_staged(gen)
     assert resolved["manifest"]["binding"]["generation_contract"]["revision"] == "e0r-v1"
 
 
@@ -236,4 +236,4 @@ def test_a_revision_dropped_from_the_registry_stops_resolving(tmp_path, monkeypa
     contracts_mod._CONTRACT_CACHE.clear()
 
     with pytest.raises(ResolveError, match="unsupported"):
-        validate_candidate_generation(gen)
+        validate_staged(gen)
