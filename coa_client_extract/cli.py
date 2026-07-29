@@ -50,7 +50,7 @@ def regenerate(
     import time as _time
     from .recordview import open_view
     from .spell_layout import load_default_policy
-    from .spell_record import iter_spell_records, project_v3_row
+    from .spell_record import iter_spell_records, observation_accumulator, project_v3_row
     from .spell_icons import iter_icon_catalog, icon_coverage
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
@@ -217,8 +217,12 @@ def regenerate(
             yield fh.read(length)
 
     full_is_coa: set[int] = set()
+    # E0R.2 T4.1: observation coverage rides the streaming write loop's existing per-row hook — counters
+    # only, so the single pass and the bounded retention are both preserved.
+    observations = observation_accumulator()
 
     def _observe_full(row):
+        observations.observe(row)
         if row["coa_attribution"].get("is_coa") is True:
             full_is_coa.add(row["spell_id"])
         if row["spell_id"] in adv_spell_ids:
@@ -283,6 +287,8 @@ def regenerate(
         client_root=str(client_root), client_build=client_build, outputs={},
         archive_plan=plan.to_dict())
     base_manifest["icon_coverage"] = icon_cov          # rides in the authoritative generation manifest-v3
+    # Two coverages, two denominators: icons count SPELLS, observations count raw CELLS (E0R.2 T4.1).
+    base_manifest["observation_coverage"] = observations.result()
     base_manifest["benchmark_env"] = benchmark_env()   # reproducible env pin for the budget (T4.3)
     gw = GenerationWriter(out_dir)
     gw.add_jsonl_lines("coa_client_spell.jsonl", _spool_lines(full_spool, full_index),
@@ -412,6 +418,7 @@ def regenerate(
     manifest["unknown_symbol_inventory"] = unknown_symbol_inventory
     manifest["spell_policy_sha256"] = policy.sha256
     manifest["icon_coverage"] = icon_cov
+    manifest["observation_coverage"] = observations.result()
     try:
         write_json(manifest, out_dir / "coa_client_extract_manifest.json")
     except OSError as exc:

@@ -258,6 +258,64 @@ def _compact_join(jname, join, jo_dict) -> dict:
 
 
 PROJECTION_SCHEMA_V3 = "coa-client-spell-projection-v3"
+OBSERVATION_COVERAGE_SCHEMA = "coa-client-observation-coverage-v1"
+
+
+class _ObservationAccumulator:
+    """Streaming state/reason tallies over full-row raw cells (E0R.2 T4.1).
+
+    This is OBSERVATION coverage, not mechanics readiness — a distinction with two different
+    denominators. Observation coverage counts every raw CELL of every full row; icon coverage counts
+    every SPELL in the domain; mechanics readiness lives on the other side of the trust boundary
+    entirely. Reporting one as the other yields a healthy-looking number about the wrong population.
+
+    The denominator is exact by construction: each cell increments exactly one state bucket and exactly
+    one reason bucket, at both the per-field and the overall level, so the parts always sum to `cells`.
+    A coverage figure computed over "the cells we happened to emit" cannot tell complete extraction from
+    silent loss — it reads 100% either way.
+
+    A join's COMPONENTS are sub-observations of the one field cell and are deliberately not counted:
+    they would inflate numerator and denominator with a different unit.
+
+    Counters only — no row is retained. This folds into the streaming write loop over a 200k-row table
+    (design A4), where holding rows would defeat the point.
+    """
+
+    __slots__ = ("rows", "cells", "states", "reasons", "fields")
+
+    def __init__(self):
+        self.rows = 0
+        self.cells = 0
+        self.states: dict[str, int] = {}
+        self.reasons: dict[str, int] = {}
+        self.fields: dict[str, dict] = {}
+
+    def observe(self, row: dict) -> None:
+        self.rows += 1
+        for field, cell in (row.get("raw") or {}).items():
+            entry = self.fields.get(field)
+            if entry is None:
+                entry = self.fields[field] = {"cells": 0, "states": {}, "decoded_reasons": {}}
+            state, reason = cell.get("state"), cell.get("decoded_reason")
+            self.cells += 1
+            entry["cells"] += 1
+            self.states[state] = self.states.get(state, 0) + 1
+            self.reasons[reason] = self.reasons.get(reason, 0) + 1
+            entry["states"][state] = entry["states"].get(state, 0) + 1
+            entry["decoded_reasons"][reason] = entry["decoded_reasons"].get(reason, 0) + 1
+
+    def result(self) -> dict:
+        return {"schema_version": OBSERVATION_COVERAGE_SCHEMA, "rows": self.rows, "cells": self.cells,
+                "states": dict(sorted(self.states.items())),
+                "decoded_reasons": dict(sorted(self.reasons.items())),
+                "fields": {f: {"cells": e["cells"],
+                               "states": dict(sorted(e["states"].items())),
+                               "decoded_reasons": dict(sorted(e["decoded_reasons"].items()))}
+                           for f, e in sorted(self.fields.items())}}
+
+
+def observation_accumulator() -> _ObservationAccumulator:
+    return _ObservationAccumulator()
 
 
 def _expand_scalar_cell(cell: dict, policy: SpellPolicy) -> dict:

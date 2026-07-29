@@ -329,6 +329,46 @@ function atomicWrite(targetPath, data) {
   fs.renameSync(tmp, targetPath);
 }
 
+// E0R.2 T4.1: the fields that carry a readiness verdict — pendingReadiness()'s three, plus power_type,
+// which is null-honest with an unavailable/no_static_anchor readiness whenever the client decode is
+// withheld. Explicit rather than derived from the rows, because the denominator has to be knowable
+// WITHOUT the rows: derived from them, a field that stopped being emitted would leave the set silently.
+export const READINESS_FIELDS = ["cooldown_ms", "costs", "gcd_ms", "power_type"];
+
+// Coverage of the fields with NO winning source — the population `source_coverage`
+// (per_field_winner_counts_by_source) is silent about, because it counts only fields that HAVE one.
+// A consumer needs both to size the artifact honestly.
+//
+// The denominator is rows x READINESS_FIELDS, not "the readiness entries we happened to emit": a row
+// that stops carrying an entry must show up as `absent` rather than shrink the denominator until the
+// ratio looks fine again. Every (row, field) pair lands in exactly one status and one reason bucket.
+export function fieldReadinessCoverage(rows) {
+  const fields = {};
+  for (const field of READINESS_FIELDS) fields[field] = { considered: 0, statuses: {}, reason_codes: {} };
+  const statuses = {}, reasonCodes = {};
+  const bump = (into, key) => { into[key] = (into[key] || 0) + 1; };
+
+  for (const row of rows) {
+    const readiness = row.field_readiness || {};
+    for (const field of READINESS_FIELDS) {
+      const entry = readiness[field];
+      const status = entry ? (entry.status ?? "unspecified") : "absent";
+      const reason = entry ? (entry.reason_code ?? "unspecified") : "absent";
+      fields[field].considered += 1;
+      bump(fields[field].statuses, status);
+      bump(fields[field].reason_codes, reason);
+      bump(statuses, status);
+      bump(reasonCodes, reason);
+    }
+  }
+  return {
+    schema_version: "coa-mechanics-readiness-coverage-v1",
+    rows: rows.length,
+    fields_considered: rows.length * READINESS_FIELDS.length,
+    statuses, reason_codes: reasonCodes, fields,
+  };
+}
+
 function winnerCounts(rows) {
   const bySource = {}; const byTier = {};
   for (const r of rows) {
@@ -420,6 +460,9 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
     coverage: loaded.absent ? null : loaded.coverage,
     per_field_winner_counts_by_source: bySource,
     per_field_winner_counts_by_tier: byTier,
+    // E0R.2 T4.1: the other half of the picture — the fields with no winning source at all, sized
+    // against an exact rows x fields denominator (see fieldReadinessCoverage).
+    field_readiness_coverage: fieldReadinessCoverage(rows),
     counts: aggregateCounts(rows),
   };
 
