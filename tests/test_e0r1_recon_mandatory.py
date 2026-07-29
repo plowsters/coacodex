@@ -1,22 +1,35 @@
 # tests/test_e0r1_recon_mandatory.py
 """E0R.1 Task 1.1: the recon `verified` state machine is self-consistent — every required join is probed,
 a unique discovery must be adopted at the authored cell, an ambiguous join may stay null WITH evidence,
-and power_type signedness is required for `verified` ONLY if the policy claims a verified interpretation."""
+and power_type signedness is required for `verified` ONLY if the policy claims a verified interpretation.
+
+E0R.2 T3.2 tightened what "ambiguous" has to show for itself: a bare `pair: None` is no longer enough,
+because a join that was never scanned looked identical to one whose ambiguity genuinely persisted. The
+helpers below therefore stage a live scan plus the reviewed baseline it agrees with, so these tests keep
+exercising the OTHER legs of the state machine. The ambiguity rule itself is tested in
+tests/test_e0r2_recon_live_joins.py.
+"""
 from coa_client_extract.spell_mechanics import _recon_status
+from tests._e0r2_recon_fixtures import baseline as make_baseline
+from tests._e0r2_recon_fixtures import candidates as make_candidates
+from tests._e0r2_recon_fixtures import scanned_probe
 
 _REQUIRED_JOINS = ("casting_time_index", "duration_index", "range_index", "spell_icon_id")
 _GOOD_LAYOUT = {"power_type": {"matches_policy": True}, "school_mask": {"matches_policy": True},
                 "name": {"matches_policy": True}}
+_CANDIDATES = make_candidates((10, 11))
+_BASELINE = make_baseline({f: _CANDIDATES for f in _REQUIRED_JOINS})
 
 
 def _joins_all_ambiguous():
-    return {f: {"pair": None, "winners": []} for f in _REQUIRED_JOINS}
+    return {f: scanned_probe(_CANDIDATES) for f in _REQUIRED_JOINS}
 
 
 def _status(**over):
     base = dict(blocking=[], bound_mismatch=[], layout_proof=_GOOD_LAYOUT, reviewed=True,
                 required_joins=_REQUIRED_JOINS, join_pairs=_joins_all_ambiguous(),
-                authored_join_cells={}, power_type_interpretation="raw_only", power_type_signed=None)
+                authored_join_cells={}, power_type_interpretation="raw_only", power_type_signed=None,
+                ambiguity_baseline=_BASELINE)
     base.update(over)
     return _recon_status(**base)
 

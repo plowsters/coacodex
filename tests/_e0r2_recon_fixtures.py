@@ -76,3 +76,36 @@ def unique_backend():
     candidate."""
     # Cell 0 = spell ids well outside the side-id range; cell 2 = values that are not side ids.
     return _bundle([(9001, 5, 40000), (9002, 71, 40001), (9003, 3, 40002)], field_count=3)
+
+
+# --- E0R.2 T3.2: ambiguity baselines --------------------------------------------------------------
+# A live ambiguous probe and the reviewed baseline it is compared against are two views of the SAME
+# candidate list, so both are built from one place here. A test that wants a disagreement changes one
+# side and leaves the other alone.
+
+def candidates(cells, *, nonzero=100, valid=100, distinct_ids=41):
+    return [{"cell": c, "nonzero_count": nonzero, "valid_count": valid, "distinct_ids": distinct_ids}
+            for c in sorted(cells)]
+
+
+def scanned_probe(cands, *, table="SpellCastTimes", thresholds=None, algorithm=None):
+    """A probe record shaped exactly as `probe_joins` emits one for a reviewed_ambiguous join."""
+    from coa_client_extract.spell_mechanics import (SCAN_ALGORITHM, SCAN_THRESHOLDS,
+                                                    candidates_digest)
+    return {"table": table, "pair": None, "winners": [], "scanned": True, "side_table_missing": False,
+            "adjudication": "reviewed_ambiguous", "evidence": "fixture",
+            "candidates": cands,
+            "scan_algorithm": SCAN_ALGORITHM if algorithm is None else algorithm,
+            "scan_thresholds": dict(SCAN_THRESHOLDS if thresholds is None else thresholds),
+            "candidates_digest": candidates_digest(cands)}
+
+
+def baseline(joins: dict, *, thresholds=None, algorithm=None):
+    """The reviewed `ambiguity_baseline` block for `{field: candidate_list}`."""
+    from coa_client_extract.spell_mechanics import (SCAN_ALGORITHM, SCAN_THRESHOLDS,
+                                                    candidates_digest)
+    return {
+        "scan_algorithm": SCAN_ALGORITHM if algorithm is None else algorithm,
+        "thresholds": dict(SCAN_THRESHOLDS if thresholds is None else thresholds),
+        "joins": {f: {"candidates": c, "digest": candidates_digest(c)} for f, c in joins.items()},
+    }

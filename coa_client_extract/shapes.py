@@ -406,7 +406,9 @@ def spell_policy_v2(doc):
     _keys(doc, required=("schema_version", "reviewed", "required_tables", "tables", "joins", "sha256",
                          "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set",
                          "artifact_contract"),
-          optional=("budget", "provenance_note"),
+          # E0R.2 T3.2: `ambiguity_baseline` is optional — a policy with no adjudicated-ambiguous
+          # join needs none — but a staged policy that carries one must still parse as a policy.
+          optional=("budget", "provenance_note", "ambiguity_baseline"),
           where=where)
     if doc["schema_version"] != "coa-spell-layout-v2":
         _fail(f"{where}.schema_version", f"{doc['schema_version']!r}")

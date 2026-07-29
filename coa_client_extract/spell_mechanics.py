@@ -18,6 +18,30 @@ _MIN_SUPPORT = 2          # a real index column references at least this many no
 _MIN_DISTINCT = 2         # ...spanning at least this many distinct side rows (not one repeated id)
 _ANCHOR_FIELDS = (("power_type", False), ("school_mask", False), ("name", True))
 
+# E0R.2 T3.2: the ambiguity baseline binds the scan that produced it, not just its output. A candidate
+# set is only comparable to another scan run under the SAME algorithm and thresholds — loosen the
+# validity ratio and "the same candidates" means something else entirely.
+#
+# The ratio is an integer fraction, never a float. The baseline and its digest are hash-bound, and float
+# repr/rounding differs across platforms and across Python/Node: 0.99 stored as a float would digest
+# differently on machines that agree completely about the client.
+SCAN_ALGORITHM = "fk_validity_v1"
+SCAN_THRESHOLDS = {"min_support": _MIN_SUPPORT, "min_distinct": _MIN_DISTINCT,
+                   "valid_num": 99, "valid_den": 100}
+_THRESHOLD_KEYS = tuple(sorted(SCAN_THRESHOLDS))
+_CANDIDATE_KEYS = ("cell", "distinct_ids", "nonzero_count", "valid_count")
+
+
+def candidates_digest(candidates) -> str:
+    """Canonical sha256 over an integer candidate list (E0R.2 T3.2).
+
+    Digesting the LIST rather than comparing it field-by-field is what makes "the ambiguity is
+    unchanged" a single reviewable fact: one value in the policy, one value from the client, equal or
+    not. Every leaf is an int, so the canonical form has no formatting freedom to disagree about."""
+    canonical = [{k: int(c[k]) for k in _CANDIDATE_KEYS} for c in candidates]
+    body = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
 
 def _norm(s) -> str:
     return (s or "").strip().casefold()
@@ -81,7 +105,7 @@ def _discover_index_cell(view, side_ids: set):
     return best, qualifiers
 
 
-def scan_index_candidates(view, side_view, *, side_id_cell: int = 0) -> list[dict]:
+def scan_index_candidates(view, side_view, *, side_id_cell: int = 0, thresholds=None) -> list[dict]:
     """Every Spell cell that could be the FK into `side_view`, with its supporting metrics (E0R.2 T3.1).
 
     An adjudicated-ambiguous join is still SCANNED on every run. Copying the authored verdict forward
@@ -97,7 +121,12 @@ def scan_index_candidates(view, side_view, *, side_id_cell: int = 0) -> list[dic
     per-cell loop `discover_join_pair` uses re-reads the whole table `cell_count` times), pass 2 counts
     distinct ids for the few survivors — which is what keeps the distinct-id sets from being 234
     simultaneous sets over a 200k-row table.
+
+    `thresholds` defaults to SCAN_THRESHOLDS and is compared integer-wise (`valid_num/valid_den`), so a
+    scan is reproducible from the baseline that records it.
     """
+    th = SCAN_THRESHOLDS if thresholds is None else thresholds
+    num, den = th["valid_num"], th["valid_den"]
     side_ids = {r.u32(side_id_cell) for r in side_view.records()}
     cells = range(view.cell_count)
     nonzero = [0] * view.cell_count
@@ -110,8 +139,10 @@ def scan_index_candidates(view, side_view, *, side_id_cell: int = 0) -> list[dic
             nonzero[c] += 1
             if v in side_ids:
                 valid[c] += 1
+    # Integer cross-multiplication rather than `valid/nonzero >= num/den`: the comparison is exact and
+    # carries no float rounding into a value that gets hashed.
     survivors = [c for c in cells
-                 if nonzero[c] >= _MIN_SUPPORT and valid[c] / nonzero[c] >= 0.99]
+                 if nonzero[c] >= th["min_support"] and valid[c] * den >= num * nonzero[c]]
     distinct: dict[int, set] = {c: set() for c in survivors}
     if survivors:
         for rec in view.records():
@@ -120,7 +151,8 @@ def scan_index_candidates(view, side_view, *, side_id_cell: int = 0) -> list[dic
                 if v != 0 and v in side_ids:
                     distinct[c].add(v)
     return [{"cell": c, "nonzero_count": nonzero[c], "valid_count": valid[c],
-             "distinct_ids": len(distinct[c])} for c in survivors]
+             "distinct_ids": len(distinct[c])}
+            for c in survivors if len(distinct[c]) >= th["min_distinct"]]
 
 
 def _read_side(rec, cell, kind):
@@ -169,7 +201,8 @@ def discover_join_pair(view, id_to_rec, side_view, *, side_id_cell, side_value_c
     return (winners[0] if len(winners) == 1 else None), winners
 
 
-def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors) -> dict:
+def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors,
+                *, thresholds=None) -> dict:
     """Probe every join carrying authored value-anchors and record the outcome per index field.
 
     A join the human review adjudicated as un-disambiguable — `adjudication: "reviewed_ambiguous"`, i.e.
@@ -189,6 +222,7 @@ def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value
     join_pairs: dict[str, dict] = {}
     if not join_value_anchors:
         return join_pairs
+    thresholds = SCAN_THRESHOLDS if thresholds is None else thresholds
     field_to_side = {j.index_field: j.side_table for j in getattr(spell_policy, "joins", {}).values()}
     for field, spec in join_value_anchors.items():
         side_name = spec.get("side_table") or field_to_side.get(field)
@@ -210,7 +244,13 @@ def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value
         record["scanned"] = True
         side_id_cell = spec.get("side_id_cell", 0)
         if ambiguous:
-            record["candidates"] = scan_index_candidates(view, side_view, side_id_cell=side_id_cell)
+            record["candidates"] = scan_index_candidates(view, side_view, side_id_cell=side_id_cell,
+                                                         thresholds=thresholds)
+            # E0R.2 T3.2: the scan records WHAT PRODUCED IT. A candidate list is only comparable to a
+            # baseline produced by the same algorithm under the same thresholds.
+            record["scan_algorithm"] = SCAN_ALGORITHM
+            record["scan_thresholds"] = dict(thresholds)
+            record["candidates_digest"] = candidates_digest(record["candidates"])
         else:
             pair, winners = discover_join_pair(
                 view, id_to_rec, side_view, side_id_cell=side_id_cell,
@@ -233,27 +273,82 @@ def discover_power_type_signedness(view, id_to_rec, *, cell, anchors) -> bool:
     return True
 
 
+def ambiguity_agrees(probe: dict, baseline: dict | None) -> str | None:
+    """Compare ONE live ambiguous-join scan against its reviewed baseline (E0R.2 T3.2).
+
+    Returns None on exact agreement, else a short reason. "Ambiguous" was previously satisfied by
+    `pair is None` — a join that was never scanned and one whose candidates changed completely both
+    read as unchanged. Accepting "any candidate set of size >= 2" is barely better: a move from cells
+    {10,11} to {90,91} keeps the count and replaces the ambiguity outright.
+
+    Exact agreement means all four of: the same scan algorithm, the same thresholds, the same candidate
+    digest, and the same candidate list. Any addition, removal, or metric drift is review_required —
+    the point is that a human looks again, not that the machine picks a winner."""
+    if baseline is None:
+        return "no reviewed ambiguity baseline for this join"
+    if not probe.get("scanned"):
+        return "join was not scanned against this client"
+    if probe.get("scan_algorithm") != baseline.get("scan_algorithm"):
+        return (f"scan algorithm {probe.get('scan_algorithm')!r} != baseline "
+                f"{baseline.get('scan_algorithm')!r}")
+    probe_th, base_th = probe.get("scan_thresholds") or {}, baseline.get("thresholds") or {}
+    if {k: probe_th.get(k) for k in _THRESHOLD_KEYS} != {k: base_th.get(k) for k in _THRESHOLD_KEYS}:
+        return f"scan thresholds {probe_th} != baseline {base_th}"
+    live = probe.get("candidates")
+    if live is None:
+        return "scan recorded no candidate list"
+    expected = baseline.get("candidates")
+    if candidates_digest(live) != baseline.get("digest"):
+        return (f"candidate digest {candidates_digest(live)[:12]} != baseline "
+                f"{str(baseline.get('digest'))[:12]}")
+    # The digest already decides; comparing the list too means a baseline whose stored `candidates` and
+    # `digest` disagree with each other is caught here rather than silently trusting the digest.
+    if [{k: c.get(k) for k in _CANDIDATE_KEYS} for c in live] != \
+            [{k: c.get(k) for k in _CANDIDATE_KEYS} for c in (expected or [])]:
+        return "baseline candidates disagree with the baseline digest"
+    return None
+
+
+def _baseline_entry(ambiguity_baseline: dict | None, field: str) -> dict | None:
+    """The per-join baseline with the block-level algorithm/thresholds folded in, so a caller compares
+    one complete record rather than reaching into two levels."""
+    baseline = ambiguity_baseline or {}
+    entry = dict((baseline.get("joins") or {}).get(field) or {})
+    if not entry:
+        return None
+    entry.setdefault("scan_algorithm", baseline.get("scan_algorithm"))
+    entry.setdefault("thresholds", baseline.get("thresholds"))
+    return entry
+
+
 def _recon_status(*, blocking, bound_mismatch, layout_proof, reviewed, required_joins, join_pairs,
-                  authored_join_cells, power_type_interpretation, power_type_signed) -> str:
+                  authored_join_cells, power_type_interpretation, power_type_signed,
+                  ambiguity_baseline=None) -> str:
     """The E0R.1 recon lifecycle (self-consistent). `verified` requires: no blocking finding; a reviewed
     policy whose structured bound matches; every scalar anchor at its policy cell; **every** required join
-    probed and either uniquely discovered AND adopted at the authored cell, or ambiguous (recorded with
-    evidence); and — ONLY if the policy claims a verified `power_type` interpretation — a proven signed
-    reading. When the policy declares `power_type` raw_only/unproven, `no_static_anchor` is acceptable and
-    signedness is not required. A uniquely-discovered join the policy has not adopted ⇒ `review_required`."""
+    probed and either uniquely discovered AND adopted at the authored cell, or ambiguous in EXACT
+    agreement with the reviewed hash-bound baseline (E0R.2 T3.2); and — ONLY if the policy claims a
+    verified `power_type` interpretation — a proven signed reading. When the policy declares `power_type`
+    raw_only/unproven, `no_static_anchor` is acceptable and signedness is not required. A
+    uniquely-discovered join the policy has not adopted ⇒ `review_required`."""
     if blocking:
         return "blocked"
     if not reviewed or bound_mismatch:
         return "review_required"
     if not all(p.get("matches_policy") for p in layout_proof.values()):
         return "review_required"
+    baseline = ambiguity_baseline or {}
     for field in required_joins:
         probe = join_pairs.get(field)
         if probe is None:                                  # a required join was never probed
             return "review_required"
         pair = probe.get("pair")
         if pair is None:
-            continue                                       # ambiguous, recorded ⇒ stays raw_only, ok
+            # Ambiguous. It stays raw_only either way — but `verified` now means the ambiguity was
+            # RE-MEASURED and matches what the review looked at, not merely that no winner emerged.
+            if ambiguity_agrees(probe, _baseline_entry(baseline, field)) is not None:
+                return "review_required"
+            continue
         discovered_index = pair[0]                         # (index_cell, value_cell)
         if authored_join_cells.get(field) != discovered_index:
             return "review_required"                       # unique but unadopted, or mismatched
@@ -400,7 +495,13 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
     # joined-pair value-anchor discovery (design A5/A6): value anchors break the bare-FK ambiguity and a
     # reviewed_ambiguous marker records a join the review could not disambiguate; power_type_anchors admit
     # the signed int32 reading only via a static negative. Delegated to probe_joins so it is unit-testable.
-    join_pairs = probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors)
+    # E0R.2 T3.2: the scan runs under the thresholds the REVIEWED baseline declares, so a live scan and
+    # the baseline it is compared against are produced the same way. A policy with no baseline falls back
+    # to the shipped defaults and simply cannot reach `verified` for an ambiguous join.
+    ambiguity_baseline = (getattr(spell_policy, "doc", {}) or {}).get("ambiguity_baseline")
+    scan_thresholds = (ambiguity_baseline or {}).get("thresholds") or SCAN_THRESHOLDS
+    join_pairs = probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value_anchors,
+                             thresholds=scan_thresholds)
     power_type_signed = None
     if power_type_anchors is not None:
         pt_cell_probe = layout_proof["power_type"]["discovered_cell"]
@@ -449,7 +550,8 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
         blocking=blocking, bound_mismatch=bound_mismatch, layout_proof=layout_proof,
         reviewed=getattr(spell_policy, "reviewed", False), required_joins=required_joins,
         join_pairs=join_pairs, authored_join_cells=authored_join_cells,
-        power_type_interpretation=power_type_interpretation, power_type_signed=power_type_signed)
+        power_type_interpretation=power_type_interpretation, power_type_signed=power_type_signed,
+        ambiguity_baseline=ambiguity_baseline)
 
     return {
         "schema_version": SCHEMA, "status": status, "blocking_findings": blocking,
@@ -459,6 +561,10 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
                         "effective_archive": str(member.effective_archive),
                         "patch_chain": [str(p) for p in member.patch_chain]},
         "layout_proof": layout_proof, "index_fk": index_fk, "join_pairs": join_pairs,
+        "ambiguity_agreement": {
+            f: ambiguity_agrees(join_pairs[f], _baseline_entry(ambiguity_baseline, f))
+            for f in required_joins
+            if f in join_pairs and join_pairs[f].get("pair") is None},
         "power_type_signed": power_type_signed, "no_static_anchor": no_static_anchor,
         "required_joins": list(required_joins), "enum_domains": enum_domains,
         "topology": topology, "proposed_policy_delta": delta, "duplicates": sorted(dupes)[:20],

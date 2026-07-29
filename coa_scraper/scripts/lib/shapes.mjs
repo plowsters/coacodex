@@ -326,7 +326,9 @@ export const SHAPES = {
     keys(doc, { required: ["schema_version", "reviewed", "required_tables", "tables", "joins", "sha256",
                            "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set",
                            "artifact_contract"],
-                optional: ["budget", "provenance_note"], where });
+                // E0R.2 T3.2: `ambiguity_baseline` is optional — a policy with no
+                // adjudicated-ambiguous join needs none — but a staged policy carrying one must parse.
+                optional: ["budget", "provenance_note", "ambiguity_baseline"], where });
     if (doc.schema_version !== "coa-spell-layout-v2") fail(`${where}.schema_version`, doc.schema_version);
     if (doc.reviewed !== true) fail(`${where}.reviewed`, "an unreviewed policy may not be staged");
     obj(doc.tables, `${where}.tables`);

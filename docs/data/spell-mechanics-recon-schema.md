@@ -29,6 +29,17 @@ StormLib absent is a separate fail-closed (exit **2**).
   that matches **all** present anchors; it never assumes the policy's cell.
 - `index_fk`: per adjudicated join index field — the discovered FK cell + validity stats, or a
   `no_unique_index_cell` finding. Only joins whose policy index cell is non-null are re-checked.
+- `join_pairs`: per join carrying value-anchors — `{table, pair, winners, scanned, side_table_missing}`.
+  A join adjudicated `reviewed_ambiguous` additionally carries `adjudication`, `evidence`, and (E0R.2
+  T3.1) a LIVE scan: `candidates` (`[{cell, nonzero_count, valid_count, distinct_ids}]`, sorted by cell,
+  every metric an integer), `scan_algorithm`, `scan_thresholds`, `candidates_digest`. `scanned: false`
+  with `side_table_missing: true` means the side table could not be opened — distinct from "ambiguous",
+  which before E0R.2 it was not.
+- `ambiguity_agreement`: per ambiguous join — `null` when the live scan matches the policy's reviewed
+  `ambiguity_baseline` exactly, else the reason it does not. E0R.2 T3.2: `verified` requires exact
+  agreement on algorithm, thresholds, candidate cells and per-candidate metrics. `pair: None` alone no
+  longer counts — a join that was never scanned and one whose candidates were replaced wholesale both
+  used to read as unchanged, and even "any candidate set of size ≥ 2" would accept `{10,11}` → `{90,91}`.
 - `enum_domains`: `power_type_observed`, `unknown_power_types`, `unknown_school_bits` — unseen symbols
   are recorded, never blocking (the extractor's per-value gate withholds them downstream).
 - `topology`: per required / expected-absent table — `{present, required|expected_absent}`

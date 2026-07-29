@@ -1,4 +1,498 @@
 {
+  "ambiguity_baseline": {
+    "joins": {
+      "casting_time_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 6,
+            "nonzero_count": 390,
+            "valid_count": 388
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 28,
+            "distinct_ids": 67,
+            "nonzero_count": 208776,
+            "valid_count": 208761
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 14,
+            "nonzero_count": 2734,
+            "valid_count": 2721
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6331
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 26,
+            "nonzero_count": 4071,
+            "valid_count": 4051
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 17,
+            "nonzero_count": 2883,
+            "valid_count": 2880
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 16,
+            "nonzero_count": 1836,
+            "valid_count": 1823
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 10,
+            "nonzero_count": 720,
+            "valid_count": 716
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 40,
+            "nonzero_count": 77902,
+            "valid_count": 77424
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 27,
+            "nonzero_count": 3382,
+            "valid_count": 3378
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 135,
+            "distinct_ids": 13,
+            "nonzero_count": 32640,
+            "valid_count": 32568
+          },
+          {
+            "cell": 208,
+            "distinct_ids": 35,
+            "nonzero_count": 86639,
+            "valid_count": 86560
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6515
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          }
+        ],
+        "digest": "5d159aa8a6b4a177b6f6e99167f03156efa5197b9b0904ac69d814d6f86b61a1"
+      },
+      "duration_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 3,
+            "distinct_ids": 31,
+            "nonzero_count": 12411,
+            "valid_count": 12411
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 20,
+            "distinct_ids": 13,
+            "nonzero_count": 341,
+            "valid_count": 338
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 7,
+            "nonzero_count": 390,
+            "valid_count": 390
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 13,
+            "nonzero_count": 2734,
+            "valid_count": 2720
+          },
+          {
+            "cell": 40,
+            "distinct_ids": 165,
+            "nonzero_count": 113855,
+            "valid_count": 113855
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6338
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 28,
+            "nonzero_count": 4071,
+            "valid_count": 4068
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 18,
+            "nonzero_count": 2883,
+            "valid_count": 2881
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 17,
+            "nonzero_count": 1836,
+            "valid_count": 1829
+          },
+          {
+            "cell": 64,
+            "distinct_ids": 12,
+            "nonzero_count": 1197,
+            "valid_count": 1191
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 11,
+            "nonzero_count": 720,
+            "valid_count": 720
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 64,
+            "nonzero_count": 77902,
+            "valid_count": 77460
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 28,
+            "nonzero_count": 3382,
+            "valid_count": 3382
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 104,
+            "distinct_ids": 17,
+            "nonzero_count": 4607,
+            "valid_count": 4581
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 8,
+            "nonzero_count": 1429,
+            "valid_count": 1429
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6504
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 219,
+            "distinct_ids": 3,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          },
+          {
+            "cell": 225,
+            "distinct_ids": 28,
+            "nonzero_count": 204892,
+            "valid_count": 202885
+          }
+        ],
+        "digest": "363ad3bef343a3a29c992ca0c64a4e7be1d88e94f96418f11bd41c376363d8ae"
+      },
+      "range_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 2,
+            "nonzero_count": 20940,
+            "valid_count": 20939
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 46,
+            "distinct_ids": 265,
+            "nonzero_count": 207507,
+            "valid_count": 207505
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 9,
+            "nonzero_count": 720,
+            "valid_count": 715
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 52,
+            "nonzero_count": 77902,
+            "valid_count": 77376
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 9,
+            "nonzero_count": 2286,
+            "valid_count": 2264
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          }
+        ],
+        "digest": "fe7c131c5741845ac3ee8ed0feffedcd37dde0e3657830e32cf6775505cefe0a"
+      }
+    },
+    "scan_algorithm": "fk_validity_v1",
+    "thresholds": {
+      "min_distinct": 2,
+      "min_support": 2,
+      "valid_den": 100,
+      "valid_num": 99
+    }
+  },
   "anchor_set": {
     "joins": {
       "casting_time_index": {
@@ -8,7 +502,7 @@
       },
       "duration_index": {
         "adjudication": "reviewed_ambiguous",
-        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 34 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
         "side_table": "SpellDuration"
       },
       "range_index": {
@@ -186,7 +680,7 @@
         "side_value_kind": "uint32"
       }
     },
-    "sha256": "7d8fbc798fba05d5ce5d81e56ecd002629f4b043025ed1f2e2cd08f79fe759f4",
+    "sha256": "3fd0f9e62bfa3ba72b7b16c816b930adf709d1922fefe53855551cace80ee2b9",
     "spells": [
       {
         "id": 133,
@@ -560,7 +1054,7 @@
   ],
   "reviewed": true,
   "schema_version": "coa-spell-layout-v2",
-  "sha256": "d90729bd119c7ab59c547df379f58bfcdffb62a4aae4815d8e9cf21eac18e515",
+  "sha256": "1c6376c656910b9e224de674b16de8167205509a9d895abcfd6bcb87387cf3f4",
   "tables": {
     "CharacterAdvancement": {
       "expected_field_count": 179,
@@ -608,7 +1102,7 @@
         },
         "duration_index": {
           "cell": null,
-          "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 33 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 34 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
           "interpretation": "unproven",
           "kind": "uint32",
           "layout": "unproven",

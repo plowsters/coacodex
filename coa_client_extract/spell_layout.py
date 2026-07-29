@@ -334,6 +334,12 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     if budget is not None:
         _validate_budget(budget)
 
+    # E0R.2 T3.2: optional at load — a policy with no adjudicated-ambiguous join needs no baseline — but
+    # strictly validated when present, because recon compares a live scan against it and a malformed
+    # baseline would decide a `verified` verdict.
+    if payload.get("ambiguity_baseline") is not None:
+        _validate_ambiguity_baseline(payload["ambiguity_baseline"], payload)
+
     declared = payload.get("sha256")
     recomputed = _sha({k: v for k, v in payload.items() if k != "sha256"})
     if declared != recomputed:
@@ -348,6 +354,64 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         anchor_set=anchor_set, _enum={"power_types": power_types, "school_bits": school_bits},
         doc=payload,
     )
+
+
+_BASELINE_THRESHOLD_KEYS = ("min_distinct", "min_support", "valid_den", "valid_num")
+_BASELINE_CANDIDATE_KEYS = ("cell", "distinct_ids", "nonzero_count", "valid_count")
+
+
+def _validate_ambiguity_baseline(baseline, payload: dict) -> None:
+    """The reviewed FK-ambiguity baseline (E0R.2 T3.2).
+
+    It records what a live scan of each adjudicated-ambiguous join must reproduce EXACTLY: the scan
+    algorithm, its integer thresholds, the candidate cells, and each candidate's metrics — plus the
+    digest recon compares against. Every leaf is an int so the digest cannot depend on float formatting.
+
+    The `digest` is re-derived here, so a baseline whose stored candidates and digest disagree is
+    rejected at load rather than deciding a verdict that reads differently from what it enforces."""
+    from .spell_mechanics import candidates_digest       # local: spell_mechanics imports topology
+
+    if not isinstance(baseline, dict):
+        raise SpellPolicyError("ambiguity_baseline must be an object")
+    if set(baseline) != {"scan_algorithm", "thresholds", "joins"}:
+        raise SpellPolicyError(
+            "ambiguity_baseline must have exactly ['joins', 'scan_algorithm', 'thresholds'], "
+            f"got {sorted(baseline)}")
+    if not isinstance(baseline["scan_algorithm"], str) or not baseline["scan_algorithm"]:
+        raise SpellPolicyError("ambiguity_baseline.scan_algorithm must be a non-empty string")
+    thresholds = baseline["thresholds"]
+    if not isinstance(thresholds, dict) or set(thresholds) != set(_BASELINE_THRESHOLD_KEYS):
+        raise SpellPolicyError(
+            f"ambiguity_baseline.thresholds must have exactly {list(_BASELINE_THRESHOLD_KEYS)}")
+    for key, value in thresholds.items():
+        if type(value) is not int or isinstance(value, bool) or value <= 0:
+            raise SpellPolicyError(f"ambiguity_baseline.thresholds.{key} must be a positive int")
+    joins = baseline["joins"]
+    if not isinstance(joins, dict) or not joins:
+        raise SpellPolicyError("ambiguity_baseline.joins must be a non-empty object")
+    index_fields = {spec["index_field"] for spec in (payload.get("joins") or {}).values()}
+    for field, entry in joins.items():
+        where = f"ambiguity_baseline.joins.{field}"
+        if field not in index_fields:
+            raise SpellPolicyError(f"{where}: {field!r} is not an index field of any declared join")
+        if not isinstance(entry, dict) or set(entry) != {"candidates", "digest"}:
+            raise SpellPolicyError(f"{where} must have exactly ['candidates', 'digest']")
+        candidates = entry["candidates"]
+        if not isinstance(candidates, list) or not candidates:
+            raise SpellPolicyError(f"{where}.candidates must be a non-empty list")
+        cells = []
+        for c in candidates:
+            if not isinstance(c, dict) or set(c) != set(_BASELINE_CANDIDATE_KEYS):
+                raise SpellPolicyError(
+                    f"{where}.candidates[] must have exactly {list(_BASELINE_CANDIDATE_KEYS)}")
+            for key, value in c.items():
+                if type(value) is not int or isinstance(value, bool) or value < 0:
+                    raise SpellPolicyError(f"{where}.candidates[].{key} must be a non-negative int")
+            cells.append(c["cell"])
+        if cells != sorted(cells) or len(set(cells)) != len(cells):
+            raise SpellPolicyError(f"{where}.candidates must be sorted by cell and unique")
+        if entry["digest"] != candidates_digest(candidates):
+            raise SpellPolicyError(f"{where}.digest does not match its own candidates")
 
 
 def _validate_content_sources(sources) -> None:
