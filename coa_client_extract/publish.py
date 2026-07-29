@@ -10,8 +10,8 @@ import uuid
 from pathlib import Path
 
 from .contracts import (CANDIDATE_MUTABLE_KEYS, ContractError, GENERATION_CONTRACT_CHILD,
-                        ICON_ASSET_STATUSES, generation_contract_sha256, load_current_contract,
-                        load_supported_contract, validate_generation_contract)
+                        GENERATION_CONTRACT_SCHEMA, ICON_ASSET_STATUSES, generation_contract_sha256,
+                        load_current_contract, load_supported_contract, validate_generation_contract)
 from .manifest import build_manifest_v3
 from .spell_layout import load_spell_policy
 from .spell_record import _expand_compact as _expand_cell
@@ -377,28 +377,60 @@ def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
     return resolved
 
 
-def _staged_contract(gen_dir: Path) -> dict:
-    """The contract the generation was PRODUCED under: read from its own staged child, then dispatched
-    through the TRUSTED registry (E0R.2 T1.1).
+def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
+    """The contract the generation was PRODUCED under, established by a THREE-WAY agreement (E0R.2
+    T1.1/T1.2). A contract read from the working tree is not bound to anything: a generation produced
+    under contract A could otherwise be validated under whichever contract happened to be checked out.
 
-    The staged bytes are untrusted input — deriving the required-child set from them without the registry
-    check would let a tampered contract declare its own (empty) requirements. Dispatch is by canonical
-    digest, so a re-serialized staged copy (indented, key-sorted) of a supported revision matches while
-    any semantic edit does not. Returns the registry's copy, which the hash proves identical."""
+      1. the STAGED child — structurally valid on its own terms;
+      2. the manifest BINDING — same revision, same canonical digest. `binding` is inside
+         TRUST_CRITICAL_MANIFEST_KEYS, so candidate trust already covers it and the binding cannot be
+         edited after the fact;
+      3. the validator's OWN registry — set MEMBERSHIP, never equality with `current`, so a generation
+         published under an older supported revision stays resolvable. Without that distinction,
+         rollback and the predecessor chain the publish transaction reads break the moment a new
+         revision ships.
+
+    Dispatch is by canonical digest, so a re-serialized staged copy (indented, key-sorted) of a
+    supported revision matches while any semantic edit does not. Returns the REGISTRY's copy — identical
+    content by hash, but reading the trusted copy means a future parser difference cannot be exploited
+    through the staged file."""
     path = gen_dir / GENERATION_CONTRACT_CHILD
     if not path.is_file():
         raise ResolveError(
             f"required child {GENERATION_CONTRACT_CHILD!r} missing: the generation does not declare "
             "the contract it was produced under")
     try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
+        staged = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise ResolveError(f"staged generation contract is not valid JSON: {exc}") from exc
     try:
-        validate_generation_contract(doc)
-        return load_supported_contract(doc["revision"], generation_contract_sha256(doc))
+        validate_generation_contract(staged)
     except ContractError as exc:
         raise ResolveError(f"staged generation contract rejected: {exc}") from exc
+
+    staged_sha = generation_contract_sha256(staged)
+    bound = (manifest.get("binding") or {}).get("generation_contract")
+    if not isinstance(bound, dict):
+        raise ResolveError(
+            "manifest binding.generation_contract missing: the generation stages a contract but does "
+            "not bind it, so the staged copy would be trusted on its own word")
+    if bound.get("schema_version") != GENERATION_CONTRACT_SCHEMA:
+        raise ResolveError(
+            f"binding.generation_contract schema_version {bound.get('schema_version')!r} "
+            f"(expected {GENERATION_CONTRACT_SCHEMA!r})")
+    if bound.get("sha256") != staged_sha:
+        raise ResolveError(
+            f"binding.generation_contract: the staged child hashes {staged_sha[:16]} but the binding "
+            f"names {str(bound.get('sha256'))[:16]}")
+    if bound.get("revision") != staged["revision"]:
+        raise ResolveError(
+            f"binding.generation_contract: staged revision {staged['revision']!r} != bound revision "
+            f"{bound.get('revision')!r}")
+    try:
+        return load_supported_contract(bound["revision"], staged_sha)
+    except ContractError as exc:
+        raise ResolveError(f"generation_contract: {exc}") from exc
 
 
 def validate_candidate_generation(gen_dir: Path) -> dict:
@@ -414,8 +446,11 @@ def validate_candidate_generation(gen_dir: Path) -> dict:
         raise ResolveError(f"not a candidate generation (publication_state={manifest.get('publication_state')!r})")
     if manifest.get("candidate_trust_sha256") != candidate_trust_sha256(manifest):
         raise ResolveError("candidate_trust_sha256 does not cover the manifest")
+    # The contract is established BEFORE any per-child work: it is what says which children are required,
+    # and an unbound/unsupported generation should fail as that rather than as an unrelated child error.
+    contract = _staged_contract(gen_dir, manifest)
     resolved = _validate_children_by_path(gen_dir, manifest)
-    for name in required_children_for(_staged_contract(gen_dir)):
+    for name in required_children_for(contract):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the candidate generation")
     _cross_child(gen_dir, manifest.get("children", {}))
@@ -456,6 +491,9 @@ def resolve_active_generation(root: Path) -> dict:
     if manifest.get("generation_id") != gen_id:
         raise ResolveError("manifest generation_id disagrees with the pointer")
     _assert_published_manifest(manifest)
+    # Identical rules to the candidate path, so a PUBLISHED generation under an older supported revision
+    # resolves by exactly the same three-way agreement it was validated under.
+    contract = _staged_contract(gen_dir, manifest)
 
     children = manifest.get("children", {})
     resolved: dict[str, Path] = {}
@@ -480,7 +518,7 @@ def resolve_active_generation(root: Path) -> dict:
         if not meta.get("schema_version"):
             raise ResolveError(f"child {name!r} missing schema_version")
         resolved[name] = child_path
-    for name in required_children_for(_staged_contract(gen_dir)):
+    for name in required_children_for(contract):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the published generation")
     return {"generation_id": gen_id, "gen_dir": gen_dir, "manifest": manifest, "children": resolved}
