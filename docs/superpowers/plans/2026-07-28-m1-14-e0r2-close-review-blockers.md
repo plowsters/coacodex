@@ -88,7 +88,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T4.2 One internally-executed acceptance command | **done** | `7daf338` — `run_acceptance` folds the executor inside, `write_acceptance_summary` deleted, record -> v3; refuses before spending a build; 933 Py + 255 Node |
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | **done** | `7f87f13` — `recon_binding_sha256` (one canonical identity, computed from both sides) beside `recon_report_sha256`; pointer re-read on BOTH identities after the build; mechanics input-identity binding emitted by Node and re-derived here; emitted JSONL hashed+counted against the Builder domain; coverage fails closed and readiness/source now come from the build's own manifest; 962 Py + 259 Node |
 | T5.1 Streaming projection consumption | **done** | `6a2d406` — `jsonl-stream.mjs` leaf module (imports nothing of ours); `streamAndValidateProjectionV3` retains only Builder-domain rows while validating every row; incremental sha256 provably equals the whole-file hash; 962 Py + 277 Node |
-| T5.2 Generator mechanics rows + incremental statistics | pending | |
+| T5.2 Generator mechanics rows + incremental statistics | **done** | `5b97ad6` — `buildCanonicalMechanics` is a generator, `statsAccumulator` folds all four statistics into the write loop; golden artifact sha + golden statistics recorded from the PRE-refactor build and pinned; 962 Py + 284 Node |
 | T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
 | T6.1 Kind-aware field descriptors (expand) | pending | |
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | pending | |
@@ -273,6 +273,13 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 - **T5.1: the incremental digest is over the bytes, not the rows.** Chunks feed the hash BEFORE line
   splitting, so blank lines and the trailing newline are covered and the digest provably equals the
   whole-file hash it replaces — the provenance in the mechanics manifest is unchanged.
+- **T5.2: the golden hash is the deliverable, not the refactor.** The artifact sha256 and the full
+  statistics block were recorded from the pre-refactor implementation over a fixed fixture BEFORE a line
+  changed, and pinned. A performance change that alters the artifact is not a performance change.
+- **T5.2: a one-shot generator is its own probe.** If any statistic were still computed by re-walking
+  the rows, that pass would see ZERO rows and the counts would come back empty rather than wrong — so
+  the behavioural test (complete statistics out of a consumed generator) catches what a source scan
+  alone would not.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
