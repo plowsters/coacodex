@@ -91,7 +91,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T5.2 Generator mechanics rows + incremental statistics | **done** | `5b97ad6` — `buildCanonicalMechanics` is a generator, `statsAccumulator` folds all four statistics into the write loop; golden artifact sha + golden statistics recorded from the PRE-refactor build and pinned; 962 Py + 284 Node |
 | T5.3 Bounded-retention RSS gate through the real canonical build | **done** | `b457696` — real `buildMechanicsArtifact` in an isolated subprocess at 10k/100k rows; streamed 122.4→132.4 MB (Δ10), pre-T5.1 retention 144.7→443.9 MB (Δ299) — probe verified by restoring the old retention; WS5 complete; 962 Py + 285 Node |
 | T6.1 Kind-aware field descriptors (expand) | **done** | `6cc048d` — `build_field_descriptors`/`buildFieldDescriptors` derived from the policy in BOTH languages and cross-checked byte-identical; a staged descriptor that differs is rejected; both cell encodings expand identically; 982 Py + 299 Node |
-| T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | pending | |
+| T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | **done** | `dee9c4d` — `coa-client-spell-v4` (`s`/`d` codes, pointers + join names hoisted); new immutable `e0r-v2` (e0r-v1 untouched, still supported); `coa_client_spell_fields.json` + `observation_wire_schema.json` staged and re-derived by BOTH validators; corpus rows 7,884→3,678 B; 1023 Py + 311 Node |
 | T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | pending | |
 | T6.4 Cross-revision compatibility matrix | pending | |
 | T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | pending | |
@@ -299,6 +299,21 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   cannot quietly leave the corpus.
 - **T6.1 did NOT touch publish.py** (the plan listed it): nothing stages a descriptor yet, so wiring
   publish belongs with T6.2's staging rather than landing as dead code.
+- **T6.2: a supported revision's shapes may never be deleted.** The shapes test now takes the union
+  over SUPPORTED revisions rather than `current` — `e0r-v1` stays in the registry so its generations
+  remain resolvable, which is only true while `full_spell_row_v3` is still implemented. Expansion
+  dispatches on the ROW's schema version for the same reason.
+- **T6.2: what went away is the dual-encoding TOLERANCE, not the ability to read v3.** A v4 cell that
+  repeats a hoisted key is refused rather than reconciled: it could contradict the descriptor, and
+  there is no principled winner between them.
+- **T6.2: neither staged decoder is believed.** The descriptor child is re-derived from the
+  trust-chained policy and the wire child compared with each validator's own copy, independently in
+  both languages. The sharpest case is tested on both sides: a staged vocabulary renumbering `present`
+  would change what EVERY cell in the artifact says, at once, with every hash still valid.
+- **T6.2 fixture correction:** both languages' two-revision registry fixtures named their synthetic
+  successor `e0r-v2`, which now collides with a shipped revision and failed against the shipped digest
+  for a reason unrelated to those tests. They are named for their ROLE now (`e0r-test-successor`).
+- **T6.2: coverage decodes the codes back to NAMES.** `{"1": 12}` is a coverage number nobody can read.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
