@@ -76,7 +76,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | **done** | `14632f0` — `e0r-v1` (12 children, no placeholders, wire schema pinned `5d9b743d`) digest `708a00e2`; validators derive from the generation's OWN staged contract via registry dispatch; 58 probes; 726 Py + 121 Node |
 | T1.2 Reject a tampered, mismatched, or unsupported contract | **done** | `8107920` — binding leg (digest **and** revision) + registry membership proven behaviourally with a real two-revision registry; 745 Py + 121 Node |
 | T1.3 Node dispatches on the supported-contract hash set | **done** | `78dbbae` — mirrored array deleted; independent Node validator (28-case matrix); hash, revision set and child list asserted against Python by subprocess; 745 Py + 168 Node |
-| T2.1 **Policy-rooted** cardinalities + unregistered children rejected | pending | |
+| T2.1 **Policy-rooted** cardinalities + unregistered children rejected | **done** | `a9e244b` groundwork (bound content read, closing derivations, 10-table synthetic policy) → `f478b6d` Python enforcement (3-step trust chain, 7 rules, whitelist) → `242ff7e` Node mirror; 765 Py + 180 Node |
 | T2.2 Per-child shape validation (both languages) | pending | |
 | T2.3 Full observation domain in the policy, validated at load | pending | |
 | T2.4 Publication requires both validations and a clean budget | pending | |
@@ -125,6 +125,20 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   exactly the drift this workstream removes. Two more Node fixtures also needed the twelfth child:
   `tests/helpers/streaming-probe.mjs` (the RSS probe) and `writeGenerationFixture` in
   `pipeline-scripts.test.mjs`.
+- **T2.1 shipped as three commits**, each green: producer groundwork, Python enforcement, Node mirror.
+  The groundwork was unavoidable — a cardinality rule cannot be enforced until the producer emits closing
+  derivations and the fixtures stage a policy that actually binds a source domain.
+- **`single_document` was unfalsifiable as specified.** `_scan_child` / `scanChild` register `records: 1`
+  for every non-JSONL child unconditionally, so a record-count comparison could never fail. The rule now
+  requires the child to PARSE as one JSON document — which is also the only check that a JSON child is
+  well-formed before a consumer reads it.
+- **`validate_candidate_generation` gained `lock_path`.** Python had no notion of a locally-supported
+  policy; Node already checked the committed lock. Both boundaries now check the same artifact, and
+  `regenerate` passes the lock it already had for Node.
+- **Test fixtures now SIZE the staged policy to what they stage** (`bind_policy_doc` /
+  `bindPolicyDoc`), and violations break that correspondence on purpose. Sizing the other way round —
+  fixed counts in the corpus policy — would have made every existing cross-child test fail the
+  cardinality gate before reaching the merge-join it was written to exercise.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
