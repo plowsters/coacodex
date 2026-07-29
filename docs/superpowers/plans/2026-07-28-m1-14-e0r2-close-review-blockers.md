@@ -89,7 +89,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | **done** | `7f87f13` — `recon_binding_sha256` (one canonical identity, computed from both sides) beside `recon_report_sha256`; pointer re-read on BOTH identities after the build; mechanics input-identity binding emitted by Node and re-derived here; emitted JSONL hashed+counted against the Builder domain; coverage fails closed and readiness/source now come from the build's own manifest; 962 Py + 259 Node |
 | T5.1 Streaming projection consumption | **done** | `6a2d406` — `jsonl-stream.mjs` leaf module (imports nothing of ours); `streamAndValidateProjectionV3` retains only Builder-domain rows while validating every row; incremental sha256 provably equals the whole-file hash; 962 Py + 277 Node |
 | T5.2 Generator mechanics rows + incremental statistics | **done** | `5b97ad6` — `buildCanonicalMechanics` is a generator, `statsAccumulator` folds all four statistics into the write loop; golden artifact sha + golden statistics recorded from the PRE-refactor build and pinned; 962 Py + 284 Node |
-| T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
+| T5.3 Bounded-retention RSS gate through the real canonical build | **done** | `b457696` — real `buildMechanicsArtifact` in an isolated subprocess at 10k/100k rows; streamed 122.4→132.4 MB (Δ10), pre-T5.1 retention 144.7→443.9 MB (Δ299) — probe verified by restoring the old retention; WS5 complete; 962 Py + 285 Node |
 | T6.1 Kind-aware field descriptors (expand) | pending | |
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | pending | |
 | T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | pending | |
@@ -280,6 +280,14 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   the rows, that pass would see ZERO rows and the counts would come back empty rather than wrong — so
   the behavioural test (complete statistics out of a consumed generator) catches what a source scan
   alone would not.
+- **T5.3: a memory gate over tiny rows measures nothing.** The first probe PASSED with pre-T5.1
+  retention restored, because ~500 B rows cost only 50 MB at 100k. Rows are now padded to ~2.5 KB
+  (`ROW_BYTES`), a ~250 MB fixture in the same order as the real 400 MB projection, and the same
+  restore then fails at Δ299 MB against the 150 MB gate. **Verify a probe by breaking the thing it
+  guards, not by watching it pass.**
+- **T5.3: the probe checks it measured the right run first.** It asserts the build streamed all N rows
+  and emitted 3,600 records BEFORE trusting the peak — a projection that failed to load reports a
+  beautifully small number.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
