@@ -526,17 +526,27 @@ def _require_executed_build_mechanics(build_mechanics: dict) -> dict:
     return dict(build_mechanics)
 
 
-def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mechanics: dict,
-                             benchmark_env_id: str = "local", out: Path | None = None) -> dict:
-    """The schema-stable curated E0R acceptance record (v2). Every claim is derived, never accepted:
+def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, builder_entries: Path,
+                   mechanics_out: Path, benchmark_env_id: str = "local", out: Path | None = None,
+                   node: str = "node") -> dict:
+    """Run the acceptance and write the record (v3). Every claim is derived, never accepted:
 
     * the generation is RESOLVED here (strict V3 / published / both-language validation / within budget),
       so a caller cannot hand in a fabricated manifest or its own publication verdict;
     * the recon report is read from disk, COMMITTED into the record in normalized form, bound by its
       sha256, and required to be `verified`;
-    * `pointer_only`, the network-trap result and the runtime measurement come from the EXECUTED
-      build-mechanics run;
-    * icon / readiness / source coverage counts ride along from the authoritative manifest.
+    * the canonical build is EXECUTED here, under the network trap, and `pointer_only`, the trap result
+      and the runtime measurement come from that run;
+    * coverage counts ride along from the authoritative manifest.
+
+    E0R.2 T4.2: this replaces `write_acceptance_summary(..., build_mechanics=...)`, which took the
+    measurement as a PARAMETER. It checked that measurement hard — executed, exit 0, zero network
+    attempts, pointer-only — but every check ran against a dict the caller supplied. The CLI happened to
+    pass a real one; nothing in the function required that. A record whose central attestation is
+    "whatever I was told" is not an attestation, so the executor moves inside and the seam disappears.
+
+    Order matters: resolve, then validate the recon, and only THEN execute. A run that can never be
+    accepted must not spend a full canonical build first.
 
     A record OF a clean run — never part of the commit it attests to.
     """
@@ -562,7 +572,12 @@ def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mecha
         raise AcceptanceError(f"recon status is {recon_status!r}; acceptance requires a verified recon")
     normalized_report = _normalized_json(recon_report)
 
-    measured = _require_executed_build_mechanics(build_mechanics)
+    # === EXECUTE, then require what the execution produced (E0R.2 T4.2) ===
+    # Looked up through the module so a test can substitute the executor and still prove it was CALLED —
+    # the one thing a fabricated-measurement parameter could never demonstrate.
+    measured = _require_executed_build_mechanics(run_measured_build_mechanics(
+        Path(scraper_dir), dist / "coa_client_extract.pointer.json",
+        builder_entries=builder_entries, out_dir=mechanics_out, node=node))
 
     children = {name: {"sha256": meta.get("sha256"), "byte_length": meta.get("byte_length"),
                        "records": meta.get("records"), "schema_version": meta.get("schema_version")}
@@ -572,7 +587,7 @@ def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mecha
     manifest_sha256 = json.loads(pointer.read_text(encoding="utf-8")).get("manifest_sha256")
 
     summary = {
-        "schema_version": "coa-e0r-acceptance-summary-v2",
+        "schema_version": "coa-e0r-acceptance-summary-v3",
         "client_build": manifest.get("client_build"),
         "generation_id": manifest.get("generation_id"),
         "predecessor_generation_id": manifest.get("predecessor_generation_id"),
@@ -588,7 +603,11 @@ def write_acceptance_summary(dist: Path, *, recon_report_path: Path, build_mecha
         "benchmark_env": manifest.get("benchmark_env"),
         "children": children,
         "coverage": {
+            # E0R.2 T4.1 split the two layers: `icon` and `observation` are generation-manifest facts.
+            # `readiness`/`source` are MECHANICS-manifest facts and have always read empty here — T4.3
+            # binds them from the executed build's own manifest instead of this one.
             "icon": manifest.get("icon_coverage") or {},
+            "observation": manifest.get("observation_coverage") or {},
             "readiness": manifest.get("readiness_coverage") or {},
             "source": manifest.get("source_coverage") or {},
         },
@@ -868,15 +887,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"mechanics-recon: {status} ({len(report['blocking_findings'])} blocking)", file=sys.stderr)
         return _RECON_EXIT.get(status, 1)
     if args.command == "acceptance-summary":
-        # The canonical build is EXECUTED here, under the trap, and its measurement is what the record
-        # binds — the command never accepts a caller's word for pointer-only/network-free (T6.2).
-        measured = run_measured_build_mechanics(
-            args.scraper_dir, Path(args.dist) / "coa_client_extract.pointer.json",
-            builder_entries=args.builder_entries, out_dir=args.mechanics_out)
+        # E0R.2 T4.2: ONE call. The canonical build is executed inside `run_acceptance`, under the trap,
+        # after the generation resolves and the recon is verified — so the record can only ever describe
+        # a build the record-writer itself ran, and an unacceptable run never pays for one.
         try:
-            write_acceptance_summary(args.dist, recon_report_path=args.recon_report,
-                                     build_mechanics=measured,
-                                     benchmark_env_id=args.benchmark_env_id, out=args.out)
+            run_acceptance(args.dist, recon_report_path=args.recon_report,
+                           scraper_dir=args.scraper_dir, builder_entries=args.builder_entries,
+                           mechanics_out=args.mechanics_out,
+                           benchmark_env_id=args.benchmark_env_id, out=args.out)
         except AcceptanceError as exc:
             print(f"error: acceptance refused: {exc}", file=sys.stderr)
             return 5
