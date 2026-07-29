@@ -80,7 +80,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T2.2 Per-child shape validation (both languages) | **done** | `cf19ad6` Python + `2e280c6` Node; 12 shapes each, golden documents from the real producer; 825 Py + 240 Node |
 | T2.3 Full observation domain in the policy, validated at load | **done** | `a675153` — mandatory `artifact_contract`, re-derived from the layout at load; enforced at BOTH boundaries (Node `verifyFullRowAgainstPolicy` + new Python `publish._observation_domain`) and structural in both shapes; 840 Py + 247 Node |
 | T2.4 Publication requires both validations and a clean budget | **done** | `f874c5a` — identity checks on both boundaries, byte ceilings recomputed from the staged children, `three_part_budget` escape hatch deleted from the publish path; 855 Py + 247 Node |
-| T2.5 `converted` prohibited until a bundle validator exists | pending | |
+| T2.5 `converted` prohibited until a bundle validator exists | **done** | `204a26f` — status + `converted_ref` removed from both vocabularies, both shapes and both cross-child passes; behavioural producer test over resolve/missing/unjoined; 862 Py + 247 Node |
 | T3.1 Live FK candidate scan on every recon | pending | |
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | pending | |
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | pending | |
@@ -184,6 +184,14 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   resolver-strict tests published deliberately-bad manifests; the publisher now refuses to produce them,
   so they write the manifest after publication. The consumer boundary still needs covering — a manifest
   edited post-publication, or written by a publisher without the gate, is the real threat it answers.
+- **T2.5's `converted_ref` had to go with `converted`.** The plan removed the status but left the key
+  admissible in both shapes and in `icon_coverage`'s asset-present branch. A bundle reference is
+  unverifiable on ANY status, so it is not a structural key either — otherwise the schema still says a
+  row may carry a reference nothing can check.
+- **The guide renderer is deliberately untouched.** `tests/test_guide_*.py` still exercise a `converted`
+  icon catalog. That catalog is a downstream consumer format, not a validated generation child; folding
+  it in would have widened T2.5 past the trust boundary it is about. Worth revisiting when the guide's
+  icon source is next touched.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
