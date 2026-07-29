@@ -96,8 +96,8 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T6.4 Cross-revision compatibility matrix | **done** | `9e4163f` — both fixtures now derive what they stage from the REVISION (children, corpus baseline by row schema, registered label); every supported revision validates as a candidate AND resolves through the pointer in both languages; foreign child refused, same child required by v3 / refused by v1, all four encoding directions rejected by shape; v3 and v4 expand to the identical envelope. Found + fixed: `child_schema_version` was declared by every revision and read by nothing; 1068 Py + 339 Node |
 | T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | **done** | `757ce36` — CI runs `npm test` (validate-normalized had never been a merge gate) with `fetch-depth: 0`; `portable_path` states the rule once and the acceptance writer uses it at all four sites; recon source pins now name archives logically, as the topology beside them already did; producer-level gate driven end-to-end (probe catches 7 leaks when reverted); the v2 acceptance record untracked pending T8.1's v3 regeneration; 1078 Py + 339 Node |
 | T7.2 Documentation + ROADMAP corrections | **done** | `219e118` — M1.8/M1.10B/M1.11D marked superseded; the four forward-looking DB promises rewritten to the client-native reality; mechanics-schema.md now declares v2 (its own E0R section already said the loader rejects v1) and drops the `raw` audit trio + `linked_item_ids` no producer emits; the E0R.1 T6.2 coverage overclaim annotated in place and pointed at T4.1/T4.3; both guide-honesty items landed as real M1.16 entries; 1078 Py + 339 Node |
-| T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
-| T8.2 Headroom gate committed with the record | pending | |
+| T8.1 Real-client re-run: recon, regenerate, build, acceptance | **done** | recon `verified` 0 blocking (3m19s, no baseline drift); regenerate published `069a9b18` under e0r-v3 (15m41s); acceptance exit 0 with the canonical build at 0 network attempts, pointer_only, 2.05s / 182.5 MB peak. **Found + fixed a real defect** (`08680d5`): a decoded-but-EMPTY icon path — 23,657 rows — was emitted as an unexplained null; 1088 Py + 343 Node |
+| T8.2 Headroom gate committed with the record | **done** | `61fbc6d` — 312,827,065 / 536,870,912 = **58.27%** of ceiling (was 97.42%); the gate pins the denominator so raising the ceiling cannot satisfy it; recon report NOT force-added (gitignored transactional output, embedded verbatim in the record) |
 | T8.3 Push, PR update, CI green | pending | |
 
 ### Execution notes (deviations from the plan as written, with reasons)
@@ -350,6 +350,24 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   clean as the writer that made it; the test runs `run_acceptance` over inputs living under an absolute
   tmp directory and asserts no absolute path survives in the record. Probe verified by reverting the
   four call sites — it catches 7 leaks.
+- **T8.1: the real client found a FIFTH icon null cause, and the validator caught it.** The first
+  regenerate under `e0r-v3` failed closed on spell 1: the client's `SpellIcon` row 1 exists, is proven,
+  and its path string is EMPTY, so the producer emitted `d=decoded` with a null reference — two
+  incompatible statements. Not `index_zero` (the FK is 1), not `side_row_missing` (the row is there),
+  not `proof_withheld` (the join decoded). Encoded as `verified_empty`, which is what this codebase's
+  readiness vocabulary already means by it. **23,657 of 28,710 null references are this case** — under
+  the v1 flat catalog every one was an indistinguishable `placeholder`, which is exactly the collapse
+  T6.3 existed to remove, still hiding a case the model did not have.
+- **T8.1: `e0r-v3` was edited in place rather than superseded.** It is unpushed, nothing has ever been
+  published under it, and as shipped it was UNSATISFIABLE — no artifact from this client could validate
+  under it. Superseding would have left a permanently-`supported` revision describing nothing
+  producible. Four corpus cases pin the corrected behaviour, including the three ways
+  `verified_empty` must NOT be usable (on a reference, on an unresolved row, or absent from a decoded
+  null) so it cannot launder an unread field into a read one.
+- **T8.2: the recon report is not force-added.** `.gitignore:62` treats it as a transactional output,
+  and the acceptance record embeds the complete report verbatim (byte-equal to the file on disk, with
+  `recon_report_sha256` matching), which is what "the summary commits the recon report itself, not only
+  its hash" always meant. The plan's `git add` line predates that ignore rule.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
