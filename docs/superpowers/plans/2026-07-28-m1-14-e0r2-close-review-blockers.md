@@ -85,7 +85,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | **done** | `de9ff19` — `ambiguity_baseline` authored from a live client scan (30/34/14), integer thresholds, digest validated at load; **caught a wrong reviewed count (33 vs 34) on the real client**; policy sha `1c6376c6`; 896 Py + 247 Node |
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | **done** | `df8bca7` — `recon_budget` replaces `three_part_budget`; `DEFAULT_BUDGET` deleted; ceilings come from the reviewed policy or the run is refused; 908 Py + 247 Node |
 | T4.1 `observation_coverage` + `field_readiness_coverage` producers | **done** | `f55e1d1` — Python accumulator folded into the existing per-row hook (counters + `__slots__`), Node readiness coverage over an explicit rows x fields denominator; 918 Py + 255 Node |
-| T4.2 One internally-executed acceptance command | pending | |
+| T4.2 One internally-executed acceptance command | **done** | `7daf338` — `run_acceptance` folds the executor inside, `write_acceptance_summary` deleted, record -> v3; refuses before spending a build; 933 Py + 255 Node |
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | pending | |
 | T5.1 Streaming projection consumption | pending | |
 | T5.2 Generator mechanics rows + incremental statistics | pending | |
@@ -231,6 +231,17 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   SPELLS, observation coverage counts CELLS, source coverage counts fields WITH a winner, readiness
   coverage counts fields WITHOUT one. Each is fine; any two reported as "coverage" without their
   denominators is not.
+- **T4.2 removed a seam, not a check.** The old writer's checks on the measurement were already strict
+  — executed, exit 0, zero network attempts, pointer-only. They just ran against a caller-supplied dict.
+  Deleting `write_acceptance_summary` rather than keeping it as a shim matters for the same reason: the
+  shim WOULD BE the seam.
+- **"Refuse before you spend" is part of the contract, and is tested as such.** Resolve and recon-verify
+  come before the build, and the tests assert the executor was NOT CALLED — not merely that the call
+  raised. Otherwise an unacceptable run pays for a full canonical build to learn what was already known.
+- **FOUND, deferred to T4.3:** the acceptance record's `coverage.readiness` and `coverage.source` read
+  from the GENERATION manifest, which has never carried them — they are mechanics-manifest facts, so
+  both have always been `{}` in every real record. T4.1's split is what made this visible. T4.3 binds
+  them from the executed build's own manifest.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
