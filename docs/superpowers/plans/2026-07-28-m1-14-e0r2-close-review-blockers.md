@@ -92,7 +92,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T5.3 Bounded-retention RSS gate through the real canonical build | **done** | `b457696` — real `buildMechanicsArtifact` in an isolated subprocess at 10k/100k rows; streamed 122.4→132.4 MB (Δ10), pre-T5.1 retention 144.7→443.9 MB (Δ299) — probe verified by restoring the old retention; WS5 complete; 962 Py + 285 Node |
 | T6.1 Kind-aware field descriptors (expand) | **done** | `6cc048d` — `build_field_descriptors`/`buildFieldDescriptors` derived from the policy in BOTH languages and cross-checked byte-identical; a staged descriptor that differs is rejected; both cell encodings expand identically; 982 Py + 299 Node |
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | **done** | `dee9c4d` — `coa-client-spell-v4` (`s`/`d` codes, pointers + join names hoisted); new immutable `e0r-v2` (e0r-v1 untouched, still supported); `coa_client_spell_fields.json` + `observation_wire_schema.json` staged and re-derived by BOTH validators; corpus rows 7,884→3,678 B; 1023 Py + 311 Node |
-| T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | pending | |
+| T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | **done** | `7cd14f4` — association + asset children, `asset_id = sha256(canonical)[:32]` with collision rejection, four null causes now distinguishable, `equals_referenced_asset_set` + no-dangling/no-orphan/derived-readiness in BOTH validators; new `e0r-v3` (v1/v2 untouched); 1047 Py + 318 Node |
 | T6.4 Cross-revision compatibility matrix | pending | |
 | T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | pending | |
 | T7.2 Documentation + ROADMAP corrections | pending | |
@@ -314,6 +314,18 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   successor `e0r-v2`, which now collides with a shipped revision and failed against the shipped digest
   for a reason unrelated to those tests. They are named for their ROLE now (`e0r-test-successor`).
 - **T6.2: coverage decodes the codes back to NAMES.** `{"1": 12}` is a coverage number nobody can read.
+- **T6.3: `readiness` is derived from AVAILABILITY, not from whether a reference exists.** A proven
+  path whose BLP member is absent from the chain is referenced AND unavailable — "null iff unresolved"
+  would have got that wrong, and a probe caught it during implementation.
+- **T6.3: the two children are MUTUALLY determined.** No dangling reference, no orphan asset, and
+  `equals_referenced_asset_set` — one direction alone leaves an asset table free to accumulate rows
+  nothing will ever reference.
+- **T6.3: a truncated digest is a probability argument, so identity does not rest on it.** Any
+  `asset_id` collision mapping to two distinct canonical paths RAISES, proved by monkeypatching the
+  digest to force one rather than by arguing about 128 bits.
+- **T6.3 consumer correction:** coa_meta's `converted` icon branch was already unreachable after T2.5
+  and has no key to read after T6.3. Deleted rather than kept as a dead special case; the no-hotlink
+  guarantee is now a property of the class rather than of its inputs.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
