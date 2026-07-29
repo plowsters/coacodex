@@ -90,7 +90,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T5.1 Streaming projection consumption | **done** | `6a2d406` — `jsonl-stream.mjs` leaf module (imports nothing of ours); `streamAndValidateProjectionV3` retains only Builder-domain rows while validating every row; incremental sha256 provably equals the whole-file hash; 962 Py + 277 Node |
 | T5.2 Generator mechanics rows + incremental statistics | **done** | `5b97ad6` — `buildCanonicalMechanics` is a generator, `statsAccumulator` folds all four statistics into the write loop; golden artifact sha + golden statistics recorded from the PRE-refactor build and pinned; 962 Py + 284 Node |
 | T5.3 Bounded-retention RSS gate through the real canonical build | **done** | `b457696` — real `buildMechanicsArtifact` in an isolated subprocess at 10k/100k rows; streamed 122.4→132.4 MB (Δ10), pre-T5.1 retention 144.7→443.9 MB (Δ299) — probe verified by restoring the old retention; WS5 complete; 962 Py + 285 Node |
-| T6.1 Kind-aware field descriptors (expand) | pending | |
+| T6.1 Kind-aware field descriptors (expand) | **done** | `6cc048d` — `build_field_descriptors`/`buildFieldDescriptors` derived from the policy in BOTH languages and cross-checked byte-identical; a staged descriptor that differs is rejected; both cell encodings expand identically; 982 Py + 299 Node |
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | pending | |
 | T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | pending | |
 | T6.4 Cross-revision compatibility matrix | pending | |
@@ -288,6 +288,17 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 - **T5.3: the probe checks it measured the right run first.** It asserts the build streamed all N rows
   and emitted 3,600 records BEFORE trusting the peak — a projection that failed to load reports a
   beautifully small number.
+- **T6.1: a descriptor defines MEANING, so neither side may take a staged one on its word.** Both
+  languages derive the expectation from the policy and reject a staged document that differs —
+  otherwise a tampered descriptor redefines a field's substrate while compact->rich expansion stays
+  perfectly self-consistent, and producer and consumer agree on a lie. A Python test spawns Node and
+  requires the two derivations to be byte-identical.
+- **T6.1: the corpus already had the resolved-join row the plan asked for** (valid_full's
+  `cast_time_ms`, three components). A test now pins that all three cell shapes are present, so the
+  resolved-join path — unexercised by all 208,447 real rows, reachable the moment E1 adopts a join —
+  cannot quietly leave the corpus.
+- **T6.1 did NOT touch publish.py** (the plan listed it): nothing stages a descriptor yet, so wiring
+  publish belongs with T6.2's staging rather than landing as dead code.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
