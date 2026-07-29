@@ -526,6 +526,163 @@ def _require_executed_build_mechanics(build_mechanics: dict) -> dict:
     return dict(build_mechanics)
 
 
+MECHANICS_MANIFEST_NAME = "coa_mechanics.manifest.json"
+# The five identities a canonical mechanics build must record about ITS OWN inputs. Each names a
+# different way the build could have read something other than the generation under acceptance.
+MECHANICS_BINDING_KEYS = ("builder_entries_sha256", "input_generation_id", "policy_sha256",
+                          "pointer_manifest_sha256", "projection_child_sha256")
+# Fail closed rather than record `{}`: an absent coverage block is an unmeasured run, not a clean one.
+GENERATION_COVERAGE_KEYS = ("icon_coverage", "observation_coverage")
+MECHANICS_COVERAGE_KEYS = ("field_readiness_coverage", "per_field_winner_counts_by_source")
+
+
+def _under_scraper(scraper_dir: Path, path: Path) -> Path:
+    """Resolve a build input/output exactly as the build itself does: the canonical run spawns with
+    cwd=<scraper dir>, so a relative path (`dist/coa_entries.jsonl`) means scraper-relative. Hashing it
+    against the record-writer's own cwd instead would hash a different file, or none."""
+    path = Path(path)
+    return path if path.is_absolute() else Path(scraper_dir) / path
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _hash_and_count_jsonl(path: Path) -> tuple[str, int]:
+    """Hash and count the emitted artifact ITSELF, streaming. What the build's manifest claims about its
+    own output is a claim; this is the measurement."""
+    digest, records = hashlib.sha256(), 0
+    with Path(path).open("rb") as handle:
+        for line in handle:
+            digest.update(line)
+            if line.strip():
+                records += 1
+    return digest.hexdigest(), records
+
+
+def _unique_builder_spell_ids(path: Path) -> int:
+    """The Builder domain the canonical build must cover, counted by the same grouping key the build uses
+    (`buildCanonicalMechanics` emits one row per unique, finite `spell_id`)."""
+    seen: set[int] = set()
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                seen.add(int(json.loads(line)["spell_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return len(seen)
+
+
+def _pointer_identity(dist: Path) -> tuple[str, str]:
+    """The active generation's identity as the pointer states it: WHICH generation, and which manifest
+    bytes. Read as a pair — a rewritten manifest under an unchanged id moves only the second."""
+    from .publish import POINTER_NAME
+
+    path = Path(dist) / POINTER_NAME
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AcceptanceError(f"active generation pointer unreadable: {exc}") from exc
+    return doc.get("generation_id"), doc.get("manifest_sha256")
+
+
+def _require_recon_binding(recon_report: dict, manifest: dict) -> str:
+    """One equality over one canonical object, computed independently from the recon report and from
+    `manifest.binding`. A recon of a different capture, a different policy, a different absent-table
+    state or a different schema cannot bind to this generation."""
+    from .spell_mechanics import generation_binding_facts, recon_binding_digest, recon_binding_facts
+
+    try:
+        from_recon = recon_binding_digest(**recon_binding_facts(recon_report))
+    except ValueError as exc:
+        raise AcceptanceError(f"the recon report cannot be bound: {exc}") from exc
+    try:
+        from_generation = recon_binding_digest(**generation_binding_facts(manifest.get("binding") or {}))
+    except ValueError as exc:
+        raise AcceptanceError(f"the published generation cannot be bound: {exc}") from exc
+    if from_recon != from_generation:
+        raise AcceptanceError(
+            "recon binding digest mismatch: the recon report describes a different run from the one this "
+            f"generation was published under (recon {from_recon}, generation {from_generation})")
+    return from_recon
+
+
+def _require_generation_facts(manifest: dict) -> dict:
+    """The generation-side facts the record must carry, required BEFORE the build runs — a generation
+    that can never be accepted must not spend a canonical build first (T4.2)."""
+    for key in GENERATION_COVERAGE_KEYS:
+        if not manifest.get(key):
+            raise AcceptanceError(f"the published generation records no {key}; an unmeasured run cannot "
+                                  "be accepted as a clean one")
+    contract = (manifest.get("binding") or {}).get("generation_contract")
+    if not isinstance(contract, dict) or not contract.get("revision") or not contract.get("sha256"):
+        raise AcceptanceError("the published generation names no generation contract revision")
+    return contract
+
+
+def _require_mechanics_artifacts(mech_dir: Path, *, generation_id: str, manifest_sha256: str,
+                                 manifest: dict, builder_entries: Path) -> dict:
+    """Check the mechanics build against the ARTIFACTS it left, not against its own summary of them."""
+    path = Path(mech_dir) / MECHANICS_MANIFEST_NAME
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AcceptanceError(f"mechanics manifest unreadable at {path}: {exc}") from exc
+
+    binding = doc.get("binding")
+    if not isinstance(binding, dict) or set(binding) != set(MECHANICS_BINDING_KEYS):
+        raise AcceptanceError(
+            f"the mechanics manifest records no input-identity binding ({sorted(MECHANICS_BINDING_KEYS)}); "
+            "a build that does not say what it read cannot be bound to a generation")
+    children = manifest.get("children") or {}
+    expected = {
+        "input_generation_id": generation_id,
+        "pointer_manifest_sha256": manifest_sha256,
+        "policy_sha256": (manifest.get("binding") or {}).get("policy_sha256"),
+        "projection_child_sha256": (children.get("coa_client_spell_coa.jsonl") or {}).get("sha256"),
+        "builder_entries_sha256": _sha256_file(builder_entries),
+    }
+    for key in MECHANICS_BINDING_KEYS:
+        if binding.get(key) != expected[key]:
+            raise AcceptanceError(f"the mechanics build's {key} is {binding.get(key)!r}, not this "
+                                  f"generation's {expected[key]!r}")
+
+    outputs = doc.get("outputs") or {}
+    jsonl = Path(mech_dir) / str(outputs.get("mechanics_jsonl") or "")
+    if not jsonl.is_file():
+        raise AcceptanceError(f"the mechanics build emitted no {outputs.get('mechanics_jsonl')!r}")
+    recomputed, records = _hash_and_count_jsonl(jsonl)
+    if outputs.get("sha256") != recomputed:
+        raise AcceptanceError(f"mechanics jsonl sha256 mismatch: the manifest claims "
+                              f"{outputs.get('sha256')!r}, {jsonl.name} hashes to {recomputed}")
+    if outputs.get("record_count") != records:
+        raise AcceptanceError(f"mechanics jsonl record count mismatch: the manifest claims "
+                              f"{outputs.get('record_count')!r}, {jsonl.name} holds {records}")
+    unique = _unique_builder_spell_ids(builder_entries)
+    if records != unique:
+        raise AcceptanceError(
+            f"incomplete mechanics build: record_count {records} does not cover the {unique} unique "
+            "builder spell ids. Completeness, not non-emptiness — a build that silently dropped rows "
+            "still emits a plausible-looking artifact")
+    for key in MECHANICS_COVERAGE_KEYS:
+        if not doc.get(key):
+            raise AcceptanceError(f"the mechanics manifest records no {key}; an unmeasured build cannot "
+                                  "be accepted as a covered one")
+    return {"manifest_path": str(path), "manifest_sha256": _sha256_file(path),
+            "jsonl": jsonl.name, "jsonl_sha256": recomputed, "record_count": records,
+            "builder_unique_spell_ids": unique, "binding": binding,
+            "client_build": doc.get("client_build"), "canonical": doc.get("canonical"),
+            "coverage": doc.get("coverage"),
+            "readiness_coverage": doc["field_readiness_coverage"],
+            "source_coverage": doc["per_field_winner_counts_by_source"]}
+
+
 def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, builder_entries: Path,
                    mechanics_out: Path, benchmark_env_id: str = "local", out: Path | None = None,
                    node: str = "node") -> dict:
@@ -535,9 +692,17 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
       so a caller cannot hand in a fabricated manifest or its own publication verdict;
     * the recon report is read from disk, COMMITTED into the record in normalized form, bound by its
       sha256, and required to be `verified`;
+    * the recon is BOUND to this generation by a canonical identity digest computed independently from
+      the report and from `manifest.binding` (E0R.2 T4.3) — a recon of a different capture, policy or
+      absent-table state cannot be accepted merely for saying `verified`;
     * the canonical build is EXECUTED here, under the network trap, and `pointer_only`, the trap result
       and the runtime measurement come from that run;
-    * coverage counts ride along from the authoritative manifest.
+    * the pointer is re-read afterwards on BOTH identities, so a publish landing under the build cannot
+      combine two generations' measurements into one attestation;
+    * the mechanics artifacts are hashed and counted HERE, and the count must cover the whole Builder
+      domain — `record_count > 0` would accept a build that silently dropped most of it;
+    * coverage counts ride along from the authoritative manifest of the layer that owns them: icon and
+      observation from the GENERATION, readiness and source from the executed BUILD.
 
     E0R.2 T4.2: this replaces `write_acceptance_summary(..., build_mechanics=...)`, which took the
     measurement as a PARAMETER. It checked that measurement hard — executed, exit 0, zero network
@@ -551,7 +716,7 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
     A record OF a clean run — never part of the commit it attests to.
     """
 
-    from .publish import ResolveError, resolve_active_generation
+    from .publish import POINTER_NAME, ResolveError, resolve_active_generation
 
     dist = Path(dist)
     try:
@@ -559,6 +724,7 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
     except ResolveError as exc:
         raise AcceptanceError(f"no acceptable published generation: {exc}") from exc
     manifest = resolved["manifest"]
+    generation_contract = _require_generation_facts(manifest)
 
     report_path = Path(recon_report_path)
     if not report_path.is_file():
@@ -571,20 +737,44 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
     if recon_status != "verified":
         raise AcceptanceError(f"recon status is {recon_status!r}; acceptance requires a verified recon")
     normalized_report = _normalized_json(recon_report)
+    recon_binding_sha256 = _require_recon_binding(recon_report, manifest)
+
+    generation_id, manifest_sha256 = _pointer_identity(dist)
 
     # === EXECUTE, then require what the execution produced (E0R.2 T4.2) ===
     # Looked up through the module so a test can substitute the executor and still prove it was CALLED —
     # the one thing a fabricated-measurement parameter could never demonstrate.
     measured = _require_executed_build_mechanics(run_measured_build_mechanics(
-        Path(scraper_dir), dist / "coa_client_extract.pointer.json",
+        Path(scraper_dir), dist / POINTER_NAME,
         builder_entries=builder_entries, out_dir=mechanics_out, node=node))
+
+    # The pointer is read at the START to run the build and again HERE, on both identities: a publish
+    # that landed under the build would otherwise put one generation's measurements in another's record.
+    after_id, after_sha256 = _pointer_identity(dist)
+    if after_id != generation_id:
+        raise AcceptanceError(f"the active generation pointer moved during the build: {generation_id} -> "
+                              f"{after_id}; the measurements and the generation are not the same run")
+    if after_sha256 != manifest_sha256:
+        raise AcceptanceError(f"the active generation's manifest_sha256 changed during the build: "
+                              f"{manifest_sha256} -> {after_sha256}")
+    try:
+        resolve_active_generation(dist)
+    except ResolveError as exc:
+        raise AcceptanceError(f"the generation no longer resolves after the build: {exc}") from exc
+
+    mechanics = _require_mechanics_artifacts(
+        _under_scraper(scraper_dir, mechanics_out), generation_id=generation_id,
+        manifest_sha256=manifest_sha256, manifest=manifest,
+        builder_entries=_under_scraper(scraper_dir, builder_entries))
+    # The two mechanics-layer coverage blocks are reported once, under `coverage`, beside the two
+    # generation-layer ones — four denominators in one place rather than two of them buried per layer.
+    readiness_coverage = mechanics.pop("readiness_coverage")
+    source_coverage = mechanics.pop("source_coverage")
 
     children = {name: {"sha256": meta.get("sha256"), "byte_length": meta.get("byte_length"),
                        "records": meta.get("records"), "schema_version": meta.get("schema_version")}
                 for name, meta in (manifest.get("children") or {}).items()}
     binding = manifest.get("binding") or {}
-    pointer = dist / "coa_client_extract.pointer.json"
-    manifest_sha256 = json.loads(pointer.read_text(encoding="utf-8")).get("manifest_sha256")
 
     summary = {
         "schema_version": "coa-e0r-acceptance-summary-v3",
@@ -601,21 +791,28 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
         "extractor_commit": manifest.get("extractor_commit") or _extractor_commit(),
         "benchmark_env_id": benchmark_env_id,
         "benchmark_env": manifest.get("benchmark_env"),
+        "generation_contract": generation_contract,
         "children": children,
         "coverage": {
-            # E0R.2 T4.1 split the two layers: `icon` and `observation` are generation-manifest facts.
-            # `readiness`/`source` are MECHANICS-manifest facts and have always read empty here — T4.3
-            # binds them from the executed build's own manifest instead of this one.
-            "icon": manifest.get("icon_coverage") or {},
-            "observation": manifest.get("observation_coverage") or {},
-            "readiness": manifest.get("readiness_coverage") or {},
-            "source": manifest.get("source_coverage") or {},
+            # E0R.2 T4.1 split the two layers, T4.3 bound each half to the manifest that owns it. `icon`
+            # and `observation` are GENERATION facts; `readiness` and `source` are MECHANICS facts and
+            # were read from the generation manifest until now — which never carried them, so both were
+            # `{}` in every record ever written. All four are required, never defaulted.
+            "icon": manifest["icon_coverage"],
+            "observation": manifest["observation_coverage"],
+            "readiness": readiness_coverage,
+            "source": source_coverage,
         },
         "recon_status": recon_status,
         "recon_report_path": str(report_path),
+        # Two hashes, two jobs: the identity is what must MATCH this generation, the report hash is what
+        # the record ATTESTS to. Everything outside the identity (scan metrics, budget measurements,
+        # proposed_policy_delta) moves only the second — so neither substitutes for the other.
+        "recon_binding_sha256": recon_binding_sha256,
         "recon_report_sha256": hashlib.sha256(normalized_report.encode("utf-8")).hexdigest(),
         "recon_report": recon_report,
         "build_mechanics": measured,
+        "mechanics": mechanics,
         "generated_at": date.today().isoformat(),
     }
     if out is not None:

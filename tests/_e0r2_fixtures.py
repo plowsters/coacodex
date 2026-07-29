@@ -163,7 +163,7 @@ def _ancillary_rows(shape: str, count: int) -> list[dict]:
 
 def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
                     ancillary_counts=None, advancement_kept=2, advancement_source=3,
-                    content_entries=2,
+                    content_entries=2, base_manifest=None,
                     # --- contract knobs (T1.2), each isolating one leg of the three-way check ---
                     drop_contract=False, contract_mutate=None, contract=None, bind_override=None,
                     drop_binding=False,
@@ -274,7 +274,7 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
         gw._children[duplicate_json_document]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
         gw._children[duplicate_json_document]["byte_length"] = path.stat().st_size
 
-    candidate = gw.publish_candidate(base_manifest={}, binding=binding)
+    candidate = gw.publish_candidate(base_manifest=dict(base_manifest or {}), binding=binding)
 
     if extra_child is not None:
         name, body = extra_child

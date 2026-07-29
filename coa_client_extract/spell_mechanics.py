@@ -42,6 +42,114 @@ def candidates_digest(candidates) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+# === the recon <-> generation identity (E0R.2 T4.3) ===
+# The five header facts are named explicitly rather than digesting whatever `header` happens to hold, so
+# a producer that grows a sixth cannot silently change the identity of every past run.
+RECON_BINDING_HEADER_KEYS = ("field_count", "magic", "record_count", "record_size", "string_block_size")
+
+
+def recon_binding_digest(*, report_schema_version, status, blocking_findings, policy_sha256,
+                         client_build, expected_absent_ok, expected_absent_set, tables) -> str:
+    """The complete identity a recon report and a generation manifest must agree on. Enumerated
+    explicitly — every field is load-bearing, and an omitted one is a hole:
+
+      report_schema_version  the recon schema this was produced under
+      status                 must be "verified"; a digest over a review_required recon must not match
+      blocking_findings      must be []; a recon with findings is not an acceptance input
+      policy_sha256          the reviewed policy both sides bound
+      client_build           the capture the run describes
+      expected_absent_ok +   the reviewed absent-table state (SpellEffect/SpellCooldowns); a client that
+      expected_absent_set    started shipping them is a different substrate, not the same one
+      tables                 per table: sha256, member, effective_archive, patch_chain, and the FULL
+                             header (magic, record_count, field_count, record_size, string_block_size)
+
+    ONE hash of ONE canonical object, computed identically from both sides — not a field-by-field walk
+    that silently skips a key it does not know about. A table present on one side and absent on the other
+    moves the digest, which is exactly the point.
+
+    It deliberately does NOT attest to the recon ARTIFACT: the scan metrics, the budget measurements,
+    `proposed_policy_delta` and `index_fk` are all outside it, so they could change with this digest
+    unmoved. That is what `recon_report_sha256` is for; neither hash substitutes for the other.
+    """
+    body = {"report_schema_version": report_schema_version, "status": status,
+            "blocking_findings": blocking_findings, "policy_sha256": policy_sha256,
+            "client_build": client_build, "expected_absent_ok": expected_absent_ok,
+            "expected_absent_set": sorted(expected_absent_set), "tables": tables}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _binding_tables(topology: dict, where: str) -> dict:
+    tables = topology.get("tables")
+    if not isinstance(tables, dict) or not tables:
+        raise ValueError(f"{where} carries no topology.tables; there is no capture to bind the run to")
+    out: dict[str, dict] = {}
+    for name, spec in tables.items():
+        if not isinstance(spec, dict) or not isinstance(spec.get("header"), dict):
+            raise ValueError(f"{where} topology.tables.{name} carries no header")
+        out[name] = {"sha256": spec.get("sha256"), "member": spec.get("member"),
+                     "effective_archive": spec.get("effective_archive"),
+                     "patch_chain": list(spec.get("patch_chain") or []),
+                     "header": {k: spec["header"].get(k) for k in RECON_BINDING_HEADER_KEYS}}
+    return out
+
+
+def _absent_facts(topology: dict, where: str) -> tuple[bool, list]:
+    ok, names = topology.get("expected_absent_ok"), topology.get("expected_absent_set")
+    if not isinstance(ok, bool) or not isinstance(names, list):
+        raise ValueError(f"{where} carries no expected_absent state")
+    return ok, names
+
+
+def recon_binding_facts(report: dict) -> dict:
+    """The digest inputs as the RECON side states them: `source_pins` for the policy digest and the
+    client build, `topology` for the tables and the absent-table state."""
+    if not isinstance(report, dict):
+        raise ValueError("the recon report is not an object")
+    pins = report.get("source_pins")
+    if not isinstance(pins, dict) or not isinstance(pins.get("dbc"), dict):
+        raise ValueError("the recon report carries no source_pins.dbc block; it is pinned to no client "
+                         "capture at all and cannot be matched against a generation")
+    topology = report.get("topology")
+    if not isinstance(topology, dict):
+        raise ValueError("the recon report carries no topology block")
+    tables = _binding_tables(topology, "the recon report")
+    for name, spec in tables.items():
+        pinned = (pins["dbc"].get(name) or {}).get("sha256")
+        if pinned != spec["sha256"]:
+            raise ValueError(f"the recon report disagrees with itself: source_pins.dbc.{name}.sha256 "
+                             f"({pinned}) is not topology.tables.{name}.sha256 ({spec['sha256']})")
+    ok, names = _absent_facts(topology, "the recon report")
+    return {"report_schema_version": report.get("schema_version"), "status": report.get("status"),
+            "blocking_findings": report.get("blocking_findings"),
+            "policy_sha256": pins.get("policy_sha256"), "client_build": pins.get("client_build"),
+            "expected_absent_ok": ok, "expected_absent_set": names, "tables": tables}
+
+
+def generation_binding_facts(binding: dict) -> dict:
+    """The same digest inputs as the GENERATION side states them, out of `manifest.binding`.
+
+    The three recon-only fields are the REQUIRED values, not a mirror of whatever the report claims:
+    this side asserts "the recon I will accept is a v-current one that was verified with no blocking
+    findings". A doctored `status` therefore cannot pass on its own — the findings it was doctored to
+    hide are inside the digest too.
+    """
+    if not isinstance(binding, dict):
+        raise ValueError("the generation manifest carries no binding block")
+    topology = binding.get("topology")
+    if not isinstance(topology, dict):
+        raise ValueError("the generation manifest carries no binding.topology block")
+    ok, names = _absent_facts(topology, "the generation manifest")
+    if not ok:
+        raise ValueError("the generation was published against a client that ships an expected-absent "
+                         "table")
+    return {"report_schema_version": SCHEMA, "status": "verified", "blocking_findings": [],
+            "policy_sha256": binding.get("policy_sha256"),
+            "client_build": topology.get("client_build"),
+            "expected_absent_ok": True, "expected_absent_set": names,
+            "tables": _binding_tables(topology, "the generation manifest")}
+
+
 def _norm(s) -> str:
     return (s or "").strip().casefold()
 

@@ -406,6 +406,24 @@ function gitHeadCommit() {
   }
 }
 
+// E0R.2 T4.3: WHAT this build read, stated as five identities the producer's acceptance run re-derives
+// independently. Without them a mechanics artifact is bound to nothing — it could have been built from
+// another generation, another policy or another Builder corpus and still look canonical.
+export const MECHANICS_BINDING_KEYS = ["builder_entries_sha256", "input_generation_id", "policy_sha256",
+                                       "pointer_manifest_sha256", "projection_child_sha256"];
+
+export function mechanicsInputBinding(resolved, builderEntriesSha256) {
+  const manifest = resolved?.manifest || {};
+  const children = manifest.children || {};
+  return {
+    input_generation_id: resolved?.generationId ?? null,
+    pointer_manifest_sha256: resolved?.pointerManifestSha256 ?? null,
+    policy_sha256: (manifest.binding || {}).policy_sha256 ?? null,
+    projection_child_sha256: (children["coa_client_spell_coa.jsonl"] || {}).sha256 ?? null,
+    builder_entries_sha256: builderEntriesSha256 ?? null,
+  };
+}
+
 export function buildMechanicsArtifact({ entries, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {}, policyPath = null }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
   const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds, policyPath });
@@ -450,6 +468,8 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
     reconciliation_policy_version: "m1.14c-1",
     reconciler_commit: canonical ? (inputs.reconciler_commit ?? null) : null,
     client_build: loaded.absent ? null : (loaded.client_build ?? null),
+    // A degraded build read no generation, so it binds to none — and says so rather than claiming one.
+    binding: canonical ? (inputs.binding ?? null) : null,
     inputs: {
       builder_entries: inputs.builder_entries || null,
       db_spell_tooltips: inputs.db_spell_tooltips || null,
@@ -492,7 +512,7 @@ if (isCliEntryPoint()) {
 
   // Producer publishes the pointer; the consumer REQUIRES it for a canonical run. The legacy fixed-path
   // projection runs only under the existing --allow-fallback-mechanics degraded path.
-  let projectionPath, projManifestPath, policyPath, allowFallback;
+  let projectionPath, projManifestPath, policyPath, allowFallback, resolvedGeneration = null;
   if (pointerPath) {
     if (has("--projection") || has("--projection-manifest")) {
       console.error("pass EITHER --client-extract-pointer OR --projection/--projection-manifest, not both");
@@ -500,6 +520,7 @@ if (isCliEntryPoint()) {
     }
     try {
       const resolved = resolveGeneration(pointerPath);
+      resolvedGeneration = resolved;
       projectionPath = resolved.children["coa_client_spell_coa.jsonl"];
       projManifestPath = resolved.children["coa_client_spell_projection.manifest.json"];
       policyPath = resolved.children["spell_layout_v2.json"];    // the reviewed policy child (v3 verify)
@@ -521,12 +542,14 @@ if (isCliEntryPoint()) {
     allowFallback = true;
   }
   const entries = readJsonl(entriesPath);
+  const entriesSha256 = sha256File(entriesPath);
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
       entries, projectionPath, manifestPath: projManifestPath, outDir,
       allowFallback, policyPath,
       inputs: {
-        builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
+        binding: resolvedGeneration ? mechanicsInputBinding(resolvedGeneration, entriesSha256) : null,
+        builder_entries: { path: entriesPath, sha256: entriesSha256 },
         db_spell_tooltips: null,
         projection_path: projectionPath, projection_manifest_path: projManifestPath,
         reconciler_commit: gitHeadCommit(),

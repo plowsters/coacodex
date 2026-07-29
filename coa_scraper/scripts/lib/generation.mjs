@@ -746,7 +746,11 @@ export function resolveGeneration(rootOrPointer, { contractsDir } = {}) {
   for (const name of requiredChildrenFor(contract)) {
     if (!(name in resolved)) throw new GenerationResolveError(`required child ${name} missing from the published generation`);
   }
-  return { generationId: genId, genDir, manifest, children: resolved };
+  // `pointerManifestSha256` is the pointer's own claim about WHICH manifest bytes are active — already
+  // verified against the file above. A consumer records it so the producer's acceptance run can prove the
+  // build read this generation and not one that replaced it mid-run (E0R.2 T4.3).
+  return { generationId: genId, genDir, manifest, children: resolved,
+           pointerManifestSha256: pointer.manifest_sha256 };
 }
 
 // A pointer may resolve ONLY a fully-published E0R generation. Mirrors Python publish._assert_published_manifest:
