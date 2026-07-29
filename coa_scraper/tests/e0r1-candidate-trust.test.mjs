@@ -54,7 +54,7 @@ test("a required field omitted from BOTH mechanics and raw FAILS (full-domain it
 test("a full row carrying field_observations (wrong dialect) FAILS", () => {
   const full = corpus.pick(corpus.full, "full_carries_field_observations");
   const { genDir, lockPath } = buildCandidate({ full });
-  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /carries field_observations/);
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /carries field_observations|unknown key/);
 });
 
 // Every projection reject case in the corpus must fail candidate validation (both biconditional directions,

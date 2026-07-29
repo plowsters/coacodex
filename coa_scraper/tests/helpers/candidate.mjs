@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, REQUIRED_CHILDREN,
          generationContractSha256, loadCurrentContract } from "../../scripts/lib/generation.mjs";
+import { goldenRows } from "./golden.mjs";
 
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CORPUS = new URL("../../../tests/golden/e0r1_corpus/", import.meta.url);
@@ -182,18 +183,20 @@ export function buildCandidate(opts = {}) {
   const jsonl = (list) => Buffer.from(list.map((r) => JSON.stringify(r)).join("\n") + (list.length ? "\n" : ""));
   // Placeholder ancillary rows: their CONTENT is not validated until T2.2's shapes; what matters is
   // that the fixture can stage a count the policy's bound actually states.
-  const rows = (schema, n) => Array.from({ length: n }, (_, i) => ({ schema_version: schema, row: i }));
+  // `n` copies of the row the REAL producer emits for this child. T2.2 shape-checks every row, so a
+  // placeholder would only prove the fixture can dodge its own gate.
+  const rows = (shape, n) => Array.from({ length: n }, () => goldenRows(shape));
   const contents = {
     "coa_client_spell.jsonl": jsonl(full),
     "coa_client_spell_coa.jsonl": jsonl(proj),
     "coa_client_spell_icons.jsonl": jsonl(icons),
-    "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-spell-projection-manifest-v3" })),
-    "coa_client_content.jsonl": jsonl(rows("coa-client-content-v1", contentEntries)),
-    "coa_client_archive_plan.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-archive-plan-v1" })),
-    "coa_client_advancement.jsonl": jsonl(rows("coa-client-advancement-v1", advancementKept)),
-    "coa_client_class_types.jsonl": jsonl(rows("coa-client-class-types-v1", ancillaryCounts.CharacterAdvancementClassTypes)),
-    "coa_client_tab_types.jsonl": jsonl(rows("coa-client-tab-types-v1", ancillaryCounts.CharacterAdvancementTabTypes)),
-    "coa_client_essence.jsonl": jsonl(rows("coa-client-essence-v1", ancillaryCounts.CharacterAdvancementEssence)),
+    "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify(goldenRows("projection_manifest_v3"))),
+    "coa_client_content.jsonl": jsonl(rows("content_row_v1", contentEntries)),
+    "coa_client_archive_plan.json": Buffer.from(JSON.stringify(goldenRows("archive_plan_v1"))),
+    "coa_client_advancement.jsonl": jsonl(rows("advancement_row_v1", advancementKept)),
+    "coa_client_class_types.jsonl": jsonl(rows("class_type_row_v1", ancillaryCounts.CharacterAdvancementClassTypes)),
+    "coa_client_tab_types.jsonl": jsonl(rows("tab_type_row_v1", ancillaryCounts.CharacterAdvancementTabTypes)),
+    "coa_client_essence.jsonl": jsonl(rows("essence_row_v1", ancillaryCounts.CharacterAdvancementEssence)),
     "spell_layout_v2.json": Buffer.from(JSON.stringify(policy)),
     [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(contract)),
   };

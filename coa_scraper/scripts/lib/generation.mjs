@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
 import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact } from "./mechanics-projection.mjs";
+import { SHAPES, ShapeError, installContractValidator } from "./shapes.mjs";
 
 export class GenerationResolveError extends Error {}
 
@@ -118,6 +119,8 @@ export function validateGenerationContract(doc) {
   }
   return doc;
 }
+
+installContractValidator(validateGenerationContract);
 
 export function validateContractRegistry(doc) {
   const fail = (m) => { throw new GenerationResolveError(`generation contract registry invalid: ${m}`); };
@@ -379,6 +382,26 @@ function resolveCardinality(genDir, name, spec, records, policyDoc, manifest, co
   }
 }
 
+// E0R.2 T2.2: every child is type-checked against the validator its contract names. An unimplemented
+// shape is a gate that silently does nothing, so it is an error rather than a skip.
+function shapeFor(name, spec) {
+  const shape = SHAPES[spec.shape];
+  if (!shape) {
+    throw new GenerationResolveError(
+      `child ${name} names shape ${spec.shape}, which this validator does not implement`);
+  }
+  return shape;
+}
+
+function checkShape(shape, doc, name) {
+  try { shape(doc); }
+  catch (e) {
+    if (e instanceof ShapeError) throw new GenerationResolveError(`shape: child ${name} ${e.message}`);
+    throw e;
+  }
+  return doc;
+}
+
 const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
 
 const CHUNK = 1 << 20;
@@ -636,21 +659,40 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
       resolveCardinality(dir, name, spec, childrenMeta[name].records, policyDoc, manifest, {});
     }
   }
+  // The three spell children are shape-checked inside the merge-join below, so they are read exactly
+  // once; every other child is streamed here.
+  const SPELL_CHILDREN = new Set(["coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
+                                  "coa_client_spell_icons.jsonl"]);
+  for (const [name, spec] of Object.entries(contract.children)) {
+    if (!(name in childrenMeta) || SPELL_CHILDREN.has(name)) continue;
+    const shape = shapeFor(name, spec);
+    if (spec.kind === "json") {
+      checkShape(shape, JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")), name);
+    } else {
+      for (const row of readJsonlLines(path.join(dir, name))) checkShape(shape, row, name);
+    }
+  }
   // Row semantics over the full required domain, verified AS the rows stream through the cross-child
   // cursors — one pass, no retained row arrays (E0R.1 T4.2). Every full row's required scalars are present
   // (not just in row.raw); every projection row's claims + biconditional + value agreement re-derive from
   // the policy; then dialects, identity/attribution, compact-raw expansion, icon domain/agreement, bundle.
-  const verified = function* (iter, verify) {
+  const verified = function* (iter, verify, name) {
+    const shape = shapeFor(name, contract.children[name]);
     for (const row of iter) {
+      checkShape(shape, row, name);
       try { verify(row, policyDoc); }
       catch (e) { throw new GenerationResolveError(e.message); }
       yield row;
     }
   };
+  const shaped = function* (iter, name) {
+    const shape = shapeFor(name, contract.children[name]);
+    for (const row of iter) yield checkShape(shape, row, name);
+  };
   const counts = crossChild(
-    verified(readJsonlLines(children["coa_client_spell.jsonl"]), verifyFullRowAgainstPolicy),
-    verified(readJsonlLines(children["coa_client_spell_coa.jsonl"]), verifyRowAgainstPolicy),
-    readJsonlLines(children["coa_client_spell_icons.jsonl"]),
+    verified(readJsonlLines(children["coa_client_spell.jsonl"]), verifyFullRowAgainstPolicy, "coa_client_spell.jsonl"),
+    verified(readJsonlLines(children["coa_client_spell_coa.jsonl"]), verifyRowAgainstPolicy, "coa_client_spell_coa.jsonl"),
+    shaped(readJsonlLines(children["coa_client_spell_icons.jsonl"]), "coa_client_spell_icons.jsonl"),
     policyDoc, manifest);
   for (const [name, spec] of Object.entries(contract.children)) {
     if (CROSS_CHILD_RULES.has(spec.cardinality.rule) && name in childrenMeta) {

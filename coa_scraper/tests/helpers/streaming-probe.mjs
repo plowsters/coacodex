@@ -8,6 +8,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { ANCILLARY_TABLES, bindPolicyDoc, loadCorpus, topologyReportFor } from "./candidate.mjs";
+import { goldenRows } from "./golden.mjs";
 import { expandCompact } from "../../scripts/lib/mechanics-projection.mjs";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, generationContractSha256,
@@ -90,12 +91,12 @@ function build(n, root) {
   children["coa_client_spell_coa.jsonl"] = writeChild(genDir, "coa_client_spell_coa.jsonl", projLines());
   children["coa_client_spell_icons.jsonl"] = writeChild(genDir, "coa_client_spell_icons.jsonl", iconLines());
   children["coa_client_spell_projection.manifest.json"] =
-    writeDoc(genDir, "coa_client_spell_projection.manifest.json", { schema_version: SCHEMA_FOR["coa_client_spell_projection.manifest.json"] });
+    writeDoc(genDir, "coa_client_spell_projection.manifest.json", goldenRows("projection_manifest_v3"));
   for (const name of ["coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                       "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"]) {
     children[name] = writeChild(genDir, name, []);
   }
-  children["coa_client_archive_plan.json"] = writeDoc(genDir, "coa_client_archive_plan.json", { schema_version: SCHEMA_FOR["coa_client_archive_plan.json"] });
+  children["coa_client_archive_plan.json"] = writeDoc(genDir, "coa_client_archive_plan.json", goldenRows("archive_plan_v1"));
   // E0R.2 T2.1: the probe's policy is bound and sized to what it stages, so the candidate validator's
   // cardinality gate is part of what the RSS measurement covers rather than something it skips.
   const policy = bindPolicyDoc(corpus.policy, {
