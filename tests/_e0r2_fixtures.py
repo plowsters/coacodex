@@ -172,7 +172,8 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
                     truncate_child=None, extra_child=None, duplicate_json_document=None,
                     advancement_derivation=None, content_derivation=None, drop_derivations=False,
                     forge_manifest_topology_record_count=None, forge_staged_policy_bound_record_count=None,
-                    forge_manifest_policy_sha256=None, unbind_staged_policy=False):
+                    forge_manifest_policy_sha256=None, unbind_staged_policy=False,
+                    return_writer=False):
     """A COMPLETE staged candidate whose policy is sized to what it stages, so the honest case validates
     and each knob breaks exactly one rule. Returns the generation directory.
 
@@ -273,12 +274,43 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
         gw._children[duplicate_json_document]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
         gw._children[duplicate_json_document]["byte_length"] = path.stat().st_size
 
-    gw.publish_candidate(base_manifest={}, binding=binding)
+    candidate = gw.publish_candidate(base_manifest={}, binding=binding)
 
     if extra_child is not None:
         name, body = extra_child
         (gw.gen_dir / name).write_bytes(body)          # on disk but NOT registered: the whitelist case
+    if return_writer:
+        return gw, candidate
     return gw.gen_dir
+
+
+# E0R.2 T2.4: policy-shaped ceilings a fixture generation comfortably fits under.
+GENEROUS_CEILINGS = {
+    "max_serialized_bytes_per_child": 16 * 1024 * 1024,
+    "max_whole_generation_bytes": 64 * 1024 * 1024,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
+
+
+def staged_writer(root, *, oversized=False, **kwargs):
+    """A COMPLETE staged candidate plus the writer that staged it and the ceilings it fits under, so a
+    test can drive `finalize_and_publish` directly (E0R.2 T2.4).
+
+    `oversized=True` returns ceilings the staged children BREACH while the test still hands finalize a
+    report claiming `within_budget: True` — the case that proves the byte check is recomputed from the
+    staged children rather than read off the caller's verdict."""
+    gw, candidate = stage_candidate(root, return_writer=True, **kwargs)
+    ceilings = dict(GENEROUS_CEILINGS)
+    if oversized:
+        ceilings["max_serialized_bytes_per_child"] = 1     # one byte: every staged child breaches
+    return gw, candidate, ceilings
+
+
+def clean_budget(ceilings: dict) -> dict:
+    """A report shaped exactly like `policy_budget_report`'s output, claiming a clean verdict."""
+    return {"whole_generation_bytes": None, "measured": {}, "ceilings": dict(ceilings),
+            "within_budget": True, "breach": []}
 
 
 def write_lock(root, policy_doc: dict) -> Path:

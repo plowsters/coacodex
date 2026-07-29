@@ -57,6 +57,16 @@ _SPELL_BYTES = struct.pack("<4sIIII", b"WDBC", 1, 8, 32, len(_SPELL_STRINGS)) + 
 _ICON_PATH = "Interface\\Icons\\Spell_Nature_Corrosion.blp"
 _ICON_BLP = b"BLP2fake-icon-bytes"
 
+# E0R.2 T2.4: reviewed ceilings are now MANDATORY on the publish path, so the synthetic policy carries an
+# explicit block instead of inheriting hard-coded defaults. Deliberately generous: a fixture that fails on
+# size would be testing the fixture. `tests/_streaming_probe.py` overrides these for its 100k-row runs.
+SYNTHETIC_BUDGET = {
+    "max_serialized_bytes_per_child": 64 * 1024 * 1024,
+    "max_whole_generation_bytes": 256 * 1024 * 1024,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
+
 
 def _full_policy_doc(client_build="3.3.5a+patch-C"):
     """The reviewed 5-table policy doc (Spell + 4 side tables + all joins incl. the SpellIcon string join),
@@ -114,7 +124,11 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
          "required_tables": sorted(tables),
          "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables,
-         "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES}
+         "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES,
+         # E0R.2 T2.4: the publish path no longer falls back to hard-coded ceilings when a policy
+         # declares none, so a synthetic policy declares its own — generous, because this fixture is
+         # about the transaction, not about the size of three rows.
+         "budget": SYNTHETIC_BUDGET}
     from coa_client_extract.spell_layout import derive_artifact_contract
     p["artifact_contract"] = derive_artifact_contract(p)
     p["sha256"] = compute_policy_sha256(p)

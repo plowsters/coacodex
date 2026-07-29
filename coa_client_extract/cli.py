@@ -56,7 +56,7 @@ def regenerate(
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
     from .contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
                             generation_contract_sha256, load_current_contract)
-    from .spell_mechanics import benchmark_env, policy_budget_report, three_part_budget, DEFAULT_BUDGET
+    from .spell_mechanics import benchmark_env, policy_budget_report
     from .errors import ClientBindingError
 
     started = _time.monotonic()
@@ -69,7 +69,6 @@ def regenerate(
     policy = spell_policy or load_default_policy()
     root, attach = plan.open_chain  # StormLib root + all base+patch archives attached on top
     client_build = _client_build(plan)
-    ceilings = budget or DEFAULT_BUDGET
 
     # === Shared full-topology hard hold (design A2) ===
     # The SAME verifier recon uses opens every required table independently (sha256, full header, member,
@@ -356,22 +355,23 @@ def regenerate(
                 ct_member=ct_member, tt_member=tt_member, ess_member=ess_member,
                 spell_member=spell_member, ca_decode_report=ca_decode_report)
 
-        # === budget over the ACTUAL serialized generation. POLICY-BOUND ceilings when the reviewed policy
-        # declares them (E0R.1 T4.3: per-child + whole-generation bytes, separate python/node RSS+elapsed);
-        # the legacy three-part DEFAULT_BUDGET only for synthetic policies without a budget block. ===
+        # === budget over the ACTUAL serialized generation. POLICY-BOUND ceilings, always (E0R.1 T4.3:
+        # per-child + whole-generation bytes, separate python/node RSS+elapsed). E0R.2 T2.4 removed the
+        # legacy three-part DEFAULT_BUDGET fallback: it applied whenever a policy declared no budget
+        # block, which silently swapped the reviewed ceilings for hard-coded ones — an unreviewed budget
+        # is not a budget. `budget=` remains as an explicit same-shape OVERRIDE for probes. ===
         elapsed_s = round(_time.monotonic() - started, 4)
         peak_rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux ru_maxrss is KiB
-        policy_ceilings = policy.doc.get("budget")
-        if policy_ceilings is not None and budget is None:
-            budget_report = policy_budget_report(
-                children=gw._children,
-                measured={"python_peak_rss_mb": peak_rss_mb, "python_elapsed_s": elapsed_s,
-                          "node_peak_rss_mb": node_peak_rss_mb, "node_elapsed_s": node_elapsed_s},
-                budget=policy_ceilings)
-        else:
-            serialized_bytes = sum(meta["byte_length"] for meta in gw._children.values())
-            budget_report = three_part_budget(serialized_bytes=serialized_bytes, peak_rss_mb=peak_rss_mb,
-                                              elapsed_s=elapsed_s, ceilings=ceilings)
+        policy_ceilings = budget if budget is not None else policy.doc.get("budget")
+        if policy_ceilings is None:
+            raise PublishError(
+                "the reviewed policy declares no budget block; refusing to publish against unreviewed "
+                "ceilings")
+        budget_report = policy_budget_report(
+            children=gw._children,
+            measured={"python_peak_rss_mb": peak_rss_mb, "python_elapsed_s": elapsed_s,
+                      "node_peak_rss_mb": node_peak_rss_mb, "node_elapsed_s": node_elapsed_s},
+            budget=policy_ceilings)
         if not budget_report["within_budget"]:
             raise PublishError(f"regenerate exceeded the budget: {budget_report['breach']}")
 

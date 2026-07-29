@@ -59,6 +59,24 @@ class ResolveError(Exception):
     Fails closed — a consumer never reads an unvalidated generation child."""
 
 
+TRUST_BOUNDARIES = ("python", "node")
+
+
+def _require_both_validations(validation: dict) -> None:
+    """Both independent trust boundaries must have PASSED — identity against True, not truthiness.
+
+    E0R.2 T2.4: the two boundaries exist because either one alone can be wrong; publishing on one of
+    them (or on a truthy `"yes"`) spends the redundancy without getting it. A skipped Node run is not a
+    passed one."""
+    if not isinstance(validation, dict):
+        raise PublishError(f"validation must be a dict, got {type(validation).__name__}")
+    for boundary in TRUST_BOUNDARIES:
+        if validation.get(boundary) is not True:
+            raise PublishError(
+                f"validation: the {boundary} trust boundary reports {validation.get(boundary)!r}, not "
+                "True — publication requires BOTH boundaries to have passed")
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -178,14 +196,61 @@ class GenerationWriter:
             raise
         return manifest
 
+    def _require_clean_budget(self, budget: dict) -> None:
+        """A clean budget report, with the BYTE ceilings recomputed from the staged children.
+
+        `within_budget` must be exactly True (a truthy string is not a verdict) and `breach` must be
+        empty — a report that lists a breach and then calls itself within budget is not one nobody acted
+        on, it is one nobody read. The recomputation is the point: a caller's verdict cannot outrank the
+        bytes actually on disk, so a budget computed before the last child was staged fails here."""
+        if not isinstance(budget, dict):
+            raise PublishError(f"budget must be a report dict, got {type(budget).__name__}")
+        if budget.get("within_budget") is not True:
+            raise PublishError(
+                f"budget: within_budget is {budget.get('within_budget')!r}, not True")
+        breach = budget.get("breach")
+        if breach != []:
+            raise PublishError(f"budget: report carries breaches {breach!r}")
+        ceilings = budget.get("ceilings")
+        if not isinstance(ceilings, dict) or any(
+                k not in ceilings for k in ("max_serialized_bytes_per_child", "max_whole_generation_bytes")):
+            raise PublishError(
+                "budget: report declares no reviewed byte ceilings, so the staged bytes cannot be "
+                "re-checked against them")
+        overrides = ceilings.get("per_child_overrides") or {}
+        total = 0
+        for name, meta in self._children.items():
+            size = meta["byte_length"]
+            total += size
+            ceiling = overrides.get(name, ceilings["max_serialized_bytes_per_child"])
+            if size > ceiling:
+                raise PublishError(
+                    f"budget: staged child {name} is {size} bytes > ceiling {ceiling} "
+                    "(recomputed from the staged children, not taken from the report)")
+        if total > ceilings["max_whole_generation_bytes"]:
+            raise PublishError(
+                f"budget: staged generation is {total} bytes > ceiling "
+                f"{ceilings['max_whole_generation_bytes']} (recomputed from the staged children)")
+        reported = budget.get("whole_generation_bytes")
+        if reported is not None and reported != total:
+            raise PublishError(
+                f"budget: report claims {reported} whole-generation bytes, staged children total {total}")
+
     def finalize_and_publish(self, *, candidate_manifest: dict, validation: dict, budget: dict) -> dict:
         """Produce the FINAL manifest (differs from the candidate ONLY in the CANDIDATE_MUTABLE_KEYS:
         publication_state->published, plus /validation and /budget) reproducing the identical
         candidate_trust_sha256, then publish the pointer LAST. Runs under the publish lock held since
         publish_candidate's predecessor read, and REVALIDATES the predecessor under that lock before the
         replace — a candidate staged against a superseded predecessor fails instead of last-writer-winning
-        the generation chain. The lock is released on every exit path."""
+        the generation chain. The lock is released on every exit path.
+
+        E0R.2 T2.4: publication is REFUSED unless both trust boundaries passed and the budget is clean,
+        with the byte ceilings recomputed here from the staged children. The consumer-side resolver also
+        checks these, but a consumer is a second line of defence — it cannot un-publish a pointer that
+        already flipped, and nothing else stopped a failed generation from becoming the live one."""
         try:
+            _require_both_validations(validation)
+            self._require_clean_budget(budget)
             final = dict(candidate_manifest)
             final["publication_state"] = "published"
             final["validation"] = validation

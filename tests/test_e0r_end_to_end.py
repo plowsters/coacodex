@@ -13,7 +13,8 @@ from coa_client_extract.publish import (
 from coa_client_extract.spell_record import iter_spell_records, project_v3_row
 from coa_client_extract.spell_icons import iter_icon_catalog
 from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_views, icon_side_views
-from tests._e0r2_fixtures import (ANCILLARY_TABLES, bind_policy_doc, generation_contract_binding,
+from tests._e0r2_fixtures import (ANCILLARY_TABLES, GENEROUS_CEILINGS, bind_policy_doc, clean_budget,
+                                  generation_contract_binding,
                                   policy_binding, stage_generation_contract, validate_staged,
                                   write_lock)
 
@@ -66,7 +67,8 @@ def test_transactional_v3_generation_resolves_in_python_and_node(tmp_path):
     candidate = gw.publish_candidate(base_manifest={}, binding=binding)
     validate_staged(gw.gen_dir)                       # Python candidate validation by path
     final = gw.finalize_and_publish(candidate_manifest=candidate,
-                                    validation={"python": True, "node": True}, budget={"within_budget": True})
+                                    validation={"python": True, "node": True},
+                                    budget=clean_budget(GENEROUS_CEILINGS))
     assert final["publication_state"] == "published"
 
     active = resolve_active_generation(dist)                        # Python resolver
@@ -97,7 +99,7 @@ def test_build_mechanics_consumes_the_v3_generation_through_the_pointer(tmp_path
     candidate = gw.publish_candidate(base_manifest={}, binding=binding)
     validate_staged(gw.gen_dir)
     gw.finalize_and_publish(candidate_manifest=candidate, validation={"python": True, "node": True},
-                            budget={"within_budget": True})
+                            budget=clean_budget(GENEROUS_CEILINGS))
 
     entries = tmp_path / "coa_entries.jsonl"                       # builder domain must ⊆ the projection
     entries.write_text(json.dumps({"spell_id": 805775, "entry_id": 1, "entry_type": "Ability",

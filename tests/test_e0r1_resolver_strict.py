@@ -14,7 +14,8 @@ from coa_client_extract.publish import (
     candidate_trust_sha256, resolve_active_generation,
 )
 
-from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
+                                  stage_generation_contract)
 
 
 def _binding():
@@ -46,7 +47,7 @@ def _publish(root, *, validation=None, budget=None):
     candidate = w.publish_candidate(base_manifest=base, binding=_binding())
     m = w.finalize_and_publish(candidate_manifest=candidate,
                                validation=validation if validation is not None else {"python": True, "node": True},
-                               budget=budget if budget is not None else {"within_budget": True})
+                               budget=budget if budget is not None else clean_budget(GENEROUS_CEILINGS))
     return w, m
 
 
@@ -97,13 +98,19 @@ def test_rejects_trust_digest_not_covering_manifest(tmp_path):
 
 
 def test_rejects_validation_not_both_true(tmp_path):
-    _w, m = _publish(tmp_path, validation={"python": True, "node": False})
+    # E0R.2 T2.4 closed the publisher-side door, so this manifest can no longer be PUBLISHED that way —
+    # it is written after the fact, which is exactly the case the consumer boundary still has to cover:
+    # a manifest edited post-publication, or produced by a publisher that lacks the T2.4 gate.
+    _w, m = _publish(tmp_path)
+    _rewrite(tmp_path, m["generation_id"],
+             lambda mm: mm.update({"validation": {"python": True, "node": False}}))
     with pytest.raises(ResolveError, match="not validated by both"):
         resolve_active_generation(tmp_path)
 
 
 def test_rejects_over_budget(tmp_path):
-    _w, m = _publish(tmp_path, budget={"within_budget": False})
+    _w, m = _publish(tmp_path)
+    _rewrite(tmp_path, m["generation_id"], lambda mm: mm.update({"budget": {"within_budget": False}}))
     with pytest.raises(ResolveError, match="exceeded its budget"):
         resolve_active_generation(tmp_path)
 

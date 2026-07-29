@@ -19,7 +19,8 @@ import pytest
 from coa_client_extract.cli import AcceptanceError, write_acceptance_summary
 from coa_client_extract.publish import GenerationWriter
 
-from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
+                                  stage_generation_contract)
 
 VERIFIED_RECON = {
     "schema_version": "coa-mechanics-recon-v2",
@@ -56,7 +57,7 @@ def _publish(root, *, base_manifest=None):
                                               **generation_contract_binding()})
     gw.finalize_and_publish(candidate_manifest=candidate,
                             validation={"python": True, "node": True},
-                            budget={"within_budget": True})
+                            budget=clean_budget(GENEROUS_CEILINGS))
     return gw
 
 

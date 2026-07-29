@@ -12,7 +12,8 @@ from coa_client_extract.publish import (
     candidate_trust_sha256, prune_generations, resolve_active_generation,
 )
 
-from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
+                                  stage_generation_contract)
 
 
 def _base():
@@ -52,7 +53,8 @@ def _publish(root, *, spell_id=1, inv=None):
     candidate = w.publish_candidate(base_manifest=_base(), binding=_binding(),
                                     unknown_symbol_inventory=inv or {"power_type": [7], "school_bits": []})
     m = w.finalize_and_publish(candidate_manifest=candidate,
-                               validation={"python": True, "node": True}, budget={"within_budget": True})
+                               validation={"python": True, "node": True},
+                               budget=clean_budget(GENEROUS_CEILINGS))
     return w, m
 
 

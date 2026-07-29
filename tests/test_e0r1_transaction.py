@@ -16,7 +16,8 @@ from coa_client_extract.publish import (
 from tests.test_client_extract_cli import (
     _bound_spell_policy, _client, _fake_backend, _synthetic_layouts,
 )
-from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
+                                  stage_generation_contract)
 
 
 def _regenerate(client_root, out, tmp_path, **kwargs):
@@ -81,7 +82,7 @@ def _stage_minimal(root):
 def _finalize(gw, candidate):
     return gw.finalize_and_publish(candidate_manifest=candidate,
                                    validation={"python": True, "node": True},
-                                   budget={"within_budget": True})
+                                   budget=clean_budget(GENEROUS_CEILINGS))
 
 
 def test_finalize_rejects_stale_predecessor(tmp_path):

@@ -72,7 +72,13 @@ def _probe(n: int, tmp: Path) -> None:
     policy = _bound_spell_policy(_backend(n), client_root)
     lock = tmp / "spell_layout.lock.json"
     lock.write_text(json.dumps({"schema_version": "coa-spell-layout-lock-v1", "sha256": policy.sha256}))
-    generous = {"artifact_size_mb": 4096, "peak_rss_mb": 16384, "elapsed_s": 3600}
+    # E0R.2 T2.4: the publish path is policy-shaped now (the legacy three-part fallback is gone), so this
+    # override carries the SAME six ceilings a reviewed policy declares — generous, because a 100k-row
+    # probe is about retention, not size.
+    generous = {"max_serialized_bytes_per_child": 4 * 1024 ** 3,
+                "max_whole_generation_bytes": 8 * 1024 ** 3,
+                "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+                "node_peak_rss_mb": 16384, "node_elapsed_s": 3600}
     # Node validation runs (both trust boundaries are required for the generation to be resolvable) but in
     # its OWN process — it never contributes to the Python peak RSS this probe measures (Node streaming is
     # T4.2's boundary).
