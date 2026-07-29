@@ -9,6 +9,39 @@ from pathlib import Path
 
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CLIENT_ROOT_LABEL = "$COA_CLIENT_ROOT"
+
+
+def portable_path(value, *, client_root=None) -> str:
+    """A path as a RECORD should state it (E0R.2 T7.1).
+
+    A tracked artifact is a published artifact, and a machine-local absolute path makes two people
+    running the identical pipeline against the identical client produce records that differ in a field
+    neither of them chose. In-repo paths become repo-relative; anything under the out-of-tree client root
+    becomes `$COA_CLIENT_ROOT/...`.
+
+    The client root is a SYMBOLIC label, never a hash of the expansion: hashing it would look canonical
+    while still making otherwise identical runs machine-dependent. Archive names and content digests
+    carry the real identity, which is why anything else absolute degrades to its basename — the part
+    that identifies the file rather than the machine it sat on.
+    """
+    raw = str(value)
+    if not os.path.isabs(raw):
+        return raw
+    path = Path(raw)
+    for root, prefix in ((REPO_ROOT, None),
+                         (client_root or os.environ.get("COA_CLIENT_ROOT"), CLIENT_ROOT_LABEL)):
+        if not root:
+            continue
+        try:
+            relative = path.relative_to(Path(root).resolve())
+        except ValueError:
+            continue
+        return f"{prefix}/{relative.as_posix()}" if prefix else relative.as_posix()
+    return path.name
+
+
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

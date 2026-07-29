@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .archive_backend import ArchiveBackend
 from .archive_plan import ArchivePlan, discover_plan, validate_load_order
-from .artifacts import write_json, write_jsonl
+from .artifacts import portable_path, write_json, write_jsonl
 from .class_types import resolve_class_types, resolve_tab_types
 from .content_json import read_bound_content, read_content_records
 from .decode_advancement import decode_layout, write_report
@@ -693,7 +693,7 @@ def _require_mechanics_artifacts(mech_dir: Path, *, generation_id: str, manifest
         if not doc.get(key):
             raise AcceptanceError(f"the mechanics manifest records no {key}; an unmeasured build cannot "
                                   "be accepted as a covered one")
-    return {"manifest_path": str(path), "manifest_sha256": _sha256_file(path),
+    return {"manifest_path": portable_path(path), "manifest_sha256": _sha256_file(path),
             "jsonl": jsonl.name, "jsonl_sha256": recomputed, "record_count": records,
             "builder_unique_spell_ids": unique, "binding": binding,
             "client_build": doc.get("client_build"), "canonical": doc.get("canonical"),
@@ -823,7 +823,7 @@ def run_acceptance(dist: Path, *, recon_report_path: Path, scraper_dir: Path, bu
             "source": source_coverage,
         },
         "recon_status": recon_status,
-        "recon_report_path": str(report_path),
+        "recon_report_path": portable_path(report_path),
         # Two hashes, two jobs: the identity is what must MATCH this generation, the report hash is what
         # the record ATTESTS to. Everything outside the identity (scan metrics, budget measurements,
         # proposed_policy_delta) moves only the second — so neither substitutes for the other.
@@ -899,8 +899,12 @@ def run_measured_build_mechanics(scraper_dir: Path, pointer_path: Path, *, build
 
     return {
         "executed": True,
-        "command": cmd,
-        "cwd": str(scraper_dir),
+        # The RECORD states the command portably (E0R.2 T7.1). The argv above must carry an absolute
+        # pointer path — the build runs with cwd=<scraper dir> — but recording that absolute path would
+        # put the author's filesystem layout into a published artifact and make two identical runs on
+        # two machines differ in a field neither operator chose.
+        "command": [portable_path(arg) for arg in cmd],
+        "cwd": portable_path(scraper_dir),
         "exit_code": proc.returncode,
         "network_attempts": network_attempts,
         "pointer_only": pointer_only,

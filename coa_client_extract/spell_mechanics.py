@@ -685,8 +685,12 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
         "source_pins": {"dbc": {t: {"sha256": h} for t, h in dbc_sha.items()},
                         "policy_sha256": getattr(spell_policy, "sha256", None),
                         "extractor_commit": extractor_commit, "client_build": client_build,
-                        "effective_archive": str(member.effective_archive),
-                        "patch_chain": [str(p) for p in member.patch_chain]},
+                        # LOGICAL archive names, exactly as `topology` states the same fact two blocks
+                        # down and as the policy's `bound` requires (spell_layout refuses an absolute
+                        # effective_archive outright). The absolute form said the same thing twice in one
+                        # report, once in a way that only reproduces on the machine that wrote it.
+                        "effective_archive": member.effective_archive.name,
+                        "patch_chain": [p.name for p in member.patch_chain]},
         "layout_proof": layout_proof, "index_fk": index_fk, "join_pairs": join_pairs,
         "ambiguity_agreement": {
             f: ambiguity_agrees(join_pairs[f], _baseline_entry(ambiguity_baseline, f))

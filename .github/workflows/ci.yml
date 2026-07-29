@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # actions/checkout defaults to fetch-depth: 1, which leaves the merge base absent — so the
+          # contract-immutability check (a shipped generation-contract revision file may never be
+          # edited, T1.1) has nothing to diff against and cannot run at all.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,4 +49,6 @@ jobs:
         run: npm --prefix coa_scraper ci
 
       - name: Run the Node suite
-        run: npm --prefix coa_scraper run unit-test
+        # `npm test` is `unit-test && validate`. CI ran `run unit-test`, so validate-normalized.mjs —
+        # the check over the committed normalized data — had never been a merge gate at all.
+        run: npm --prefix coa_scraper test

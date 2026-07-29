@@ -307,7 +307,7 @@ model outside remediation scope).
 
 ### A7. Repo hygiene — fix the generator, then untrack deliberately
 
-The machine-local `/home/archbug/...` paths in `coa_artifact_manifest.json` are a **generator** bug:
+The machine-local home-directory paths in `coa_artifact_manifest.json` are a **generator** bug:
 `write-artifact-manifest.mjs` emits absolute paths. E0R fixes the generator to emit repo-relative
 paths, then classifies every artifact in the E0 churn as **source**, **committed acceptance fixture**,
 or **disposable output**; disposable outputs are untracked with `git rm --cached` (`.gitignore` alone
