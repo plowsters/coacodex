@@ -87,7 +87,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T4.1 `observation_coverage` + `field_readiness_coverage` producers | **done** | `f55e1d1` — Python accumulator folded into the existing per-row hook (counters + `__slots__`), Node readiness coverage over an explicit rows x fields denominator; 918 Py + 255 Node |
 | T4.2 One internally-executed acceptance command | **done** | `7daf338` — `run_acceptance` folds the executor inside, `write_acceptance_summary` deleted, record -> v3; refuses before spending a build; 933 Py + 255 Node |
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | **done** | `7f87f13` — `recon_binding_sha256` (one canonical identity, computed from both sides) beside `recon_report_sha256`; pointer re-read on BOTH identities after the build; mechanics input-identity binding emitted by Node and re-derived here; emitted JSONL hashed+counted against the Builder domain; coverage fails closed and readiness/source now come from the build's own manifest; 962 Py + 259 Node |
-| T5.1 Streaming projection consumption | pending | |
+| T5.1 Streaming projection consumption | **done** | `6a2d406` — `jsonl-stream.mjs` leaf module (imports nothing of ours); `streamAndValidateProjectionV3` retains only Builder-domain rows while validating every row; incremental sha256 provably equals the whole-file hash; 962 Py + 277 Node |
 | T5.2 Generator mechanics rows + incremental statistics | pending | |
 | T5.3 Bounded-retention RSS gate through the real canonical build | pending | |
 | T6.1 Kind-aware field descriptors (expand) | pending | |
@@ -262,6 +262,17 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   5 tables where the reviewed policy now requires 10. Both sides call the same
   `verify_source_topology(policy, …)`, so the re-run in T8.1 produces all 10 and the digests agree; the
   stale report on disk would NOT bind, which is the gate behaving correctly.
+- **T5.1: the import cycle is why the build slurped.** `readJsonlLines` lived in `generation.mjs`, which
+  imports four things FROM `mechanics-projection.mjs` — so the streaming primitive was unreachable from
+  the consumer that needed it most. The leaf module `jsonl-stream.mjs` (asserted by test to import
+  nothing of ours) is the fix, and both boundaries now stream over the same code.
+- **T5.1: retention is an optimisation, validation coverage is the contract.** Only Builder-domain rows
+  are retained, but every row is still parsed and re-derived against the policy — a corrupt row outside
+  the domain is still a corrupt generation. A probe corrupts line 73 of a 200-row projection whose
+  Builder domain is `{1}`.
+- **T5.1: the incremental digest is over the bytes, not the rows.** Chunks feed the hash BEFORE line
+  splitting, so blank lines and the trailing newline are covered and the digest provably equals the
+  whole-file hash it replaces — the provenance in the mechanics manifest is unchanged.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
