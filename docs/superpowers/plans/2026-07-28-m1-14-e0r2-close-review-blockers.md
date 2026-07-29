@@ -78,7 +78,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T1.3 Node dispatches on the supported-contract hash set | **done** | `78dbbae` — mirrored array deleted; independent Node validator (28-case matrix); hash, revision set and child list asserted against Python by subprocess; 745 Py + 168 Node |
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | **done** | `a9e244b` groundwork (bound content read, closing derivations, 10-table synthetic policy) → `f478b6d` Python enforcement (3-step trust chain, 7 rules, whitelist) → `242ff7e` Node mirror; 765 Py + 180 Node |
 | T2.2 Per-child shape validation (both languages) | **done** | `cf19ad6` Python + `2e280c6` Node; 12 shapes each, golden documents from the real producer; 825 Py + 240 Node |
-| T2.3 Full observation domain in the policy, validated at load | pending | |
+| T2.3 Full observation domain in the policy, validated at load | **done** | `a675153` — mandatory `artifact_contract`, re-derived from the layout at load; enforced at BOTH boundaries (Node `verifyFullRowAgainstPolicy` + new Python `publish._observation_domain`) and structural in both shapes; 840 Py + 247 Node |
 | T2.4 Publication requires both validations and a clean budget | pending | |
 | T2.5 `converted` prohibited until a bundle validator exists | pending | |
 | T3.1 Live FK candidate scan on every recon | pending | |
@@ -152,6 +152,25 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   carries no components; `decoded: null` is legitimate under `value_out_of_domain`; an unresolved rich
   join carries plain `proof` while a resolved one carries `composed_proof`; `archive_plan.excluded` is
   keyed by exclusion family, not a list.
+- **T2.3's hole was bigger than the plan described.** The plan said `required_scalar_fields` "still
+  permits omitting five fields." The probe found the production policy never carried the key AT ALL, so
+  Node's `policyDoc.required_scalar_fields || []` asked nothing of any real row — the `|| []` converted
+  an absent contract into an empty one. Permissive defaults are how a check becomes decorative.
+- **The domain gate was consumer-only, so T2.3 added the producer half.** The plan's Step 4 named only
+  Node. Python's `validate_candidate_generation` checked no observation domain whatsoever, which is not
+  "two independent trust boundaries" — it is one boundary and a bystander. `publish._observation_domain`
+  now runs in the same streaming cross-child pass, held to the same corpus policy.
+- **Key presence is a POLICY question, not a structural one.** A shape validator has no policy, so it
+  cannot know which mechanics keys must exist; the first draft of the T2.3 test asserted absence at the
+  shape layer and was wrong. Structure says "a mechanics value may be null"; the policy-driven gate says
+  "this key must be present." Both are needed and they live in different places.
+- **`school_mask` stays nullable and that is not a weakening.** `_emit_school` nulls the value under
+  `value_out_of_domain`, so a patch adding an unseen school bit produces a null BY DESIGN. A static
+  nullability list cannot distinguish a legitimate null from a dropped one — the biconditional does.
+- **Two assertions were retightened, not preserved.** A raw cell deleted to test expansion inequality is
+  now caught one gate earlier as loss (the Node tamper became additive: same cells, different substrate),
+  and the corpus's `required_field_omitted_from_both` case is rejected on the raw domain rather than the
+  old mechanics∪raw union. A test that keeps passing for a new reason is worth re-reading.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
