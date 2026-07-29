@@ -93,7 +93,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T6.1 Kind-aware field descriptors (expand) | **done** | `6cc048d` — `build_field_descriptors`/`buildFieldDescriptors` derived from the policy in BOTH languages and cross-checked byte-identical; a staged descriptor that differs is rejected; both cell encodings expand identically; 982 Py + 299 Node |
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | **done** | `dee9c4d` — `coa-client-spell-v4` (`s`/`d` codes, pointers + join names hoisted); new immutable `e0r-v2` (e0r-v1 untouched, still supported); `coa_client_spell_fields.json` + `observation_wire_schema.json` staged and re-derived by BOTH validators; corpus rows 7,884→3,678 B; 1023 Py + 311 Node |
 | T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | **done** | `7cd14f4` — association + asset children, `asset_id = sha256(canonical)[:32]` with collision rejection, four null causes now distinguishable, `equals_referenced_asset_set` + no-dangling/no-orphan/derived-readiness in BOTH validators; new `e0r-v3` (v1/v2 untouched); 1047 Py + 318 Node |
-| T6.4 Cross-revision compatibility matrix | pending | |
+| T6.4 Cross-revision compatibility matrix | **done** | `9e4163f` — both fixtures now derive what they stage from the REVISION (children, corpus baseline by row schema, registered label); every supported revision validates as a candidate AND resolves through the pointer in both languages; foreign child refused, same child required by v3 / refused by v1, all four encoding directions rejected by shape; v3 and v4 expand to the identical envelope. Found + fixed: `child_schema_version` was declared by every revision and read by nothing; 1068 Py + 339 Node |
 | T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | pending | |
 | T7.2 Documentation + ROADMAP corrections | pending | |
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
@@ -326,6 +326,20 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 - **T6.3 consumer correction:** coa_meta's `converted` icon branch was already unreachable after T2.5
   and has no key to read after T6.3. Deleted rather than kept as a dead special case; the no-hotlink
   guarantee is now a property of the class rather than of its inputs.
+- **T6.4: `child_schema_version` was declared by every revision and read by nothing.** The matrix is
+  what surfaced it: a generation could register v4 rows as `coa-client-spell-v3` with every hash, byte
+  length and record count valid, because the SHAPE is chosen from the contract and never from the
+  label — and the label is what a consumer dispatches on. Both validators now require the manifest to
+  register what the revision declares, on the candidate path and the resolver path. Four older fixtures
+  had been registering placeholders (`coa-client-misc-v1`, `"x"`) and one still said `icons-v1` after
+  T6.3; they read the declaration now, which is also what the real producer writes.
+- **T6.4: the fixtures derive from the revision, not from a table of revision names.** The corpus
+  baseline is keyed by ROW SCHEMA, so a revision introducing a new encoding must add a baseline rather
+  than be silently staged with the previous one and "pass". A fixture that always staged today's
+  children could only ever prove today's revision works — which is precisely the gap that made the
+  registry descriptive.
+- **T6.4: the older-revision coverage that already existed proved membership, not encoding.** Its
+  synthetic successor was a CLONE of `current`, so no v3 row or flat icon catalog was ever staged.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
