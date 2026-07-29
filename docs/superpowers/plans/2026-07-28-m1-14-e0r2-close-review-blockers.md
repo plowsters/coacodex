@@ -83,7 +83,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T2.5 `converted` prohibited until a bundle validator exists | **done** | `204a26f` — status + `converted_ref` removed from both vocabularies, both shapes and both cross-child passes; behavioural producer test over resolve/missing/unjoined; 862 Py + 247 Node |
 | T3.1 Live FK candidate scan on every recon | **done** | `3b23849` — `scan_index_candidates` (integer metrics, 2 passes not 234), `side_table_missing` distinguished from ambiguous, the "must not read its side table" test inverted; 870 Py + 247 Node |
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | **done** | `de9ff19` — `ambiguity_baseline` authored from a live client scan (30/34/14), integer thresholds, digest validated at load; **caught a wrong reviewed count (33 vs 34) on the real client**; policy sha `1c6376c6`; 896 Py + 247 Node |
-| T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | pending | |
+| T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | **done** | `df8bca7` — `recon_budget` replaces `three_part_budget`; `DEFAULT_BUDGET` deleted; ceilings come from the reviewed policy or the run is refused; 908 Py + 247 Node |
 | T4.1 `observation_coverage` + `field_readiness_coverage` producers | pending | |
 | T4.2 One internally-executed acceptance command | pending | |
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | pending | |
@@ -215,6 +215,14 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   child would have failed its own exact-key-set check. Worth remembering for every future policy block.
 - **Editing evidence prose moves `anchor_set.sha256`, not just the policy digest.** The join evidence
   lives inside `anchor_set`, which carries its own hash; both had to be recomputed, then the Node lock.
+- **`DEFAULT_BUDGET` was the same hole as T2.4's, one layer down.** Deleting the publish-path fallback
+  left a module-level constant that any recon caller inheriting the default silently got — including the
+  600 s elapsed ceiling already known to be breached by the real ~700 s recon. Both are gone; a policy
+  without a reviewed budget block is refused on both paths.
+- **WS3 is done, and all three tasks removed a claim rather than adding one.** T3.1 stopped quoting a
+  past review, T3.2 stopped accepting a count, T3.3 stopped forecasting a size. The pattern is worth
+  naming: each was a gate whose NAME described a stronger guarantee than its body delivered, which is
+  how they survived review for so long.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
