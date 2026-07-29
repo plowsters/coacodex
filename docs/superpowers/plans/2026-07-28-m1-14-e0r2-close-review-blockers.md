@@ -70,8 +70,9 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 
 | Task | Status | Commit |
 |---|---|---|
-| T0.1 Observation vocabularies: shared wire schema, constructor-enforced | pending | |
-| T0.2 Bind every source domain the contract cites (DBC + Content JSON) | pending | |
+| T0.1 Observation vocabularies: shared wire schema, constructor-enforced | **done** | `c97d7d5` — 30 probes; `_STATES` dead code removed; 655 Py + 121 Node |
+| — Mechanical re-bind (unplanned, user-approved) | **done** | `d935845` — Spell `c8cd440d`→`fc9d91ca` (+329 rows), SpellIcon string block −5 B; layout identical, semantic view byte-identical, 0 blocking |
+| T0.2 Bind every source domain the contract cites (DBC + Content JSON) | **done** | `a7f7653` — 10 tables bound, `topology_matches_bound` EMPTY; content 52,744 = child exactly; policy `5fbd5b5d`→`056166c2` |
 | T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | pending | |
 | T1.2 Reject a tampered, mismatched, or unsupported contract | pending | |
 | T1.3 Node dispatches on the supported-contract hash set | pending | |
