@@ -84,7 +84,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T3.1 Live FK candidate scan on every recon | **done** | `3b23849` — `scan_index_candidates` (integer metrics, 2 passes not 234), `side_table_missing` distinguished from ambiguous, the "must not read its side table" test inverted; 870 Py + 247 Node |
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | **done** | `de9ff19` — `ambiguity_baseline` authored from a live client scan (30/34/14), integer thresholds, digest validated at load; **caught a wrong reviewed count (33 vs 34) on the real client**; policy sha `1c6376c6`; 896 Py + 247 Node |
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | **done** | `df8bca7` — `recon_budget` replaces `three_part_budget`; `DEFAULT_BUDGET` deleted; ceilings come from the reviewed policy or the run is refused; 908 Py + 247 Node |
-| T4.1 `observation_coverage` + `field_readiness_coverage` producers | pending | |
+| T4.1 `observation_coverage` + `field_readiness_coverage` producers | **done** | `f55e1d1` — Python accumulator folded into the existing per-row hook (counters + `__slots__`), Node readiness coverage over an explicit rows x fields denominator; 918 Py + 255 Node |
 | T4.2 One internally-executed acceptance command | pending | |
 | T4.3 Acceptance binds recon + mechanics to one generation (real schemas) | pending | |
 | T5.1 Streaming projection consumption | pending | |
@@ -223,6 +223,14 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   past review, T3.2 stopped accepting a count, T3.3 stopped forecasting a size. The pattern is worth
   naming: each was a gate whose NAME described a stronger guarantee than its body delivered, which is
   how they survived review for so long.
+- **T4.1's whole content is the denominator.** Both accumulators were easy; what took the care was
+  making the parts sum to a stated total at every level, and choosing denominators that a regression can
+  move. `rows x READINESS_FIELDS` from an explicit constant, not from the rows: derived from the rows, a
+  field that stopped being emitted would leave the set silently and the ratio would never budge.
+- **Two same-named things counting different units is the actual bug class.** icon coverage counts
+  SPELLS, observation coverage counts CELLS, source coverage counts fields WITH a winner, readiness
+  coverage counts fields WITHOUT one. Each is fine; any two reported as "coverage" without their
+  denominators is not.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
