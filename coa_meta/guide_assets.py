@@ -6,14 +6,25 @@ from .guide_models import GuideAsset
 
 
 class GuideAssetCatalog:
-    """Resolves spell icons ONLY from the client-native coa-client-spell-icons-v1 catalog (keyed by
-    spell_id). A `converted` row — a client BLP converted to a browser-renderable bundle asset — renders
-    that asset (`source="client_icon"`); a `source_only`/`missing`/absent row renders a placeholder. It
-    NEVER constructs a remote DB URL and NEVER falls through to a generic asset_root search that
-    could resurrect a cached AscensionDB image (E0R AscensionDB sunset)."""
+    """Resolves spell icons ONLY from the client-native icon catalog (keyed by spell_id). Every row
+    renders a PLACEHOLDER: a client BLP is not browser-renderable, and nothing may construct a remote DB
+    URL or fall through to a generic asset_root search that could resurrect a cached AscensionDB image
+    (E0R AscensionDB sunset).
 
-    def __init__(self, icon_catalog: dict | None = None, asset_root: Path | str | None = None):
+    E0R.2 T2.5 prohibited the one status that rendered anything else (`converted`), leaving that branch
+    dead; T6.3 then normalized the catalog into an association row plus an asset table, and the
+    association carries no `asset_status` at all. So the branch is gone rather than kept as a
+    now-unreachable special case — the readiness of a client asset is recorded, and rendering it is a
+    separate capability that does not exist yet.
+
+    `icon_assets` (optional) is the asset child keyed by `asset_id`; it is what a future renderer would
+    resolve a reference through, and holding it here is what makes that a wiring change rather than a
+    redesign."""
+
+    def __init__(self, icon_catalog: dict | None = None, asset_root: Path | str | None = None,
+                 icon_assets: dict | None = None):
         self.icon_catalog = {int(k): v for k, v in (icon_catalog or {}).items()}
+        self.icon_assets = dict(icon_assets or {})
         self.asset_root = Path(asset_root) if asset_root else None
         self._assets: dict[str, GuideAsset] = {}
 
@@ -29,19 +40,15 @@ class GuideAssetCatalog:
         if asset_id in self._assets:
             return self._assets[asset_id]
 
-        if row and row.get("asset_status") == "converted" and row.get("converted_ref"):
-            asset = GuideAsset(
-                asset_id=asset_id, kind="icon", label=label,
-                href=row["converted_ref"], source="client_icon", missing=False,
-                source_path=row.get("client_path"),
-            )
-        else:
-            # source_only (a verified client BLP that is not itself browser-renderable), missing, or no
-            # client row at all -> a placeholder, NEVER a remote/cached-DB image.
-            asset = GuideAsset(
-                asset_id=asset_id, kind="icon", label=label,
-                href=None, source="placeholder", missing=True,
-            )
+        # A verified client BLP is not browser-renderable, and neither a missing asset nor an absent row
+        # is renderable either -> a placeholder, NEVER a remote/cached-DB image. `row` is consulted so a
+        # caller passing the catalog gets the same answer as one that does not, which is what makes the
+        # AscensionDB sunset a property of this class rather than of its inputs.
+        _ = row
+        asset = GuideAsset(
+            asset_id=asset_id, kind="icon", label=label,
+            href=None, source="placeholder", missing=True,
+        )
         self._assets[asset_id] = asset
         return asset
 

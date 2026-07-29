@@ -71,6 +71,8 @@ _CORPUS_SHAPES = {
 # with. Everything else in the corpus is shared — the projection dialect does not change in v4.
 _CORPUS_V4_SHAPES = {
     "full_spell_row_v4": ("full_rows.jsonl", "valid_full"),
+    "icon_association_row_v2": ("icons.jsonl", "valid_icon"),
+    "icon_asset_row_v1": ("icon_assets.jsonl", "valid_asset"),
 }
 _PRODUCER_DOC_SHAPES_V4 = {
     "spell_field_descriptors_v1": "coa_client_spell_fields.json",

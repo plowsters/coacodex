@@ -33,6 +33,8 @@ def _publish(root, *, validation=None, budget=None):
                {"schema_version": "coa-client-spell-projection-manifest-v3"},
                schema_version="coa-client-spell-projection-manifest-v3")
     w.add_jsonl("coa_client_spell_icons.jsonl", [], schema_version="coa-client-spell-icons-v1")
+    w.add_jsonl("coa_client_icon_assets.jsonl", [],
+                  schema_version="coa-client-icon-assets-v1")
     for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
         w.add_jsonl(name, [], schema_version="coa-client-misc-v1")

@@ -21,6 +21,9 @@ from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_
                                           generation_contract_sha256, load_current_contract)
 from coa_client_extract.contracts import load_observation_wire_schema
 from coa_client_extract.publish import GenerationWriter
+from coa_client_extract.spell_icons import (ASSET_CHILD as ICON_ASSET_CHILD,
+                                            ASSET_SCHEMA as ICON_ASSET_SCHEMA,
+                                            ASSOCIATION_SCHEMA as ICON_ASSOCIATION_SCHEMA)
 from coa_client_extract.spell_layout import compute_policy_sha256, derive_artifact_contract
 from coa_client_extract.spell_record import (FIELD_DESCRIPTORS_CHILD, FIELD_DESCRIPTORS_SCHEMA,
                                              SPELL_SCHEMA_V4, WIRE_SCHEMA_CHILD,
@@ -194,6 +197,8 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
                     forge_manifest_policy_sha256=None, unbind_staged_policy=False,
                     # --- v4 decoder knobs (T6.2): the two children a hoisted row needs ---
                     forge_descriptors=None, forge_wire=None,
+                    # --- normalized-icon knobs (T6.3) ---
+                    icon_assets=None,
                     return_writer=False):
     """A COMPLETE staged candidate whose policy is sized to what it stages, so the honest case validates
     and each knob breaks exactly one rule. Returns the generation directory.
@@ -203,7 +208,9 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
     """
     full = corpus_rows("full_rows.jsonl", "valid_full", corpus=CORPUS_V4) if full is None else full
     proj = corpus_rows("projection_rows.jsonl", "valid") if proj is None else proj
-    icons = corpus_rows("icons.jsonl", "valid_icon") if icons is None else icons
+    icons = corpus_rows("icons.jsonl", "valid_icon", corpus=CORPUS_V4) if icons is None else icons
+    icon_assets = (corpus_rows("icon_assets.jsonl", "valid_asset", corpus=CORPUS_V4)
+                   if icon_assets is None else icon_assets)
     ancillary_counts = {**{t: 2 for t in ANCILLARY_TABLES}, **(ancillary_counts or {})}
     ancillary_counts["CharacterAdvancement"] = advancement_source
 
@@ -245,7 +252,8 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
     write_lock(gw.root, policy)      # the HONEST policy: a forged staged copy is caught against this
     gw.add_jsonl("coa_client_spell.jsonl", full, schema_version=SPELL_SCHEMA_V4)
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
+    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version=ICON_ASSOCIATION_SCHEMA)
+    gw.add_jsonl(ICON_ASSET_CHILD, icon_assets, schema_version=ICON_ASSET_SCHEMA)
     from tests.golden import golden_rows
     gw.add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"),
                 schema_version="coa-client-spell-projection-manifest-v3")

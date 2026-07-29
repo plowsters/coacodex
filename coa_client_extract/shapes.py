@@ -366,6 +366,55 @@ def icon_row_v1(row):
     return row
 
 
+# --- E0R.2 T6.3: the normalized icon dialect ------------------------------------------------------
+# `icon_row_v1` above is RETAINED: `e0r-v1`/`e0r-v2` still name it, and a generation published under
+# either must keep validating.
+_ICON_AVAILABILITY = ("source_only", "missing")
+
+
+def icon_association_row_v2(row):
+    """One spell's icon reference. It carries no path, no hash and no archive — those live once on the
+    referenced asset row — and its two interned codes say WHY a null reference is null."""
+    where = "icon_association_row_v2"
+    _obj(row, where)
+    _keys(row, required=("schema_version", "spell_id", "spell_icon_id", "asset_ref", "s", "d",
+                         "readiness"), where=where)
+    if row["schema_version"] != "coa-client-spell-icons-v2":
+        _fail(f"{where}.schema_version", f"{row['schema_version']!r}")
+    _int(row["spell_id"], f"{where}.spell_id")
+    _int(row["spell_icon_id"], f"{where}.spell_icon_id", allow_null=True)
+    _str(row["asset_ref"], f"{where}.asset_ref", allow_null=True)
+    _coded_vocabulary(row, where)
+    if row["readiness"] not in ("available", "unavailable"):
+        _fail(f"{where}.readiness", f"{row['readiness']!r} not in ('available', 'unavailable')")
+    return row
+
+
+def icon_asset_row_v1(row):
+    """One normalized client asset. Hash and archive are non-null IFF `source_only` — a `missing` asset
+    is a PROVEN path whose member is absent from the chain, so it has neither, and the earlier model
+    that required them of every asset row could never have been satisfied."""
+    where = "icon_asset_row_v1"
+    _obj(row, where)
+    _keys(row, required=("schema_version", "asset_id", "client_path", "availability",
+                         "source_asset_sha256", "source_archive"), where=where)
+    if row["schema_version"] != "coa-client-icon-assets-v1":
+        _fail(f"{where}.schema_version", f"{row['schema_version']!r}")
+    _str(row["asset_id"], f"{where}.asset_id")
+    _str(row["client_path"], f"{where}.client_path")
+    if row["availability"] not in _ICON_AVAILABILITY:
+        _fail(f"{where}.availability", f"{row['availability']!r} not in {_ICON_AVAILABILITY}")
+    _str(row["source_asset_sha256"], f"{where}.source_asset_sha256", allow_null=True)
+    _str(row["source_archive"], f"{where}.source_archive", allow_null=True)
+    present = row["availability"] == "source_only"
+    for key in ("source_asset_sha256", "source_archive"):
+        if present and row[key] is None:
+            _fail(f"{where}.{key}", "a source_only asset must carry it")
+        if not present and row[key] is not None:
+            _fail(f"{where}.{key}", "a missing asset has no member to describe")
+    return row
+
+
 def content_row_v1(row):
     where = "content_row_v1"
     _obj(row, where)
@@ -563,6 +612,8 @@ SHAPES = {
     "observation_wire_v1": observation_wire_v1,
     "projection_row_v3": projection_row_v3,
     "icon_row_v1": icon_row_v1,
+    "icon_association_row_v2": icon_association_row_v2,
+    "icon_asset_row_v1": icon_asset_row_v1,
     "content_row_v1": content_row_v1,
     "advancement_row_v1": advancement_row_v1,
     "class_type_row_v1": class_type_row_v1,

@@ -115,6 +115,11 @@ export function loadCorpus() {
     // the valid baselines (case "valid"/"valid_full"/"valid_icon"), stripped of the corpus labels
     validFull() { return pick(v4Rows("full_rows.jsonl"), "valid_full"); },
     validFullV3() { return pick(rows("full_rows.jsonl"), "valid_full"); },
+    // E0R.2 T6.3: the NORMALIZED icon baselines (association + asset), beside the v1 ones.
+    iconsV2: v4Rows("icons.jsonl"),
+    iconAssets: v4Rows("icon_assets.jsonl"),
+    validIconsV2() { return pick(v4Rows("icons.jsonl"), "valid_icon"); },
+    validIconAssets() { return pick(v4Rows("icon_assets.jsonl"), "valid_asset"); },
     validProj() { return pick(rows("projection_rows.jsonl"), "valid"); },
     validIcons() { return pick(rows("icons.jsonl"), "valid_icon"); },
   };
@@ -128,7 +133,8 @@ const SCHEMA_FOR = {
   "coa_client_spell.jsonl": "coa-client-spell-v4",
   "coa_client_spell_coa.jsonl": "coa-client-spell-projection-v3",
   "coa_client_spell_projection.manifest.json": "coa-client-spell-projection-manifest-v3",
-  "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v1",
+  "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v2",
+  "coa_client_icon_assets.jsonl": "coa-client-icon-assets-v1",
   "coa_client_content.jsonl": "coa-client-content-v1",
   "coa_client_archive_plan.json": "coa-client-archive-plan-v1",
   "coa_client_advancement.jsonl": "coa-client-advancement-v1",
@@ -187,7 +193,8 @@ export function buildCandidate(opts = {}) {
   const corpus = loadCorpus();
   const full = opts.full || corpus.validFull();
   const proj = opts.proj || corpus.validProj();
-  const icons = opts.icons || corpus.validIcons();
+  const icons = opts.icons || corpus.validIconsV2();
+  const iconAssets = opts.iconAssets || corpus.validIconAssets();
   const drop = new Set(opts.drop || []);
   const ancillaryCounts = { ...Object.fromEntries(ANCILLARY_TABLES.map((t) => [t, 2])),
                             ...(opts.ancillaryCounts || {}) };
@@ -217,6 +224,7 @@ export function buildCandidate(opts = {}) {
     "coa_client_spell.jsonl": jsonl(full),
     "coa_client_spell_coa.jsonl": jsonl(proj),
     "coa_client_spell_icons.jsonl": jsonl(icons),
+    "coa_client_icon_assets.jsonl": jsonl(iconAssets),
     "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify(goldenRows("projection_manifest_v3"))),
     "coa_client_content.jsonl": jsonl(rows("content_row_v1", contentEntries)),
     "coa_client_archive_plan.json": Buffer.from(JSON.stringify(goldenRows("archive_plan_v1"))),

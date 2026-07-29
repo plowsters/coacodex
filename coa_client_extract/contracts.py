@@ -121,6 +121,10 @@ _CARDINALITY_KEYS_BY_RULE = {
     "declared_content_derivation": {"rule"},
     "equals_full_spell_records": {"rule"},
     "equals_is_coa_full_records": {"rule"},
+    # E0R.2 T6.3: a RELATIONAL rule — the asset child holds exactly the distinct non-null asset_refs the
+    # association child names. With the cross-child no-dangling/no-orphan checks it makes the two
+    # children mutually determined, so neither can carry a row the other does not account for.
+    "equals_referenced_asset_set": {"rule"},
     "single_document": {"rule"},
     "min": {"rule", "min"},
 }

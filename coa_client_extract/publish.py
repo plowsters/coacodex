@@ -10,11 +10,13 @@ import uuid
 from pathlib import Path
 
 from .contracts import (CANDIDATE_MUTABLE_KEYS, ContractError, GENERATION_CONTRACT_CHILD,
-                        GENERATION_CONTRACT_SCHEMA, ICON_ASSET_STATUSES, generation_contract_sha256,
+                        GENERATION_CONTRACT_SCHEMA, ICON_ASSET_STATUSES, decoded_reason_name,
+                        generation_contract_sha256,
                         load_current_contract, load_supported_contract, validate_generation_contract)
 from .manifest import build_manifest_v3
 from .spell_layout import compute_policy_sha256, load_spell_policy
 from .shapes import SHAPES, ShapeError
+from .spell_icons import ASSET_CHILD as ICON_ASSET_CHILD
 from .spell_record import _expand_compact as _expand_cell
 from .spell_record import (FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD, build_field_descriptors,
                            require_field_descriptors)
@@ -379,6 +381,53 @@ def _identity_agrees(frow, prow) -> None:
         raise ResolveError(f"identity_agrees: spell {frow['spell_id']} attribution differs full vs projection")
 
 
+def _verify_icon_association(r: dict, assets: dict) -> None:
+    """E0R.2 T6.3: one association row against the asset table it references.
+
+    Every leg is DERIVED, not read: `readiness` must equal what the referenced asset's availability
+    implies, and a null reference must be explained by a `decoded_reason` that is not `decoded`. A stored
+    verdict nobody re-derives is a claim, and the whole point of normalizing was to stop repeating
+    claims."""
+    sid, ref = r.get("spell_id"), r.get("asset_ref")
+    reason = decoded_reason_name(r.get("d"))
+    if ref is None:
+        if reason == "decoded":
+            raise ResolveError(f"icon {sid}: no asset_ref but decoded_reason is 'decoded'; a decoded "
+                               "icon join HAS a path")
+        if r.get("readiness") != "unavailable":
+            raise ResolveError(f"icon {sid}: readiness {r.get('readiness')!r} with no asset_ref")
+        return
+    if reason != "decoded":
+        raise ResolveError(f"icon {sid}: carries an asset_ref but decoded_reason is {reason!r}; only a "
+                           "decoded join yields a path")
+    asset = assets.get(ref)
+    if asset is None:
+        raise ResolveError(f"icon {sid}: dangling asset_ref {ref!r} — no such row in the asset child")
+    want = "available" if asset["availability"] == "source_only" else "unavailable"
+    if r.get("readiness") != want:
+        raise ResolveError(f"icon {sid}: readiness {r.get('readiness')!r} but its asset is "
+                           f"{asset['availability']!r} (derived: {want!r})")
+
+
+def _read_icon_assets(gen_dir: Path, shape) -> dict:
+    """The asset child, loaded before the merge-join: 14,022 rows on the real client, against 208,447
+    associations. Sorted-unique by `asset_id` is checked here so the child's ORDER is part of the
+    contract rather than an accident of how paths were met."""
+    assets: dict[str, dict] = {}
+    previous = None
+    for row in _read_jsonl(gen_dir / ICON_ASSET_CHILD):
+        if shape is not None:
+            _check_shape(shape, row, ICON_ASSET_CHILD)
+        asset_id = row["asset_id"]
+        if previous is not None and asset_id <= previous:
+            raise ResolveError(
+                f"icon assets: {asset_id!r} out of order/duplicated after {previous!r}; the child is "
+                "sorted-unique by asset_id so identical inputs produce identical bytes")
+        previous = asset_id
+        assets[asset_id] = row
+    return assets
+
+
 def _verify_icon_row(r: dict) -> None:
     """Icon id/path agreement (mirrors Node verifyIconRow): a valid asset_status, and a placeholder
     (unresolved join) has a null client_path while a resolved status carries one.
@@ -415,6 +464,12 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
     # E0R.2 T6.2: derived from the STAGED POLICY, which the trust chain has already bound to the reviewed
     # one — never from the staged descriptor child, which is checked against this rather than consulted.
     descriptors = build_field_descriptors(policy.doc)
+    # E0R.2 T6.3: the asset child, when the contract registers one. Loaded first (14,022 rows against
+    # 208,447 associations) so every association can be checked against the asset it names as it streams.
+    icon_assets = None
+    referenced: set[str] = set()
+    if (gen_dir / ICON_ASSET_CHILD).is_file() and ICON_ASSET_CHILD in (shapes or {}):
+        icon_assets = _read_icon_assets(gen_dir, (shapes or {}).get(ICON_ASSET_CHILD))
 
     def _shaped(name):
         rows = _read_jsonl(gen_dir / name)
@@ -436,7 +491,12 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
             raise ResolveError(f"icons_agree: spell {sid} lacks an icon-catalog row")
         if icons.row["spell_id"] != sid:
             raise ResolveError(f"icons_agree: icon row spell_id {icons.row['spell_id']} != full {sid}")
-        _verify_icon_row(icons.row)
+        if icon_assets is None:
+            _verify_icon_row(icons.row)                   # e0r-v1/e0r-v2: the flat v1 catalog
+        else:
+            _verify_icon_association(icons.row, icon_assets)
+            if icons.row.get("asset_ref") is not None:
+                referenced.add(icons.row["asset_ref"])
         icons.advance()
         if proj.row is not None and proj.row["spell_id"] < sid:
             raise ResolveError(f"projection_within_domain: {proj.row['spell_id']} outside is_coa domain")
@@ -472,9 +532,16 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
     # EXISTED — no tar path containment, no bundle manifest, no content hashes — so it never verified the
     # thing it was named after. `converted` is prohibited outright now (see ICON_ASSET_STATUSES), which
     # makes the whole branch unreachable rather than weakly guarded.
+    if icon_assets is not None:
+        # NO ORPHANS. `no dangling` was checked per association; this is the other direction, and it is
+        # what makes the two children mutually determined instead of merely consistent one way.
+        orphans = sorted(set(icon_assets) - referenced)
+        if orphans:
+            raise ResolveError(
+                f"icon assets: {len(orphans)} asset row(s) referenced by no spell, e.g. {orphans[:5]}")
     # Tallies the cursors derived themselves, so the contract can cross-check them against the
     # manifest-registered record counts (E0R.2 T2.1).
-    return {"full": full_count, "is_coa": is_coa_count}
+    return {"full": full_count, "is_coa": is_coa_count, "referenced_assets": len(referenced)}
 
 
 def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
@@ -683,6 +750,13 @@ def _resolve_cardinality(name: str, spec: dict, records: int, policy, manifest: 
             raise ResolveError(
                 f"equals_full_spell_records: child {name!r} carries {records} records but the full "
                 f"spell child carries {counts['full']}")
+    elif rule == "equals_referenced_asset_set":
+        # E0R.2 T6.3: relational. Combined with no-dangling (per association) and no-orphans (after the
+        # merge), the asset child holds EXACTLY the distinct references the association child names.
+        if records != counts["referenced_assets"]:
+            raise ResolveError(
+                f"equals_referenced_asset_set: child {name!r} carries {records} asset rows but the "
+                f"association child references {counts['referenced_assets']} distinct assets")
     elif rule == "equals_is_coa_full_records":
         if records != counts["is_coa"]:
             raise ResolveError(
@@ -695,7 +769,8 @@ def _resolve_cardinality(name: str, spec: dict, records: int, policy, manifest: 
 # Rules whose expectation is derived by the streaming merge-join, so they are resolved AFTER it. They
 # cross-check two independently-derived numbers (the manifest-registered record count against the
 # cursor's own tally); the merge-join itself remains the authoritative row-level enforcement.
-_CROSS_CHILD_RULES = frozenset({"equals_full_spell_records", "equals_is_coa_full_records"})
+_CROSS_CHILD_RULES = frozenset({"equals_full_spell_records", "equals_is_coa_full_records",
+                                "equals_referenced_asset_set"})
 
 
 def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
@@ -822,8 +897,10 @@ def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = Non
     # SHAPES: every child is type-checked against the validator its contract names. The three spell
     # children are checked inside the merge-join below so they are read exactly once; every other child
     # is streamed here (E0R.2 T2.2).
+    # E0R.2 T6.3: the asset child joins the merge-join group — it is read there, against the
+    # associations that reference it, rather than shape-checked in isolation and then read again.
     spell_children = {"coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
-                      "coa_client_spell_icons.jsonl"}
+                      "coa_client_spell_icons.jsonl", ICON_ASSET_CHILD}
     for name, spec in contract["children"].items():
         if name not in children_meta or name in spell_children:
             continue

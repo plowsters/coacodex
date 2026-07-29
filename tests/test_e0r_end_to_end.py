@@ -11,7 +11,7 @@ from coa_client_extract.publish import (
     GenerationWriter, validate_candidate_generation, resolve_active_generation, ResolveError,
 )
 from coa_client_extract.spell_record import iter_spell_records, project_v3_row
-from coa_client_extract.spell_icons import iter_icon_catalog
+from coa_client_extract.spell_icons import icon_asset_table, iter_icon_catalog
 from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_views, icon_side_views
 from tests._e0r2_fixtures import (ANCILLARY_TABLES, GENEROUS_CEILINGS, bind_policy_doc, clean_budget,
                                   generation_contract_binding,
@@ -35,12 +35,18 @@ def _stage_full_generation(root: Path):
                                      coa_spell_ids={805775}),
                   key=lambda r: r["spell_id"])
     proj = [project_v3_row(r, v2_policy()) for r in full if r["coa_attribution"]["is_coa"] is True]
+    # E0R.2 T6.3: ONE producer pass emits the associations and the asset table they reference, so the
+    # end-to-end generation is mutually determined the way a real one is.
+    icon_assets = icon_asset_table()
     icons = sorted(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy(),
-                                     asset_resolver=_resolver), key=lambda r: r["spell_id"])
+                                     asset_resolver=_resolver, assets=icon_assets),
+                   key=lambda r: r["spell_id"])
     gw = GenerationWriter(root)
     gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v4")
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
+    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v2")
+    gw.add_jsonl("coa_client_icon_assets.jsonl", icon_assets.rows(),
+                 schema_version="coa-client-icon-assets-v1")
     from tests.golden import golden_rows
     gw.add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"),
                 schema_version="coa-client-spell-projection-manifest-v3")

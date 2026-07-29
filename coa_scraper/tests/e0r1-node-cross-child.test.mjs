@@ -16,37 +16,42 @@ test("the valid baseline passes cross-child", () => {
   assert.doesNotThrow(run({}));
 });
 
-// --- icon id/path agreement + bundle consistency (corpus reject rows, domain preserved) ---
-test("placeholder icon carrying a client_path FAILS (id/path agreement)", () => {
-  const icons = corpus.validIcons();
-  icons[1] = corpus.pick(corpus.icons, "placeholder_with_path")[0];   // spell 2
-  assert.throws(run({ icons }), /placeholder spell 2 carries a client_path/);
+// --- E0R.2 T6.3: the RELATIONAL icon rules, mirrored from Python and derived independently ---
+// The v1 id/path cases these replace described a dialect that no longer exists: `asset_status` became an
+// ASSET row's availability, and `converted`/`converted_ref` have no key to appear in.
+test("a null reference claiming `available` FAILS", () => {
+  const icons = corpus.validIconsV2();
+  icons[1] = corpus.pick(corpus.iconsV2, "null_ref_claims_available")[0];   // spell 2
+  assert.throws(run({ icons }), /readiness/);
 });
 
-test("a converted icon row FAILS (E0R.2 T2.5: the status is prohibited outright)", () => {
-  // The corpus case is named for the retired rule (a converted row needs a converted_ref); the stronger
-  // rule that replaced it rejects the status itself, so the row still fails.
-  const icons = corpus.validIcons();
-  icons[0] = corpus.pick(corpus.icons, "converted_without_ref")[0];
-  assert.throws(run({ icons }), /converted/);
+test("a dangling asset_ref FAILS", () => {
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "dangling_asset_ref")[0];
+  assert.throws(run({ icons }), /dangling asset_ref/);
 });
 
-test("a source_only icon row carrying a converted_ref FAILS", () => {
-  // A bundle reference is unverifiable on ANY status: the shape has no such key, and verifyIconRow
-  // restates the prohibition behind it.
-  const icons = corpus.validIcons();
-  icons[0] = corpus.pick(corpus.icons, "source_only_with_converted_ref")[0];
-  assert.throws(run({ icons }), /converted_ref/);
+test("a reference whose decoded_reason is not `decoded` FAILS", () => {
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "ref_with_undecoded_reason")[0];
+  assert.throws(run({ icons }), /only a decoded join yields a path/);
+});
+
+test("an orphan asset row FAILS", () => {
+  // The other direction from `no dangling`, and what makes the two children mutually determined.
+  const iconAssets = [...corpus.validIconAssets(), corpus.pick(corpus.iconAssets, "orphan_asset")[0]]
+    .sort((a, b) => (a.asset_id < b.asset_id ? -1 : 1));
+  assert.throws(run({ iconAssets }), /referenced by no spell/);
 });
 
 // --- exact icon domain (trailing / extra / missing) ---
 test("a trailing icon row beyond the full domain FAILS", () => {
-  const icons = [...corpus.validIcons(), corpus.pick(corpus.icons, "trailing_icon_beyond_domain")[0]];
+  const icons = [...corpus.validIconsV2(), corpus.pick(corpus.iconsV2, "trailing_icon_beyond_domain")[0]];
   assert.throws(run({ icons }), /icons_agree/);
 });
 
 test("a missing icon row (catalog shorter than the full table) FAILS", () => {
-  const icons = corpus.validIcons().slice(0, 2);       // drop spell 3's icon
+  const icons = corpus.validIconsV2().slice(0, 2);       // drop spell 3's icon
   assert.throws(run({ icons }), /icons_agree/);
 });
 

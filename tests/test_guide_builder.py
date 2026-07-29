@@ -93,21 +93,24 @@ def test_guide_nodes_include_links_tooltips_and_icons():
     assert node.asset.source == "placeholder"           # no client icon catalog supplied -> placeholder
 
 
-def test_guide_builder_uses_client_icon_catalog(tmp_path: Path):
-    # E0R client-native icons: a converted client-icon row renders from the client catalog by spell_id;
-    # no AscensionDB icon name / cached path is consulted.
+def test_guide_builder_renders_a_placeholder_for_a_client_icon_row(tmp_path: Path):
+    """E0R client-native icons: the catalog is consulted by spell_id and NO AscensionDB icon name or
+    cached path is ever reached.
+
+    This asserted that a `converted` row rendered a bundle asset. E0R.2 T2.5 prohibited that status
+    (its bundle validator was never implemented) and T6.3 removed the key it lived on, so a verified
+    client BLP renders a placeholder — the guarantee that remains is the one about never hotlinking."""
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        icon_catalog={2001: {"client_path": "Interface/Icons/Spell_Nature_Poison.blp",
-                             "asset_status": "converted", "converted_ref": "icons.tar#spell_nature_poison.png"}},
+        icon_catalog={2001: {"spell_id": 2001, "asset_ref": "a" * 32, "readiness": "available"}},
     )
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)
 
-    assert node.asset.source == "client_icon"
-    assert node.asset.href == "icons.tar#spell_nature_poison.png"
-    assert node.asset.missing is False
+    assert node.asset.source == "placeholder"
+    assert node.asset.href is None
+    assert "db.ascension.gg" not in str(node.asset.href or "")
 
 
 def test_guide_build_cards_include_static_tree_payloads():

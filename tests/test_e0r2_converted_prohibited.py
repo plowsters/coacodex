@@ -12,7 +12,7 @@ import pytest
 from coa_client_extract.contracts import ICON_ASSET_STATUSES
 from coa_client_extract.publish import ResolveError, _verify_icon_row
 from coa_client_extract.shapes import SHAPES, ShapeError
-from coa_client_extract.spell_icons import iter_icon_catalog, icon_coverage
+from coa_client_extract.spell_icons import icon_asset_table, icon_coverage, iter_icon_catalog
 from tests._spell_fixtures import icon_side_views, spell_dbc_icon_edges, v2_icon_policy
 
 
@@ -26,8 +26,10 @@ def _blp(path):
 
 
 def _catalog():
-    return list(iter_icon_catalog(spell_dbc_icon_edges(), icon_side_views(),
-                                  policy=v2_icon_policy(), asset_resolver=_blp))
+    assets = icon_asset_table()
+    rows = list(iter_icon_catalog(spell_dbc_icon_edges(), icon_side_views(),
+                                  policy=v2_icon_policy(), asset_resolver=_blp, assets=assets))
+    return rows, assets
 
 
 def test_converted_is_not_an_admissible_status():
@@ -59,25 +61,36 @@ def test_converted_ref_is_not_even_a_structural_key():
 
 def test_the_catalog_producer_never_emits_converted():
     """Behavioural, not a grep: run the real catalog producer over a client whose icons resolve, are
-    missing, and are unjoined, and assert the emitted statuses. A double-quoted-literal scan is brittle
-    in both directions — it fires on a comment and misses a computed value."""
-    statuses = {row["asset_status"] for row in _catalog()}
-    assert statuses <= ICON_ASSET_STATUSES
-    assert statuses == {"source_only", "missing", "placeholder"}   # all three paths exercised
+    missing, and are unjoined, and assert what it emits. A double-quoted-literal scan is brittle in both
+    directions — it fires on a comment and misses a computed value.
+
+    E0R.2 T6.3 moved availability onto the ASSET row, so the vocabulary this checks is the asset one; the
+    prohibition is the same statement about the same producer."""
+    rows, assets = _catalog()
+    availability = {a["availability"] for a in assets.rows()}
+    assert availability == {"source_only", "missing"}          # both asset paths exercised
+    assert "converted" not in availability
+    assert any(r["asset_ref"] is None for r in rows)           # and the unjoined path too
 
 
-def test_every_produced_row_passes_the_prohibition_gate():
-    for row in _catalog():
-        _verify_icon_row(row)
-        assert "converted_ref" not in row
+def test_no_produced_row_carries_a_bundle_reference():
+    rows, assets = _catalog()
+    for row in rows:
+        assert "converted_ref" not in row and "asset_status" not in row
+    for asset in assets.rows():
+        assert "converted_ref" not in asset
 
 
 def test_coverage_counts_the_produced_statuses_without_a_converted_branch():
     # icon_coverage counted `converted` as an asset-present status. Nothing produced it, so the branch
-    # was unreachable arithmetic; present must equal exactly the source_only rows.
-    rows = _catalog()
-    cov = icon_coverage(rows)
-    assert cov["assets_present"] == sum(1 for r in rows if r["asset_status"] == "source_only")
-    assert cov["assets_missing"] == sum(1 for r in rows if r["asset_status"] == "missing")
-    assert cov["placeholders"] == sum(1 for r in rows if r["asset_status"] == "placeholder")
+    # was unreachable arithmetic; present must equal exactly the rows referencing a source_only asset.
+    rows, assets = _catalog()
+    cov = icon_coverage(rows, assets)
+    assert cov["assets_present"] == sum(
+        1 for r in rows
+        if r["asset_ref"] is not None and assets.get(r["asset_ref"])["availability"] == "source_only")
+    assert cov["assets_missing"] == sum(
+        1 for r in rows
+        if r["asset_ref"] is not None and assets.get(r["asset_ref"])["availability"] == "missing")
+    assert cov["placeholders"] == sum(1 for r in rows if r["asset_ref"] is None)
     assert cov["spells"] == cov["assets_present"] + cov["assets_missing"] + cov["placeholders"]

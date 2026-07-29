@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
 import { CHUNK, readJsonlLines } from "./jsonl-stream.mjs";
+import { decodedReasonName } from "./mechanics-projection.mjs";
 import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact,
          buildFieldDescriptors, requireFieldDescriptors, requireObservationWire,
          FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD } from "./mechanics-projection.mjs";
@@ -31,6 +32,8 @@ const RESERVED = new Set([MANIFEST_NAME, POINTER_NAME]);
 export const GENERATION_CONTRACT_SCHEMA = "coa-generation-contract-v1";
 export const CONTRACT_INDEX_SCHEMA = "coa-generation-contract-index-v1";
 export const GENERATION_CONTRACT_CHILD = "generation_contract.json";
+// E0R.2 T6.3: the normalized icon asset child.
+export const ICON_ASSET_CHILD = "coa_client_icon_assets.jsonl";
 const DEFAULT_CONTRACTS_DIR = new URL("../../../coa_client_extract/data/generation_contracts/", import.meta.url);
 
 const CHILD_KEYS = ["cardinality", "child_schema_version", "kind", "optional", "row_schema_version", "shape"];
@@ -43,6 +46,8 @@ const CARDINALITY_KEYS_BY_RULE = {
   declared_content_derivation: ["rule"],
   equals_full_spell_records: ["rule"],
   equals_is_coa_full_records: ["rule"],
+  equals_referenced_asset_set: ["rule"],
+
   single_document: ["rule"],
   min: ["min", "rule"],
 };
@@ -338,7 +343,8 @@ function declaredDerivation(manifest, child, keys) {
 
 // Rules whose expectation the streaming merge-join derives, resolved AFTER it. They cross-check two
 // independently-derived numbers; the merge-join stays the authoritative row-level enforcement.
-const CROSS_CHILD_RULES = new Set(["equals_full_spell_records", "equals_is_coa_full_records"]);
+const CROSS_CHILD_RULES = new Set(["equals_full_spell_records", "equals_is_coa_full_records",
+                                   "equals_referenced_asset_set"]);
 
 function resolveCardinality(genDir, name, spec, records, policyDoc, manifest, counts) {
   const rule = spec.cardinality.rule;
@@ -396,6 +402,13 @@ function resolveCardinality(genDir, name, spec, records, policyDoc, manifest, co
     if (records !== counts.full) {
       throw new GenerationResolveError(
         `equals_full_spell_records: child ${name} carries ${records} records but the full spell child carries ${counts.full}`);
+    }
+  } else if (rule === "equals_referenced_asset_set") {
+    // E0R.2 T6.3: relational. With no-dangling (per association) and no-orphans (after the merge), the
+    // asset child holds EXACTLY the distinct references the association child names.
+    if (records !== counts.referenced_assets) {
+      throw new GenerationResolveError(
+        `equals_referenced_asset_set: child ${name} carries ${records} asset rows but the association child references ${counts.referenced_assets} distinct assets`);
     }
   } else if (rule === "equals_is_coa_full_records") {
     if (records !== counts.is_coa) {
@@ -519,15 +532,60 @@ function verifyIconRow(r) {
   }
 }
 
+// E0R.2 T6.3: one association row against the asset table it references. Every leg is DERIVED, not
+// read: `readiness` must equal what the referenced asset's availability implies, and a null reference
+// must be explained by a decoded_reason that is not `decoded`. A stored verdict nobody re-derives is a
+// claim, and normalizing exists to stop repeating claims.
+function verifyIconAssociation(r, assets) {
+  const reason = decodedReasonName(r.d);
+  if (r.asset_ref == null) {
+    if (reason === "decoded") {
+      throw new GenerationResolveError(`icon ${r.spell_id}: no asset_ref but decoded_reason is 'decoded'; a decoded icon join HAS a path`);
+    }
+    if (r.readiness !== "unavailable") {
+      throw new GenerationResolveError(`icon ${r.spell_id}: readiness ${r.readiness} with no asset_ref`);
+    }
+    return;
+  }
+  if (reason !== "decoded") {
+    throw new GenerationResolveError(`icon ${r.spell_id}: carries an asset_ref but decoded_reason is ${reason}; only a decoded join yields a path`);
+  }
+  const asset = assets.get(r.asset_ref);
+  if (asset === undefined) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: dangling asset_ref ${r.asset_ref} — no such row in the asset child`);
+  }
+  const want = asset.availability === "source_only" ? "available" : "unavailable";
+  if (r.readiness !== want) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: readiness ${r.readiness} but its asset is ${asset.availability} (derived: ${want})`);
+  }
+}
+
+// The asset child, read before the merge-join. Sorted-unique by asset_id is checked HERE so the child's
+// ORDER is part of the contract rather than an accident of how paths were met.
+function readIconAssets(rows, shape) {
+  const assets = new Map();
+  let previous = null;
+  for (const row of rows) {
+    if (shape) shape(row);
+    if (previous !== null && row.asset_id <= previous) {
+      throw new GenerationResolveError(`icon assets: ${row.asset_id} out of order/duplicated after ${previous}; the child is sorted-unique by asset_id so identical inputs produce identical bytes`);
+    }
+    previous = row.asset_id;
+    assets.set(row.asset_id, row);
+  }
+  return assets;
+}
+
 // Streaming cross-child merge-join over ascending spell_id (mirrors Python publish._cross_child + _icon_bundle):
 // per-child sorted uniqueness, the icon catalog is exactly the full domain (catching missing/extra/trailing
 // icons), projection ⊆ is_coa within domain, the disjoint v3 dialects, identity/mechanics/attribution
 // agreement, and compact_raw_expands_to_envelope (expand(full.raw) deep-equals projection.field_observations).
-export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
+export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest, iconAssets = null) {
   // E0R.2 T6.1: derived HERE from the staged policy, never read off the generation — a descriptor says
   // what every hoisted cell means, so taking one on its word would let the producer and the consumer
   // agree on a redefinition. Both cell encodings expand identically, so this is inert until T6.2.
   const descriptors = buildFieldDescriptors(policyDoc);
+  const referenced = new Set();
   const full = new Cursor(fullRows, "full");
   const proj = new Cursor(projRows, "projection");
   const icons = new Cursor(iconRows, "icons");
@@ -544,7 +602,12 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
     if (icons.row.spell_id !== sid) {
       throw new GenerationResolveError(`icons_agree: icon row spell_id ${icons.row.spell_id} != full ${sid}`);
     }
-    verifyIconRow(icons.row);
+    if (iconAssets === null) {
+      verifyIconRow(icons.row);                        // e0r-v1/e0r-v2: the flat v1 catalog
+    } else {
+      verifyIconAssociation(icons.row, iconAssets);
+      if (icons.row.asset_ref != null) referenced.add(icons.row.asset_ref);
+    }
     icons.advance();
     if (proj.row !== null && proj.row.spell_id < sid) {
       throw new GenerationResolveError(`projection_within_domain: ${proj.row.spell_id} outside is_coa domain`);
@@ -581,9 +644,17 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
   // E0R.2 T2.5: the converted->bundle-required check lived here and only asserted that a bundle child
   // EXISTED. `converted` is prohibited outright now, which makes the branch unreachable rather than
   // weakly guarded.
+  if (iconAssets !== null) {
+    // NO ORPHANS — the other direction from `no dangling`, and what makes the two children mutually
+    // determined rather than consistent one way only.
+    const orphans = [...iconAssets.keys()].filter((id) => !referenced.has(id)).sort();
+    if (orphans.length) {
+      throw new GenerationResolveError(`icon assets: ${orphans.length} asset row(s) referenced by no spell, e.g. ${orphans.slice(0, 5)}`);
+    }
+  }
   // Tallies the cursors derived themselves, so the contract can cross-check them against the
   // manifest-registered record counts (E0R.2 T2.1).
-  return { full: fullCount, is_coa: isCoaCount };
+  return { full: fullCount, is_coa: isCoaCount, referenced_assets: referenced.size };
 }
 
 function sha256(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
@@ -667,8 +738,10 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
   }
   // The three spell children are shape-checked inside the merge-join below, so they are read exactly
   // once; every other child is streamed here.
+  // The asset child joins this group (E0R.2 T6.3): it is read in the merge-join, against the
+  // associations that reference it, rather than shape-checked in isolation and then read again.
   const SPELL_CHILDREN = new Set(["coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
-                                  "coa_client_spell_icons.jsonl"]);
+                                  "coa_client_spell_icons.jsonl", ICON_ASSET_CHILD]);
   for (const [name, spec] of Object.entries(contract.children)) {
     if (!(name in childrenMeta) || SPELL_CHILDREN.has(name)) continue;
     const shape = shapeFor(name, spec);
@@ -695,11 +768,18 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
     const shape = shapeFor(name, contract.children[name]);
     for (const row of iter) yield checkShape(shape, row, name);
   };
+  // E0R.2 T6.3: the asset child, when the contract registers one. Read first (14,022 rows against
+  // 208,447 associations) so every association can be checked against the asset it names as it streams.
+  const iconAssets = ICON_ASSET_CHILD in contract.children
+    ? readIconAssets(readJsonlLines(children[ICON_ASSET_CHILD]),
+                     (row) => checkShape(shapeFor(ICON_ASSET_CHILD, contract.children[ICON_ASSET_CHILD]),
+                                         row, ICON_ASSET_CHILD))
+    : null;
   const counts = crossChild(
     verified(readJsonlLines(children["coa_client_spell.jsonl"]), verifyFullRowAgainstPolicy, "coa_client_spell.jsonl"),
     verified(readJsonlLines(children["coa_client_spell_coa.jsonl"]), verifyRowAgainstPolicy, "coa_client_spell_coa.jsonl"),
     shaped(readJsonlLines(children["coa_client_spell_icons.jsonl"]), "coa_client_spell_icons.jsonl"),
-    policyDoc, manifest);
+    policyDoc, manifest, iconAssets);
   for (const [name, spec] of Object.entries(contract.children)) {
     if (CROSS_CHILD_RULES.has(spec.cardinality.rule) && name in childrenMeta) {
       resolveCardinality(dir, name, spec, childrenMeta[name].records, policyDoc, manifest, counts);

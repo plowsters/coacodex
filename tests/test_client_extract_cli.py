@@ -273,8 +273,13 @@ def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
     icons = {r["spell_id"]: r for r in
              (json.loads(l) for l in (gen_dir / "coa_client_spell_icons.jsonl").read_text().splitlines())}
     assert set(icons) == {805775}
-    assert icons[805775]["asset_status"] == "source_only"
-    assert icons[805775]["source_asset_sha256"] == __import__("hashlib").sha256(_ICON_BLP).hexdigest()
+    # E0R.2 T6.3: the association references the asset; the path, hash and archive live once on the
+    # asset child instead of once per spell.
+    assets = {r["asset_id"]: r for r in
+              (json.loads(l) for l in (gen_dir / "coa_client_icon_assets.jsonl").read_text().splitlines())}
+    asset = assets[icons[805775]["asset_ref"]]
+    assert asset["availability"] == "source_only" and icons[805775]["readiness"] == "available"
+    assert asset["source_asset_sha256"] == __import__("hashlib").sha256(_ICON_BLP).hexdigest()
     # honest resolved-icon coverage rides in the authoritative generation manifest
     cov = resolved["manifest"]["icon_coverage"]
     assert cov["resolved_paths"] == 1 and cov["assets_present"] == 1

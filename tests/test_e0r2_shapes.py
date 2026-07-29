@@ -62,7 +62,7 @@ def test_the_producer_rows_satisfy_the_same_shapes_as_the_corpus():
     full, projection, icon = producer_spell_rows()
     SHAPES["full_spell_row_v4"](full)
     SHAPES["projection_row_v3"](projection)
-    SHAPES["icon_row_v1"](icon)
+    SHAPES["icon_association_row_v2"](icon)
 
 
 # --- JSON documents: the `{}` hole ---

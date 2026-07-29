@@ -54,7 +54,9 @@ def regenerate(
     from .spell_record import (FIELD_DESCRIPTORS_CHILD, FIELD_DESCRIPTORS_SCHEMA,
                                WIRE_SCHEMA_CHILD, build_field_descriptors, iter_spell_records,
                                observation_accumulator, project_v3_row)
-    from .spell_icons import iter_icon_catalog, icon_coverage
+    from .spell_icons import (ASSET_CHILD as ICON_ASSET_CHILD, ASSET_SCHEMA as ICON_ASSET_SCHEMA,
+                              ASSOCIATION_SCHEMA as ICON_ASSOCIATION_SCHEMA, icon_asset_table,
+                              icon_coverage, iter_icon_catalog)
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
     from .contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
@@ -234,10 +236,15 @@ def regenerate(
     full_spool, full_index = _spool(
         iter_spell_records(spell_view, side_views, policy=policy, provenance=provenance,
                            coa_spell_ids=coa_attributed_ids), _observe_full)
+    # E0R.2 T6.3: ONE pass emits the associations and accumulates the asset table beside them — 14,022
+    # assets against 208,447 associations, so the table is counter-scale while the stream stays a stream.
+    icon_assets = icon_asset_table()
     icon_spool, icon_index = _spool(
-        iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver))
+        iter_icon_catalog(spell_view, side_views, policy=policy, asset_resolver=asset_resolver,
+                          assets=icon_assets))
     # Honest resolved-icon coverage: a streaming pass over the spool (never a row list).
-    icon_cov = icon_coverage(json.loads(line) for line in _spool_lines(icon_spool, icon_index))
+    icon_cov = icon_coverage((json.loads(line) for line in _spool_lines(icon_spool, icon_index)),
+                             icon_assets)
 
     def _projection_rows():
         # The projection is the RICH form: each compact `raw` cell expands into a canonical field
@@ -301,7 +308,8 @@ def regenerate(
     gw.add_json("coa_client_spell_projection.manifest.json", projection_manifest,
                 schema_version="coa-client-spell-projection-manifest-v3")
     gw.add_jsonl_lines("coa_client_spell_icons.jsonl", _spool_lines(icon_spool, icon_index),
-                       schema_version="coa-client-spell-icons-v1")
+                       schema_version=ICON_ASSOCIATION_SCHEMA)
+    gw.add_jsonl(ICON_ASSET_CHILD, icon_assets.rows(), schema_version=ICON_ASSET_SCHEMA)
     full_spool.close()
     icon_spool.close()
     gw.add_jsonl("coa_client_content.jsonl", content_records, schema_version="coa-client-content-v1")

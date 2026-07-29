@@ -14,10 +14,13 @@ from coa_client_extract.publish import GenerationWriter, ResolveError, validate_
 from tests._e0r2_fixtures import stage_candidate, validate_staged
 
 CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
+CORPUS_V4 = Path(__file__).resolve().parent / "golden" / "e0r2_corpus_v4"
 
 
 def _rows(name):
-    return [json.loads(l) for l in (CORPUS / name).read_text().splitlines() if l.strip()]
+    # E0R.2 T6.3: the icon baselines are the NORMALIZED v2 ones; the v3 corpus keeps the rest.
+    corpus = CORPUS_V4 if name in ("icons.jsonl", "icon_assets.jsonl") else CORPUS
+    return [json.loads(l) for l in (corpus / name).read_text().splitlines() if l.strip()]
 
 
 def _pick(name, case):
@@ -25,13 +28,13 @@ def _pick(name, case):
             for r in _rows(name) if r["case"] == case]
 
 
-def _candidate(root, *, full=None, proj=None, icons=None):
+def _candidate(root, *, full=None, proj=None, icons=None, icon_assets=None):
     """Assemble a COMPLETE staged candidate from the corpus baselines (mirrors the Node helper
     coa_scraper/tests/helpers/candidate.mjs); a single full/proj/icons override injects one failure.
 
     E0R.2 T2.1: the shared fixture also sizes the staged policy's reviewed `bound` and writes the lock,
     so a cross-child case reaches the merge-join rather than the cardinality gate."""
-    return stage_candidate(root, full=full, proj=proj, icons=icons)
+    return stage_candidate(root, full=full, proj=proj, icons=icons, icon_assets=icon_assets)
 
 
 def test_valid_corpus_baseline_passes_cross_child(tmp_path):
@@ -41,29 +44,35 @@ def test_valid_corpus_baseline_passes_cross_child(tmp_path):
 
 # --- icon id/path agreement (corpus reject rows, domain preserved) ---
 
-def test_placeholder_icon_with_client_path_fails(tmp_path):
+# E0R.2 T6.3 replaced the id/path agreement rules with RELATIONAL ones. The v1 cases these tests were
+# written for (`placeholder_with_path`, the two `converted` ones) describe a dialect that no longer
+# exists; the corpus carries their v2 successors, each breaking one relation between the two children.
+
+def test_a_null_reference_claiming_available_fails(tmp_path):
     icons = _pick("icons.jsonl", "valid_icon")
-    icons[1] = _pick("icons.jsonl", "placeholder_with_path")[0]        # spell 2
-    with pytest.raises(ResolveError, match="placeholder spell 2 carries a client_path"):
+    icons[1] = _pick("icons.jsonl", "null_ref_claims_available")[0]     # spell 2
+    with pytest.raises(ResolveError, match="readiness"):
         validate_staged(_candidate(tmp_path, icons=icons))
 
 
-def test_converted_icon_without_converted_ref_fails(tmp_path):
-    # E0R.2 T2.5 retired the rule this corpus case was written for (`converted` needs a converted_ref)
-    # in favour of a stronger one: `converted` is not an admissible status at all.
+def test_a_dangling_reference_fails(tmp_path):
     icons = _pick("icons.jsonl", "valid_icon")
-    icons[0] = _pick("icons.jsonl", "converted_without_ref")[0]
-    with pytest.raises(ResolveError, match="converted"):
+    icons[0] = _pick("icons.jsonl", "dangling_asset_ref")[0]
+    with pytest.raises(ResolveError, match="dangling asset_ref"):
         validate_staged(_candidate(tmp_path, icons=icons))
 
 
-def test_source_only_icon_with_converted_ref_fails(tmp_path):
-    # Likewise: a bundle reference is unverifiable on ANY status, so it is rejected structurally (the
-    # shape has no such key) before the semantic gate restates it.
+def test_a_reference_whose_reason_is_not_decoded_fails(tmp_path):
     icons = _pick("icons.jsonl", "valid_icon")
-    icons[0] = _pick("icons.jsonl", "source_only_with_converted_ref")[0]
-    with pytest.raises(ResolveError, match="converted_ref"):
+    icons[0] = _pick("icons.jsonl", "ref_with_undecoded_reason")[0]
+    with pytest.raises(ResolveError, match="only a decoded join yields a path"):
         validate_staged(_candidate(tmp_path, icons=icons))
+
+
+def test_an_orphan_asset_row_fails(tmp_path):
+    assets = _pick("icon_assets.jsonl", "valid_asset") + _pick("icon_assets.jsonl", "orphan_asset")
+    with pytest.raises(ResolveError, match="referenced by no spell"):
+        validate_staged(_candidate(tmp_path, icon_assets=sorted(assets, key=lambda a: a["asset_id"])))
 
 
 # --- exact icon domain: catalog == full table, 1:1 in lockstep ---

@@ -951,6 +951,8 @@ function writeGenerationFixture(root, projRecords) {
     "coa_client_spell_coa.jsonl": projBody,
     "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify(projManifest, null, 2) + "\n"),
     "coa_client_spell_icons.jsonl": jsonl([]),
+    // E0R.2 T6.3 added the normalized asset child to the contract.
+    "coa_client_icon_assets.jsonl": jsonl([]),
     "coa_client_content.jsonl": jsonl([]),
     "coa_client_archive_plan.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-archive-plan-v1" })),
     "coa_client_advancement.jsonl": jsonl([]),

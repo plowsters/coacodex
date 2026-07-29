@@ -58,7 +58,7 @@ test("the producer rows satisfy the same shapes as the corpus", () => {
   const { full, projection, icon } = producerSpellRows();
   SHAPES.full_spell_row_v4(full);
   SHAPES.projection_row_v3(projection);
-  SHAPES.icon_row_v1(icon);
+  SHAPES.icon_association_row_v2(icon);
 });
 
 // --- the `{}` hole ---

@@ -19,7 +19,8 @@ const SCHEMA_FOR = {
   "coa_client_spell.jsonl": "coa-client-spell-v4",
   "coa_client_spell_coa.jsonl": "coa-client-spell-projection-v3",
   "coa_client_spell_projection.manifest.json": "coa-client-spell-projection-manifest-v3",
-  "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v1",
+  "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v2",
+  "coa_client_icon_assets.jsonl": "coa-client-icon-assets-v1",
   "coa_client_content.jsonl": "coa-client-content-v1",
   "coa_client_archive_plan.json": "coa-client-archive-plan-v1",
   "coa_client_advancement.jsonl": "coa-client-advancement-v1",
@@ -57,7 +58,7 @@ function writeDoc(genDir, name, doc) {
 function build(n, root) {
   const corpus = loadCorpus();
   const fullT = corpus.validFull()[0];               // spell-1 template (is_coa), v4-encoded
-  const iconT = corpus.validIcons()[0];
+  const iconT = corpus.validIconsV2()[0];      // E0R.2 T6.3: the association dialect
   const genDir = path.join(root, "gen-c1");
   fs.mkdirSync(genDir, { recursive: true });
 
@@ -96,6 +97,10 @@ function build(n, root) {
   children["coa_client_spell.jsonl"] = writeChild(genDir, "coa_client_spell.jsonl", fullLines());
   children["coa_client_spell_coa.jsonl"] = writeChild(genDir, "coa_client_spell_coa.jsonl", projLines());
   children["coa_client_spell_icons.jsonl"] = writeChild(genDir, "coa_client_spell_icons.jsonl", iconLines());
+  // E0R.2 T6.3: every probe association references the SAME asset, so the asset child stays one row
+  // while the association child scales — which is the normalization the probe should be measuring.
+  children["coa_client_icon_assets.jsonl"] = writeChild(
+    genDir, "coa_client_icon_assets.jsonl", [JSON.stringify(corpus.validIconAssets()[0]) + "\n"]);
   children["coa_client_spell_projection.manifest.json"] =
     writeDoc(genDir, "coa_client_spell_projection.manifest.json", goldenRows("projection_manifest_v3"));
   for (const name of ["coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",

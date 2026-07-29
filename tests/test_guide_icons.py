@@ -14,22 +14,22 @@ def test_absent_client_icon_is_placeholder_not_remote():
     assert asset.href is None or not str(asset.href).startswith("http")
 
 
-def test_source_only_renders_placeholder_and_converted_renders_asset():
-    # source_only (BLP verified but not browser-renderable) -> placeholder, NOT an asset_root fallthrough
-    src = GuideAssetCatalog(icon_catalog={133: {"client_path": "Interface/Icons/Spell_Fire_Fireball.blp",
-                                                "asset_status": "source_only"}})
-    a1 = src.icon_for(icon=None, label="Fireball", spell_id=133)
-    assert a1.source == "placeholder" and "db.ascension.gg" not in str(a1.href or "")
-    # converted -> the bundle asset is rendered from the client catalog
-    conv = GuideAssetCatalog(icon_catalog={133: {"client_path": "Interface/Icons/Spell_Fire_Fireball.blp",
-                                                 "asset_status": "converted", "converted_ref": "icons.tar#fireball.png"}})
-    a2 = conv.icon_for(icon=None, label="Fireball", spell_id=133)
-    assert a2.source == "client_icon" and a2.href == "icons.tar#fireball.png"
-    assert "db.ascension.gg" not in str(a2.href or "")
+def test_a_referenced_client_asset_still_renders_a_placeholder():
+    """E0R.2 T2.5 prohibited `converted`, and T6.3 normalized the catalog so an association carries no
+    status at all. A verified client BLP is not browser-renderable, so every row is a placeholder —
+    what must never happen is a fallthrough to a remote or cached-DB image."""
+    cat = GuideAssetCatalog(
+        icon_catalog={133: {"spell_id": 133, "asset_ref": "a" * 32, "readiness": "available"}},
+        icon_assets={"a" * 32: {"asset_id": "a" * 32, "availability": "source_only",
+                                "client_path": "interface/icons/spell_fire_fireball.blp"}})
+    asset = cat.icon_for(icon=None, label="Fireball", spell_id=133)
+    assert asset.source == "placeholder" and asset.href is None
+    assert "db.ascension.gg" not in str(asset.href or "")
 
 
 def test_missing_client_row_never_constructs_a_remote_url():
-    cat = GuideAssetCatalog(icon_catalog={999: {"client_path": None, "asset_status": "missing"}})
+    cat = GuideAssetCatalog(icon_catalog={999: {"spell_id": 999, "asset_ref": None,
+                                                "readiness": "unavailable"}})
     asset = cat.icon_for(icon="Interface\\Icons\\Whatever", label="Whatever", spell_id=999)
     assert asset.source == "placeholder" and asset.href is None
 

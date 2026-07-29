@@ -212,10 +212,12 @@ def test_the_new_document_shapes_accept_what_the_producer_stages():
 
 # --- the contract revision is NEW, and the old one is untouched ---
 
-def test_the_registry_moved_current_to_e0r_v2_and_kept_e0r_v1():
+def test_the_registry_keeps_every_revision_that_ever_shipped():
+    """T6.3 moved `current` again. What must hold is MEMBERSHIP: an older generation stays resolvable
+    only while its revision is still supported."""
     registry = load_contract_registry()
-    assert registry["current"] == "e0r-v2"
     assert {"e0r-v1", "e0r-v2"} <= set(registry["supported"]), "an older generation must stay resolvable"
+    assert registry["current"] in registry["supported"]
 
 
 def test_e0r_v1_was_not_edited():
@@ -228,11 +230,11 @@ def test_e0r_v1_was_not_edited():
     assert doc["children"]["coa_client_spell.jsonl"]["child_schema_version"] == SPELL_SCHEMA_V3
 
 
-def test_e0r_v2_declares_the_v4_child_and_the_two_new_documents():
-    from coa_client_extract.contracts import load_current_contract
+def test_the_current_contract_declares_the_v4_child_and_the_two_new_documents():
+    from coa_client_extract.contracts import load_contract_registry, load_supported_contract
 
-    revision, contract = load_current_contract()
-    assert revision == "e0r-v2"
+    registry = load_contract_registry()
+    contract = load_supported_contract("e0r-v2", registry["supported"]["e0r-v2"]["sha256"])
     children = contract["children"]
     assert children["coa_client_spell.jsonl"]["child_schema_version"] == SPELL_SCHEMA_V4
     assert children["coa_client_spell.jsonl"]["shape"] == "full_spell_row_v4"

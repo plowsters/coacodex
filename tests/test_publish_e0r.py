@@ -66,13 +66,28 @@ def _proj(sid, **extra):
                                    for f, cell in _domain_raw(sid).items()}, **extra}
 
 
+def _icon_path(sid):
+    return f"Interface/Icons/S{sid}.blp"
+
+
 def _icon(sid, **extra):
-    return {"schema_version": "coa-client-spell-icons-v1", "spell_id": sid, "spell_icon_id": sid,
-            "asset_status": "source_only", "readiness": "available",
-            "client_path": f"Interface/Icons/S{sid}.blp", **extra}
+    """A v2 ASSOCIATION row (E0R.2 T6.3): a reference plus the codes that explain a null one."""
+    from coa_client_extract.spell_icons import icon_asset_id
+
+    return {"schema_version": "coa-client-spell-icons-v2", "spell_id": sid, "spell_icon_id": sid,
+            "asset_ref": icon_asset_id(_icon_path(sid)), "s": observation_state_code("resolved"),
+            "d": decoded_reason_code("decoded"), "readiness": "available", **extra}
 
 
-def _stage(root: Path, *, full=None, proj=None, icons=None):
+def _icon_asset(sid, **extra):
+    from coa_client_extract.spell_icons import canonical_icon_path, icon_asset_id
+
+    return {"schema_version": "coa-client-icon-assets-v1", "asset_id": icon_asset_id(_icon_path(sid)),
+            "client_path": canonical_icon_path(_icon_path(sid)), "availability": "source_only",
+            "source_asset_sha256": "a" * 64, "source_archive": "patch-T.MPQ", **extra}
+
+
+def _stage(root: Path, *, full=None, proj=None, icons=None, icon_assets=None):
     """Stage ALL required children so per-child hashes match; inconsistencies are injected at stage-time
     via full/proj/icons (NEVER by mutating a file after its hash is registered). Icons default to one row
     per full spell so a projection-gap test is not masked by the icon-coverage check.
@@ -83,7 +98,12 @@ def _stage(root: Path, *, full=None, proj=None, icons=None):
     proj = proj if proj is not None else [_proj(1)]
     if icons is None:
         icons = [_icon(r["spell_id"]) for r in full]
-    return stage_candidate(root, full=full, proj=proj, icons=icons, policy_doc=v2_policy().doc)
+    # The asset child is derived from the associations staged here, so the honest case is mutually
+    # determined and a knob breaks exactly one relation (E0R.2 T6.3).
+    if icon_assets is None:
+        icon_assets = [_icon_asset(r["spell_id"]) for r in full]
+    return stage_candidate(root, full=full, proj=proj, icons=icons, icon_assets=icon_assets,
+                           policy_doc=v2_policy().doc)
 
 
 def test_trust_digest_ignores_only_validation_and_budget():
@@ -149,13 +169,40 @@ def test_valid_candidate_passes_cross_child(tmp_path):
     assert "coa_client_spell.jsonl" in active["children"]
 
 
-def test_a_converted_icon_row_is_rejected_outright(tmp_path):
-    # E0R.2 T2.5: this used to assert that a converted row REQUIRED a bundle child — an existence test
-    # that verified nothing about the bundle. The status is prohibited now, so the generation is refused
-    # whether or not a bundle is registered.
-    gen = _stage(tmp_path, icons=[_icon(1, asset_status="converted",
-                                        converted_ref="icons.tar#a.png")])
-    with pytest.raises(ResolveError, match="converted"):
+def test_a_dangling_asset_ref_is_rejected(tmp_path):
+    """E0R.2 T6.3. This test used to be about `converted`, which T2.5 prohibited outright and T6.3's
+    dialect no longer has a key for. The relational failure it is replaced by is the one normalizing
+    actually introduces: a reference to an asset row that is not there."""
+    gen = _stage(tmp_path, icons=[_icon(1, asset_ref="0" * 32)])
+    with pytest.raises(ResolveError, match="dangling asset_ref"):
+        validate_staged(gen)
+
+
+def test_an_orphan_asset_row_is_rejected(tmp_path):
+    """The other direction. Without it the two children are consistent one way only, and an asset table
+    could accumulate rows nothing will ever reference."""
+    gen = _stage(tmp_path, icon_assets=[_icon_asset(1), _icon_asset(2)])
+    with pytest.raises(ResolveError, match="referenced by no spell"):
+        validate_staged(gen)
+
+
+def test_a_readiness_that_disagrees_with_its_asset_is_rejected(tmp_path):
+    gen = _stage(tmp_path, icons=[_icon(1, readiness="unavailable")])
+    with pytest.raises(ResolveError, match="readiness"):
+        validate_staged(gen)
+
+
+def test_a_reference_whose_reason_is_not_decoded_is_rejected(tmp_path):
+    gen = _stage(tmp_path, icons=[_icon(1, d=decoded_reason_code("side_row_missing"))])
+    with pytest.raises(ResolveError, match="only a decoded join yields a path"):
+        validate_staged(gen)
+
+
+def test_an_unsorted_asset_child_is_rejected(tmp_path):
+    """Sorted-unique by asset_id is what makes identical inputs produce identical bytes."""
+    gen = _stage(tmp_path, full=[_full(1), _full(2)], proj=[_proj(1), _proj(2)],
+                 icon_assets=[_icon_asset(2), _icon_asset(1)])
+    with pytest.raises(ResolveError, match="out of order"):
         validate_staged(gen)
 
 

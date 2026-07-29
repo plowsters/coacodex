@@ -317,6 +317,47 @@ export const SHAPES = {
     return row;
   },
 
+  // --- E0R.2 T6.3: the normalized icon dialect ----------------------------------------------------
+  // `icon_row_v1` above is RETAINED: e0r-v1/e0r-v2 still name it.
+  icon_association_row_v2(row) {
+    const where = "icon_association_row_v2";
+    obj(row, where);
+    keys(row, { required: ["schema_version", "spell_id", "spell_icon_id", "asset_ref", "s", "d",
+                           "readiness"], where });
+    if (row.schema_version !== "coa-client-spell-icons-v2") fail(`${where}.schema_version`, row.schema_version);
+    int(row.spell_id, `${where}.spell_id`);
+    int(row.spell_icon_id, `${where}.spell_icon_id`, { nullable: true });
+    str(row.asset_ref, `${where}.asset_ref`, { nullable: true });
+    codedVocabulary(row, where);
+    if (row.readiness !== "available" && row.readiness !== "unavailable") {
+      fail(`${where}.readiness`, `${row.readiness} not in ("available", "unavailable")`);
+    }
+    return row;
+  },
+
+  icon_asset_row_v1(row) {
+    // Hash and archive are non-null IFF `source_only`: a `missing` asset is a PROVEN path whose member
+    // is absent from the chain, so it has neither.
+    const where = "icon_asset_row_v1";
+    obj(row, where);
+    keys(row, { required: ["schema_version", "asset_id", "client_path", "availability",
+                           "source_asset_sha256", "source_archive"], where });
+    if (row.schema_version !== "coa-client-icon-assets-v1") fail(`${where}.schema_version`, row.schema_version);
+    str(row.asset_id, `${where}.asset_id`);
+    str(row.client_path, `${where}.client_path`);
+    if (row.availability !== "source_only" && row.availability !== "missing") {
+      fail(`${where}.availability`, `${row.availability} not in ("source_only", "missing")`);
+    }
+    str(row.source_asset_sha256, `${where}.source_asset_sha256`, { nullable: true });
+    str(row.source_archive, `${where}.source_archive`, { nullable: true });
+    const present = row.availability === "source_only";
+    for (const key of ["source_asset_sha256", "source_archive"]) {
+      if (present && row[key] === null) fail(`${where}.${key}`, "a source_only asset must carry it");
+      if (!present && row[key] !== null) fail(`${where}.${key}`, "a missing asset has no member to describe");
+    }
+    return row;
+  },
+
   content_row_v1(row) {
     const where = "content_row_v1";
     obj(row, where);
