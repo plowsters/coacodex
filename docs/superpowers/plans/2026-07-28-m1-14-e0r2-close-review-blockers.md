@@ -74,8 +74,8 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | — Mechanical re-bind (unplanned, user-approved) | **done** | `d935845` — Spell `c8cd440d`→`fc9d91ca` (+329 rows), SpellIcon string block −5 B; layout identical, semantic view byte-identical, 0 blocking |
 | T0.2 Bind every source domain the contract cites (DBC + Content JSON) | **done** | `a7f7653` — 10 tables bound, `topology_matches_bound` EMPTY; content 52,744 = child exactly; policy `5fbd5b5d`→`056166c2` |
 | T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | **done** | `14632f0` — `e0r-v1` (12 children, no placeholders, wire schema pinned `5d9b743d`) digest `708a00e2`; validators derive from the generation's OWN staged contract via registry dispatch; 58 probes; 726 Py + 121 Node |
-| T1.2 Reject a tampered, mismatched, or unsupported contract | pending | |
-| T1.3 Node dispatches on the supported-contract hash set | pending | |
+| T1.2 Reject a tampered, mismatched, or unsupported contract | **done** | `8107920` — binding leg (digest **and** revision) + registry membership proven behaviourally with a real two-revision registry; 745 Py + 121 Node |
+| T1.3 Node dispatches on the supported-contract hash set | **done** | `78dbbae` — mirrored array deleted; independent Node validator (28-case matrix); hash, revision set and child list asserted against Python by subprocess; 745 Py + 168 Node |
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | pending | |
 | T2.2 Per-child shape validation (both languages) | pending | |
 | T2.3 Full observation domain in the policy, validated at load | pending | |
@@ -120,6 +120,14 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   (indented, key-sorted), so a byte digest of the registry file would never match the staged copy.
   `generation_contract_sha256` canonicalizes (`sort_keys`, `separators=(",", ":")`), which is also what
   lets Node re-derive it independently in T1.3.
+- **T1.3 extended `tests/helpers/candidate.mjs` instead of adding `_e0r2-fixtures.mjs`.** Every Node test
+  builds candidates through that helper; a parallel fixture would be a second thing to keep in step —
+  exactly the drift this workstream removes. Two more Node fixtures also needed the twelfth child:
+  `tests/helpers/streaming-probe.mjs` (the RSS probe) and `writeGenerationFixture` in
+  `pipeline-scripts.test.mjs`.
+- **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
+  Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
+  test membership-vs-current before WS6 actually ships `e0r-v2`.
 
 ---
 
