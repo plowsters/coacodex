@@ -81,7 +81,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T2.3 Full observation domain in the policy, validated at load | **done** | `a675153` — mandatory `artifact_contract`, re-derived from the layout at load; enforced at BOTH boundaries (Node `verifyFullRowAgainstPolicy` + new Python `publish._observation_domain`) and structural in both shapes; 840 Py + 247 Node |
 | T2.4 Publication requires both validations and a clean budget | **done** | `f874c5a` — identity checks on both boundaries, byte ceilings recomputed from the staged children, `three_part_budget` escape hatch deleted from the publish path; 855 Py + 247 Node |
 | T2.5 `converted` prohibited until a bundle validator exists | **done** | `204a26f` — status + `converted_ref` removed from both vocabularies, both shapes and both cross-child passes; behavioural producer test over resolve/missing/unjoined; 862 Py + 247 Node |
-| T3.1 Live FK candidate scan on every recon | pending | |
+| T3.1 Live FK candidate scan on every recon | **done** | `3b23849` — `scan_index_candidates` (integer metrics, 2 passes not 234), `side_table_missing` distinguished from ambiguous, the "must not read its side table" test inverted; 870 Py + 247 Node |
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | pending | |
 | T3.3 Recon stops claiming artifact size; policy-bound rss/elapsed | pending | |
 | T4.1 `observation_coverage` + `field_readiness_coverage` producers | pending | |
@@ -192,6 +192,15 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   icon catalog. That catalog is a downstream consumer format, not a validated generation child; folding
   it in would have widened T2.5 past the trust boundary it is about. Worth revisiting when the guide's
   icon source is next touched.
+- **T3.1's scan had to be cheaper than the code it sits beside.** `discover_join_pair` re-reads the
+  whole table once per candidate cell — 234 passes over 208k records on the real client. Adding a
+  same-shaped scan to three ambiguous joins would have tripled that. `scan_index_candidates` tallies
+  every cell in ONE pass and only counts distinct ids for survivors, which also avoids holding 234
+  distinct-id sets at once. Watch this in T3.3's real-client budget.
+- **A test that asserted the bug had to be inverted, not deleted.**
+  `test_reviewed_ambiguous_join_is_probed_without_reading_side_table` passed an `_ExplodingBackend`
+  precisely to prove the side table was never read. It was a faithful test of a wrong design; the
+  replacement asserts the scan happens and that the recorded verdict + evidence survive beside it.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
