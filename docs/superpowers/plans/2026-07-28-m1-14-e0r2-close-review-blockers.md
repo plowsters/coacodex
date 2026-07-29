@@ -79,7 +79,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | **done** | `a9e244b` groundwork (bound content read, closing derivations, 10-table synthetic policy) → `f478b6d` Python enforcement (3-step trust chain, 7 rules, whitelist) → `242ff7e` Node mirror; 765 Py + 180 Node |
 | T2.2 Per-child shape validation (both languages) | **done** | `cf19ad6` Python + `2e280c6` Node; 12 shapes each, golden documents from the real producer; 825 Py + 240 Node |
 | T2.3 Full observation domain in the policy, validated at load | **done** | `a675153` — mandatory `artifact_contract`, re-derived from the layout at load; enforced at BOTH boundaries (Node `verifyFullRowAgainstPolicy` + new Python `publish._observation_domain`) and structural in both shapes; 840 Py + 247 Node |
-| T2.4 Publication requires both validations and a clean budget | pending | |
+| T2.4 Publication requires both validations and a clean budget | **done** | `f874c5a` — identity checks on both boundaries, byte ceilings recomputed from the staged children, `three_part_budget` escape hatch deleted from the publish path; 855 Py + 247 Node |
 | T2.5 `converted` prohibited until a bundle validator exists | pending | |
 | T3.1 Live FK candidate scan on every recon | pending | |
 | T3.2 Hash-bound ambiguity baseline; exact agreement required | pending | |
@@ -171,6 +171,19 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   now caught one gate earlier as loss (the Node tamper became additive: same cells, different substrate),
   and the corpus's `required_field_omitted_from_both` case is rejected on the raw domain rather than the
   old mechanics∪raw union. A test that keeps passing for a new reason is worth re-reading.
+- **T2.4's budget check needs ceilings, so the plan's sketch could not work as written.** "Recompute the
+  byte ceilings from `self._children`" requires ceilings to recompute AGAINST, and the plan's passing
+  case supplied `{"within_budget": True, "breach": []}` with none. The report must carry its `ceilings`
+  block — which `policy_budget_report` already emits — and a report without one is refused for being
+  uncheckable rather than waved through.
+- **The three-part fallback was a second, quieter escape hatch.** `three_part_budget` applied whenever a
+  policy declared no budget block — that is, it substituted hard-coded DEFAULT_BUDGET ceilings for
+  reviewed ones exactly when review was missing. Deleting it forced every synthetic policy to declare
+  its own ceilings, which is the honest state.
+- **Publisher-side gates make some consumer-side tests unbuildable, and that is the point.** Two
+  resolver-strict tests published deliberately-bad manifests; the publisher now refuses to produce them,
+  so they write the manifest after publication. The consumer boundary still needs covering — a manifest
+  edited post-publication, or written by a publisher without the gate, is the real threat it answers.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
