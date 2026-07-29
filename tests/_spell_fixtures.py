@@ -3,7 +3,7 @@
 import struct
 
 from coa_client_extract.recordview import open_view
-from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
+from coa_client_extract.spell_layout import compute_policy_sha256, derive_artifact_contract, load_spell_policy
 
 # Spell layout used by the fixtures: id@0, power_type@1, school_mask@2, name@3, casting_time_index@4,
 # spell_icon_id@5 (six 4-byte cells).
@@ -90,6 +90,9 @@ def _base(tables, joins):
          "required_tables": list(tables), "expected_absent": [], "enum_policy": enum,
          "anchor_set": anchor, "tables": tables, "joins": joins,
          "content_sources": SYNTHETIC_CONTENT_SOURCES}
+    # E0R.2 T2.3: the observation domain is a REVIEWED block the loader checks against the layout, so a
+    # fixture derives it from the tables/joins it just declared rather than restating it by hand.
+    p["artifact_contract"] = derive_artifact_contract(p)
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

@@ -115,6 +115,8 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
          "required_tables": sorted(tables),
          "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables,
          "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES}
+    from coa_client_extract.spell_layout import derive_artifact_contract
+    p["artifact_contract"] = derive_artifact_contract(p)
     p["sha256"] = compute_policy_sha256(p)
     return p, client_build
 

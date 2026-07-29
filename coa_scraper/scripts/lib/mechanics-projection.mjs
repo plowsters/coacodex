@@ -323,11 +323,25 @@ export function verifyFullRowAgainstPolicy(row, policyDoc) {
     throw new MechanicsBuildError(`full ${row.spell_id}: missing compact raw`);
   }
   const mech = row.mechanics || {};
-  const required = policyDoc.required_scalar_fields || [];
-  const domain = new Set([...required, ...Object.keys(mech), ...Object.keys(raw)]);
-  for (const field of domain) {
-    if (required.includes(field) && !(field in raw) && !(field in mech)) {
-      throw new MechanicsBuildError(`full ${row.spell_id}: required field ${field} omitted from both mechanics and raw`);
+  // E0R.2 T2.3: the observation domain comes from the policy's REVIEWED artifact_contract and this
+  // fails CLOSED when it is absent. It used to read `policyDoc.required_scalar_fields || []` — and the
+  // PRODUCTION policy never carried that key, so this check asked nothing of any real row.
+  const contract = policyDoc.artifact_contract;
+  if (!contract || !Array.isArray(contract.required_raw_observations)) {
+    throw new MechanicsBuildError(
+      `full ${row.spell_id}: staged policy declares no artifact_contract.required_raw_observations; ` +
+      "the observation domain is unknown, so losslessness cannot be checked");
+  }
+  for (const field of contract.required_raw_observations) {
+    // REQUIRED means the OBSERVATION exists, not that a normalized value does: a join in `unresolved`
+    // state is still a required cell, and omitting it is the silent loss E0R exists to prevent.
+    if (!(field in raw)) {
+      throw new MechanicsBuildError(`full ${row.spell_id}: required field ${field} omitted from raw`);
+    }
+  }
+  for (const key of contract.required_mechanics_keys) {
+    if (!(key in mech)) {
+      throw new MechanicsBuildError(`full ${row.spell_id}: required mechanics key ${key} absent (a null is a recorded observation; an absent key is loss)`);
     }
   }
 }

@@ -321,11 +321,23 @@ export const SHAPES = {
     const where = "spell_policy_v2";
     obj(doc, where);
     keys(doc, { required: ["schema_version", "reviewed", "required_tables", "tables", "joins", "sha256",
-                           "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set"],
-                optional: ["budget", "provenance_note", "required_scalar_fields", "artifact_contract"], where });
+                           "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set",
+                           "artifact_contract"],
+                optional: ["budget", "provenance_note"], where });
     if (doc.schema_version !== "coa-spell-layout-v2") fail(`${where}.schema_version`, doc.schema_version);
     if (doc.reviewed !== true) fail(`${where}.reviewed`, "an unreviewed policy may not be staged");
     obj(doc.tables, `${where}.tables`);
+    // E0R.2 T2.3: the observation domain is structural. verifyFullRowAgainstPolicy reads it to decide
+    // what a lossless row must carry, and this side has no load_spell_policy behind it — an absent or
+    // malformed contract has to be a shape failure or the domain check silently degrades to nothing.
+    const contract = obj(doc.artifact_contract, `${where}.artifact_contract`);
+    keys(contract, { required: ["required_raw_observations", "required_mechanics_keys",
+                                "nullable_mechanics_keys", "icon_observation_domain"],
+                     where: `${where}.artifact_contract` });
+    for (const [key, names] of Object.entries(contract)) {
+      if (!Array.isArray(names)) fail(`${where}.artifact_contract.${key}`, "must be a list of field names");
+      for (const name of names) str(name, `${where}.artifact_contract.${key}[]`);
+    }
     return doc;
   },
 

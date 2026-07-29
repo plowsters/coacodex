@@ -13,7 +13,13 @@ Reviewed `coa-spell-layout-v2` doc. Fields exercise every proof/promotion combin
 `power_type` (verified/normalized numeric), `school_mask` (verified-layout / **reference** / **raw_only**),
 `name` (string, normalized), `cast_time_ms` (**resolved** numeric join), `duration_ms` (**absent** null-cell
 raw_only join — the reviewed_ambiguous state), `spell_icon_id` (string join, normalized).
-`required_scalar_fields` names the normalized Spell scalars a full row must carry (`id`, `name`, `power_type`).
+`artifact_contract` (E0R.2 T2.3) names the FULL observation domain — `required_raw_observations` (every
+scalar and non-icon join a full row's `raw` must carry, regardless of promotion), `required_mechanics_keys`
+and `nullable_mechanics_keys` (the keys that must be PRESENT, with `null` a recorded observation), and
+`icon_observation_domain` (the joins the icon child owns instead). It is derived from the tables/joins and
+re-derived at load, so it cannot drift from the layout it describes. It replaced an optional
+`required_scalar_fields` list that named only the normalized scalars — and that the real policy never
+carried, so the consumer's domain check asked nothing of any real row.
 
 ## `projection_rows.jsonl` — rich `field_observations` dialect (row semantics: Node T3.1, Python T3.3, golden)
 | case | accept | violates |

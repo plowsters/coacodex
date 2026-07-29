@@ -1,6 +1,8 @@
 # tests/test_spell_layout_v2.py
 import pytest
-from coa_client_extract.spell_layout import load_spell_policy, SpellPolicyError, compute_policy_sha256
+from coa_client_extract.spell_layout import (
+    load_spell_policy, SpellPolicyError, compute_policy_sha256, derive_artifact_contract,
+)
 from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 
@@ -37,6 +39,7 @@ def _v2():
          "required_tables": ["Spell", "SpellCastTimes"], "expected_absent": ["SpellEffect"],
          "enum_policy": enum, "anchor_set": anchor, "tables": tables, "joins": joins,
          "content_sources": SYNTHETIC_CONTENT_SOURCES}
+    p["artifact_contract"] = derive_artifact_contract(p)     # E0R.2 T2.3: reviewed observation domain
     p["sha256"] = compute_policy_sha256(p)
     return p
 

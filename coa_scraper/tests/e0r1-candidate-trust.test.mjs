@@ -46,9 +46,12 @@ test("a policy child not matching the lock FAILS", () => {
 });
 
 test("a required field omitted from BOTH mechanics and raw FAILS (full-domain iteration)", () => {
+  // E0R.2 T2.3 tightened the rule this corpus case was written against: the domain now comes from the
+  // policy's artifact_contract, and an observation must be in `raw` whether or not mechanics carries a
+  // value — so this row is rejected on the raw domain rather than on the mechanics∪raw union.
   const full = [...corpus.validFull(), ...corpus.pick(corpus.full, "required_field_omitted_from_both")];
   const { genDir, lockPath } = buildCandidate({ full });
-  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /required field power_type omitted from both/);
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /required field power_type omitted from raw/);
 });
 
 test("a full row carrying field_observations (wrong dialect) FAILS", () => {

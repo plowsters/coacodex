@@ -3,7 +3,8 @@ import copy
 import pytest
 
 from coa_client_extract.spell_layout import (
-    SCHEMA, SpellPolicyError, compute_policy_sha256, load_spell_policy, load_default_policy,
+    SCHEMA, SpellPolicyError, compute_policy_sha256, derive_artifact_contract, load_spell_policy,
+    load_default_policy,
 )
 from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
@@ -64,6 +65,10 @@ def _valid_payload() -> dict:
                              "side_value_field": "base_ms", "promotion": "raw_only"},
         },
     }
+    # E0R.2 T2.3: the observation domain is reviewed alongside the layout, so a fixture derives it from
+    # the tables/joins it just declared. No test below adds or removes a field, so the derivation stays
+    # valid across the mutations _rehash() re-signs.
+    p["artifact_contract"] = derive_artifact_contract(p)
     p["sha256"] = compute_policy_sha256(p)
     return p
 

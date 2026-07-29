@@ -10,7 +10,9 @@ import pytest
 from coa_client_extract.archive_backend import FakeArchiveBackend
 from coa_client_extract.cli import main, mechanics_recon_command, _RECON_EXIT
 from coa_client_extract.publish import GenerationWriter, resolve_active_generation
-from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
+from coa_client_extract.spell_layout import (
+    compute_policy_sha256, derive_artifact_contract, load_spell_policy,
+)
 from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 REPO = Path(__file__).resolve().parents[1]
@@ -58,6 +60,7 @@ def _recon_policy(*, reviewed):
                  "id": f(0, "uint32"), "base_ms": f(1, "int32")}}},
          "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
                                     "side_value_field": "base_ms", "promotion": "raw_only"}}}
+    p["artifact_contract"] = derive_artifact_contract(p)     # E0R.2 T2.3: reviewed observation domain
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

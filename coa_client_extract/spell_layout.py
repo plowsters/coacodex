@@ -61,6 +61,7 @@ class SpellPolicy:
     required_tables: tuple[str, ...]
     expected_absent: tuple[str, ...]
     content_sources: dict          # the Content JSON binding (E0R.2 T0.2 — no WDBC source exists)
+    artifact_contract: dict        # the FULL observation domain a row must carry (E0R.2 T2.3)
     anchor_set: dict
     _enum: dict
     doc: dict         # the exact source payload, staged verbatim as the reviewed-policy generation child
@@ -156,6 +157,70 @@ def _validate_bound(bound: dict) -> dict:
 
 _BUDGET_CEILINGS = ("max_serialized_bytes_per_child", "max_whole_generation_bytes",
                     "python_peak_rss_mb", "python_elapsed_s", "node_peak_rss_mb", "node_elapsed_s")
+
+
+def derive_artifact_contract(payload: dict) -> dict:
+    """The observation domain a v3 row must carry, DERIVED from the layout (E0R.2 T2.3).
+
+    Lossless extraction means every field has an OBSERVATION, even when it has no normalized value. A
+    join in `unresolved` state is still a required cell; omitting it is silent loss, which is exactly
+    what E0R exists to prevent. So the domain is:
+
+      * every Spell scalar that is EMITTED — i.e. not one of the index columns a join consumes (those
+        appear as join components, never as top-level cells); plus
+      * every join name except the icon join, which lands in the icon child rather than the spell row.
+
+    The policy AUTHORS this block and the loader checks it against this derivation, so a reviewed claim
+    that has drifted from the layout it describes fails at load instead of silently under-checking.
+    """
+    joins = payload.get("joins") or {}
+    icon_joins = {name for name, spec in joins.items() if spec.get("side_table") == "SpellIcon"}
+    index_fields = {spec["index_field"] for spec in joins.values()}
+    scalars = set(payload.get("tables", {}).get("Spell", {}).get("fields", {})) - index_fields
+    mechanics = sorted((scalars - {"id", "name", "description"}) | (set(joins) - icon_joins))
+    return {
+        "required_raw_observations": sorted(scalars | (set(joins) - icon_joins)),
+        "required_mechanics_keys": mechanics,
+        # ALL mechanics keys are structurally nullable, school_mask included: a proven policy still
+        # yields a null normalized value when an unseen school bit trips the per-value domain gate
+        # (`value_out_of_domain`). Nullability is structural; whether a null is LEGITIMATE is a semantic
+        # question the per-row verifier answers, not something a static list can express.
+        "nullable_mechanics_keys": mechanics,
+        "icon_observation_domain": sorted(icon_joins),
+    }
+
+
+_ARTIFACT_CONTRACT_KEYS = ("required_raw_observations", "required_mechanics_keys",
+                           "nullable_mechanics_keys", "icon_observation_domain")
+
+
+def _validate_artifact_contract(payload: dict) -> dict:
+    """A reviewed observation domain, checked against the layout it claims to describe.
+
+    Before this, the domain lived in an optional `required_scalar_fields` list that the PRODUCTION
+    policy did not carry at all — so Node's full-domain check read `policyDoc.required_scalar_fields ||
+    []` and asked nothing of any real row. An unchecked JSON property that only one consumer reads is
+    not a contract."""
+    contract = payload.get("artifact_contract")
+    if not isinstance(contract, dict):
+        raise SpellPolicyError("policy must declare an artifact_contract (the observation domain)")
+    if set(contract) != set(_ARTIFACT_CONTRACT_KEYS):
+        raise SpellPolicyError(
+            f"artifact_contract must have exactly {sorted(_ARTIFACT_CONTRACT_KEYS)}, "
+            f"got {sorted(contract)}")
+    for key in _ARTIFACT_CONTRACT_KEYS:
+        value = contract[key]
+        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+            raise SpellPolicyError(f"artifact_contract.{key} must be a list of field names")
+        if sorted(value) != value or len(set(value)) != len(value):
+            raise SpellPolicyError(f"artifact_contract.{key} must be sorted and unique")
+    derived = derive_artifact_contract(payload)
+    if contract != derived:
+        diff = {k: {"declared": contract[k], "derived": derived[k]}
+                for k in _ARTIFACT_CONTRACT_KEYS if contract[k] != derived[k]}
+        raise SpellPolicyError(
+            f"artifact_contract has drifted from the layout it describes: {diff}")
+    return contract
 
 
 def _validate_budget(budget: dict) -> None:
@@ -263,6 +328,8 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     content_sources = payload.get("content_sources")
     _validate_content_sources(content_sources)
 
+    artifact_contract = _validate_artifact_contract(payload)
+
     budget = payload.get("budget")
     if budget is not None:
         _validate_budget(budget)
@@ -277,7 +344,7 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         tables=tables, joins=joins,
         required_tables=required_tables,
         expected_absent=expected_absent,
-        content_sources=content_sources,
+        content_sources=content_sources, artifact_contract=artifact_contract,
         anchor_set=anchor_set, _enum={"power_types": power_types, "school_bits": school_bits},
         doc=payload,
     )

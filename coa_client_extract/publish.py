@@ -268,6 +268,34 @@ def _expand_full_raw(sid, raw, policy):
         raise ResolveError(f"compact_raw_expands_to_envelope: {sid} unresolvable compact cell ({exc})")
 
 
+def _observation_domain(sid, row, policy) -> None:
+    """E0R.2 T2.3: the row must carry an OBSERVATION for every field the REVIEWED policy declares.
+
+    Lossless means the envelope exists, not that a normalized value exists — a join in `unresolved`
+    state is still a required cell, and a null mechanics value is a recorded observation while an absent
+    key is loss. The domain comes from `policy.artifact_contract`, which the loader re-derives from the
+    tables/joins, so this cannot be satisfied by a policy that quietly narrowed what it asks for."""
+    contract = policy.artifact_contract
+    raw = row.get("raw", {})
+    for field in contract["required_raw_observations"]:
+        if field not in raw:
+            raise ResolveError(f"observation_domain: spell {sid} omits required observation {field!r}")
+    for field in contract["icon_observation_domain"]:
+        if field in raw:
+            raise ResolveError(
+                f"observation_domain: spell {sid} carries {field!r}, which the icon child owns")
+    mech = row.get("mechanics", {})
+    for key in contract["required_mechanics_keys"]:
+        if key not in mech:
+            raise ResolveError(
+                f"observation_domain: spell {sid} absent mechanics key {key!r} "
+                "(a null is a recorded observation; an absent key is loss)")
+    for key in mech:
+        if key not in contract["required_mechanics_keys"]:
+            raise ResolveError(
+                f"observation_domain: spell {sid} mechanics key {key!r} is outside the policy domain")
+
+
 def _identity_agrees(frow, prow) -> None:
     """identity_agrees: the full-table row and its projection must agree on identity + normalized
     mechanics + attribution (the projection is a re-view of the same spell, never a divergent one)."""
@@ -341,6 +369,7 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
             raise ResolveError(f"full_is_compact: spell {sid} full row missing compact raw")
         if "field_observations" in full.row:
             raise ResolveError(f"full_is_compact: spell {sid} full row carries field_observations (rich dialect)")
+        _observation_domain(sid, full.row, policy)
         expanded = _expand_full_raw(sid, full.row["raw"], policy)
         is_coa = full.row.get("coa_attribution", {}).get("is_coa") is True
         is_coa_count += 1 if is_coa else 0

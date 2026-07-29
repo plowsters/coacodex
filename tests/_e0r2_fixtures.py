@@ -20,7 +20,7 @@ from pathlib import Path
 from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
                                           generation_contract_sha256, load_current_contract)
 from coa_client_extract.publish import GenerationWriter
-from coa_client_extract.spell_layout import compute_policy_sha256
+from coa_client_extract.spell_layout import compute_policy_sha256, derive_artifact_contract
 
 CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
 
@@ -79,6 +79,7 @@ def bind_policy_doc(doc: dict, *, spell_records: int, ancillary_records: dict | 
         "required_files": {"SpellRankData.json": {
             "kind": "spell_rank", "sha256": "0" * 64, "source_entries": content_entries}},
     }
+    doc["artifact_contract"] = derive_artifact_contract(doc)
     doc.pop("sha256", None)
     doc["sha256"] = compute_policy_sha256(doc)
     return doc

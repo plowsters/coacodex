@@ -65,7 +65,9 @@ test("a full/projection name disagreement FAILS", () => {
 test("a full.raw that does not expand to the projection's field_observations FAILS", () => {
   const full = corpus.validFull();
   full[0] = clone(full[0]);
-  delete full[0].raw.power_type;                       // kept in mechanics, so the full-row check still passes
+  // E0R.2 T2.3: the tamper must PRESERVE the observation domain (deleting the cell is now caught one
+  // gate earlier, as loss), so this stays a test of expansion EQUALITY: same cells, different substrate.
+  full[0].raw.power_type.raw_u32 = 99;
   assert.throws(run({ full }), /compact_raw_expands_to_envelope: spell 1/);
 });
 

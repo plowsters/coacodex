@@ -8,27 +8,60 @@ from tests._spell_fixtures import v2_policy
 from tests._e0r2_fixtures import stage_candidate, validate_staged
 
 
-# E0R.2 T2.2: a row must now satisfy its contracted SHAPE, so the minimal row carries one real
-# observation cell instead of an empty substrate — a row with no observations is not lossless. The
-# projection's expansion is computed with the same `_expand_compact` the validator uses, so these
-# cross-child tests stay about cross-child semantics rather than about the fixture.
+# E0R.2 T2.2: a row must now satisfy its contracted SHAPE, so the minimal row carries real observation
+# cells instead of an empty substrate — a row with no observations is not lossless. The projection's
+# expansion is computed with the same `_expand_compact` the validator uses, so these cross-child tests
+# stay about cross-child semantics rather than about the fixture.
+#
+# E0R.2 T2.3: "minimal" now means the FULL observation domain the fixture policy declares, not one cell.
+# A row may leave every mechanics value null, but every declared field must have an envelope and every
+# mechanics key must be present — so the fixture derives both from `policy.artifact_contract` rather than
+# hard-coding a list that would silently fall behind the policy.
 def _cell(sid):
     return {"state": "present", "decoded_reason": "decoded",
             "policy_ref": "/tables/Spell/fields/id", "raw_u32": sid}
 
 
+def _domain_raw(sid):
+    """One envelope per declared observation: numeric cells present/decoded, the string cell resolved,
+    and the join UNRESOLVED (index_zero) — which is still an observation, not an absence."""
+    policy = v2_policy()
+    joins = set(policy.doc.get("joins", {}))
+    raw = {}
+    for field in policy.artifact_contract["required_raw_observations"]:
+        if field in joins:
+            spec = policy.doc["joins"][field]
+            raw[field] = {"join_name": field, "state": "unresolved", "decoded_reason": "index_zero",
+                          "policy_ref": f"/tables/Spell/fields/{spec['index_field']}"}
+        elif policy.doc["tables"]["Spell"]["fields"][field]["kind"] == "string":
+            raw[field] = {"state": "unresolved", "decoded_reason": "not_present",
+                          "policy_ref": f"/tables/Spell/fields/{field}",
+                          "raw_offset": 0, "resolved": None}
+        else:
+            raw[field] = {"state": "present", "decoded_reason": "decoded",
+                          "policy_ref": f"/tables/Spell/fields/{field}", "raw_u32": sid}
+    return raw
+
+
+def _domain_mechanics():
+    # Present-but-null: a null is a recorded observation, an absent key is loss.
+    return {k: None for k in v2_policy().artifact_contract["required_mechanics_keys"]}
+
+
 def _full(sid, **extra):
     # the COMPACT full-child dialect: carries `raw`, never `field_observations`
     return {"schema_version": "coa-client-spell-v3", "spell_id": sid, "coa_attribution": {"is_coa": True},
-            "name": None, "mechanics": {}, "raw": {"id": _cell(sid)}, **extra}
+            "name": None, "mechanics": _domain_mechanics(), "raw": _domain_raw(sid), **extra}
 
 
 def _proj(sid, **extra):
     # the RICH projection dialect: carries `field_observations`, never `raw`
     from coa_client_extract.spell_record import _expand_compact
+    policy = v2_policy()
     return {"schema_version": "coa-client-spell-projection-v3", "spell_id": sid,
-            "coa_attribution": {"is_coa": True}, "name": None, "mechanics": {},
-            "field_observations": {"id": _expand_compact(_cell(sid), v2_policy())}, **extra}
+            "coa_attribution": {"is_coa": True}, "name": None, "mechanics": _domain_mechanics(),
+            "field_observations": {f: _expand_compact(cell, policy)
+                                   for f, cell in _domain_raw(sid).items()}, **extra}
 
 
 def _icon(sid, **extra):
@@ -97,17 +130,12 @@ def test_cross_child_rejects_projection_carrying_raw(tmp_path):
 
 
 def test_cross_child_rejects_tampered_field_observation(tmp_path):
-    # the projection's field_observations must EQUAL the expansion of the full child's raw.
-    full = _full(1, name="Fireball",
-                 raw={"power_type": {"state": "present", "decoded_reason": "decoded",
-                                     "policy_ref": "/tables/Spell/fields/power_type", "raw_u32": 3}})
-    tampered = _proj(1, name="Fireball",
-                     field_observations={"power_type": {"state": "present", "decoded_reason": "decoded",
-                                                        "policy_ref": "/tables/Spell/fields/power_type",
-                                                        "raw_u32": 3, "decoded": {"kind": "int32", "value": 99},
-                                                        "proof": {"integrity": "verified", "layout": "verified",
-                                                                  "interpretation": "verified"},
-                                                        "promotion": "normalized"}})
+    # the projection's field_observations must EQUAL the expansion of the full child's raw. The tamper is
+    # ADDITIVE to the full declared domain (T2.3), so this stays a cross-child equality test rather than
+    # tripping the observation-domain gate on a hand-narrowed raw block.
+    full = _full(1, name="Fireball")
+    tampered = _proj(1, name="Fireball")
+    tampered["field_observations"]["power_type"]["decoded"] = {"kind": "int32", "value": 99}
     gen = _stage(tmp_path, full=[full], proj=[tampered])
     with pytest.raises(ResolveError, match="compact_raw_expands_to_envelope"):
         validate_staged(gen)

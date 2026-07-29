@@ -238,6 +238,38 @@
       }
     ]
   },
+  "artifact_contract": {
+    "icon_observation_domain": [
+      "spell_icon_id"
+    ],
+    "nullable_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ],
+    "required_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ],
+    "required_raw_observations": [
+      "cast_time_ms",
+      "description",
+      "duration_ms",
+      "id",
+      "name",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ]
+  },
   "bound": {
     "client_build": "3.3.5a+patch-CZZ",
     "expected_absent": [
@@ -528,7 +560,7 @@
   ],
   "reviewed": true,
   "schema_version": "coa-spell-layout-v2",
-  "sha256": "056166c2fd483dffa61500329c2e3d52116a1e1a1c645ab5eda41a93893f6759",
+  "sha256": "d90729bd119c7ab59c547df379f58bfcdffb62a4aae4815d8e9cf21eac18e515",
   "tables": {
     "CharacterAdvancement": {
       "expected_field_count": 179,

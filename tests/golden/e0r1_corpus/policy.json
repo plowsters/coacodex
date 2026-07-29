@@ -10,6 +10,31 @@
       }
     ]
   },
+  "artifact_contract": {
+    "icon_observation_domain": [
+      "spell_icon_id"
+    ],
+    "nullable_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_raw_observations": [
+      "cast_time_ms",
+      "duration_ms",
+      "id",
+      "name",
+      "power_type",
+      "school_mask"
+    ]
+  },
   "bound": null,
   "content_sources": {
     "directory": "Content",
@@ -64,11 +89,6 @@
       "side_value_field": "path"
     }
   },
-  "required_scalar_fields": [
-    "id",
-    "name",
-    "power_type"
-  ],
   "required_tables": [
     "Spell",
     "SpellCastTimes",
@@ -77,7 +97,7 @@
   ],
   "reviewed": true,
   "schema_version": "coa-spell-layout-v2",
-  "sha256": "46353fc98255979c107c5cba7f94ba0ddbb9b8df9470ba912f4eb0267c99124d",
+  "sha256": "740e6cd9ac90b08c6b3e86ab0ebafbd7d0af06a931e14e3279a855e66782a91f",
   "tables": {
     "Spell": {
       "expected_field_count": 6,

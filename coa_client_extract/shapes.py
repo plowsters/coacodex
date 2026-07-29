@@ -401,14 +401,27 @@ def spell_policy_v2(doc):
     where = "spell_policy_v2"
     _obj(doc, where)
     _keys(doc, required=("schema_version", "reviewed", "required_tables", "tables", "joins", "sha256",
-                         "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set"),
-          optional=("budget", "provenance_note", "required_scalar_fields", "artifact_contract"),
+                         "content_sources", "bound", "expected_absent", "enum_policy", "anchor_set",
+                         "artifact_contract"),
+          optional=("budget", "provenance_note"),
           where=where)
     if doc["schema_version"] != "coa-spell-layout-v2":
         _fail(f"{where}.schema_version", f"{doc['schema_version']!r}")
     if doc["reviewed"] is not True:
         _fail(f"{where}.reviewed", "an unreviewed policy may not be staged")
     _obj(doc["tables"], f"{where}.tables")
+    # E0R.2 T2.3: the observation domain is structural, not an optional annotation. Node has no
+    # load_spell_policy to fall back on — the shape is the only thing standing between it and a policy
+    # whose domain it would read as `undefined` and then check nothing against.
+    contract = _obj(doc["artifact_contract"], f"{where}.artifact_contract")
+    _keys(contract, required=("required_raw_observations", "required_mechanics_keys",
+                              "nullable_mechanics_keys", "icon_observation_domain"),
+          where=f"{where}.artifact_contract")
+    for key, names in contract.items():
+        if not isinstance(names, list):
+            _fail(f"{where}.artifact_contract.{key}", "must be a list of field names")
+        for name in names:
+            _str(name, f"{where}.artifact_contract.{key}[]")
     return doc
 
 
