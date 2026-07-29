@@ -81,6 +81,48 @@ def _discover_index_cell(view, side_ids: set):
     return best, qualifiers
 
 
+def scan_index_candidates(view, side_view, *, side_id_cell: int = 0) -> list[dict]:
+    """Every Spell cell that could be the FK into `side_view`, with its supporting metrics (E0R.2 T3.1).
+
+    An adjudicated-ambiguous join is still SCANNED on every run. Copying the authored verdict forward
+    means recon cannot notice the day the client makes the join unique — the one thing the hold exists
+    to catch — so what "ambiguous" means has to be re-measured against the client in front of us, not
+    re-read from the review.
+
+    Metrics are INTEGERS. T3.2 hashes this list into a baseline, and hashing floats is needlessly
+    fragile: repr and rounding differ across platforms and across Python/Node, so the same client would
+    produce different digests. The fraction is derived for display, never stored.
+
+    Two passes, not one per cell: pass 1 tallies nonzero/valid counts for every cell at once (the
+    per-cell loop `discover_join_pair` uses re-reads the whole table `cell_count` times), pass 2 counts
+    distinct ids for the few survivors — which is what keeps the distinct-id sets from being 234
+    simultaneous sets over a 200k-row table.
+    """
+    side_ids = {r.u32(side_id_cell) for r in side_view.records()}
+    cells = range(view.cell_count)
+    nonzero = [0] * view.cell_count
+    valid = [0] * view.cell_count
+    for rec in view.records():
+        for c in cells:
+            v = rec.u32(c)
+            if v == 0:
+                continue
+            nonzero[c] += 1
+            if v in side_ids:
+                valid[c] += 1
+    survivors = [c for c in cells
+                 if nonzero[c] >= _MIN_SUPPORT and valid[c] / nonzero[c] >= 0.99]
+    distinct: dict[int, set] = {c: set() for c in survivors}
+    if survivors:
+        for rec in view.records():
+            for c in survivors:
+                v = rec.u32(c)
+                if v != 0 and v in side_ids:
+                    distinct[c].add(v)
+    return [{"cell": c, "nonzero_count": nonzero[c], "valid_count": valid[c],
+             "distinct_ids": len(distinct[c])} for c in survivors]
+
+
 def _read_side(rec, cell, kind):
     raw = rec.u32(cell)
     if kind == "float":
@@ -132,10 +174,18 @@ def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value
 
     A join the human review adjudicated as un-disambiguable — `adjudication: "reviewed_ambiguous"`, i.e.
     no admissible independent evidence pins its index cell — is recorded PROBED-but-ambiguous (pair=None)
-    WITHOUT a scan and WITHOUT reading its side table. The recon state machine accepts a recorded-ambiguous
-    join as raw_only, so this keeps the join honestly documented (not silently unprobed) while the cell
-    stays null. A join with real state-bearing anchors is discovered as a jointly-unique (index_cell,
-    value_cell) pair; a non-unique / no-match result also yields pair=None (recorded-ambiguous)."""
+    and, since E0R.2 T3.1, LIVE-SCANNED against the client's own bytes. It used to be recorded from the
+    authored verdict alone, without reading the side table at all, which meant recon could never notice
+    the day a client patch made the join unique — the one thing the hold exists to catch. The recon state
+    machine still accepts a recorded-ambiguous join as raw_only and the cell stays null; what changed is
+    that "ambiguous" is now a measurement rather than a quotation.
+
+    A join with real state-bearing anchors is discovered as a jointly-unique (index_cell, value_cell)
+    pair; a non-unique / no-match result also yields pair=None (recorded-ambiguous).
+
+    A side table that cannot be opened is recorded `scanned: False` + `side_table_missing: True` rather
+    than dropped: the old `continue` made an absent side table indistinguishable from an ambiguous join,
+    because both simply produced no record."""
     join_pairs: dict[str, dict] = {}
     if not join_value_anchors:
         return join_pairs
@@ -144,20 +194,30 @@ def probe_joins(backend, root, attach, view, id_to_rec, spell_policy, join_value
         side_name = spec.get("side_table") or field_to_side.get(field)
         if not side_name:
             continue
-        if spec.get("adjudication") == "reviewed_ambiguous":
-            join_pairs[field] = {"table": side_name, "pair": None, "winners": [],
-                                 "adjudication": "reviewed_ambiguous", "evidence": spec.get("evidence")}
-            continue
+        ambiguous = spec.get("adjudication") == "reviewed_ambiguous"
+        record: dict = {"table": side_name, "pair": None, "winners": [], "scanned": False,
+                        "side_table_missing": False}
+        if ambiguous:
+            record["adjudication"] = "reviewed_ambiguous"
+            record["evidence"] = spec.get("evidence")
         try:
             sm = backend.read_effective_file(root, attach, f"DBFilesClient\\{side_name}.dbc")
             side_view = open_view(sm.data)
         except (ArchiveError, DbcDriftError):
+            record["side_table_missing"] = True
+            join_pairs[field] = record
             continue
-        pair, winners = discover_join_pair(
-            view, id_to_rec, side_view, side_id_cell=spec.get("side_id_cell", 0),
-            side_value_cells=spec["side_value_cells"], anchors=spec["anchors"],
-            side_value_kind=spec.get("side_value_kind", "int32"))
-        join_pairs[field] = {"table": side_name, "pair": pair, "winners": winners}
+        record["scanned"] = True
+        side_id_cell = spec.get("side_id_cell", 0)
+        if ambiguous:
+            record["candidates"] = scan_index_candidates(view, side_view, side_id_cell=side_id_cell)
+        else:
+            pair, winners = discover_join_pair(
+                view, id_to_rec, side_view, side_id_cell=side_id_cell,
+                side_value_cells=spec["side_value_cells"], anchors=spec["anchors"],
+                side_value_kind=spec.get("side_value_kind", "int32"))
+            record["pair"], record["winners"] = pair, winners
+        join_pairs[field] = record
     return join_pairs
 
 

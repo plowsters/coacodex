@@ -5,9 +5,10 @@ The reviewed spell-layout policy must record a definite verdict for every join: 
 at the cell that independent Builder-payload icon evidence uniquely pins (cell 133 on the real client),
 while the three numeric joins (cast time / duration / range) — for which no admissible independent value
 evidence exists — are recorded reviewed_ambiguous with a null cell and recorded evidence, never silently
-left unprobed or deferred. The recon machinery must (a) probe a reviewed_ambiguous join WITHOUT reading its
-side table, and (b) NOT let the deliberately-ambiguous bare FK-validity scan block a join the stronger
-value-anchor discovery has already resolved.
+left unprobed or deferred. The recon machinery must (a) probe a reviewed_ambiguous join by SCANNING its
+side table live on every run (E0R.2 T3.1 — it used to skip the read entirely, which made the verdict
+uncheckable against the client), and (b) NOT let the deliberately-ambiguous bare FK-validity scan block a
+join the stronger value-anchor discovery has already resolved.
 """
 import json
 import struct
@@ -34,23 +35,24 @@ def _side_bytes(pairs):  # 2-col WDBC: id@0, value@1
     return struct.pack("<4sIIII", b"WDBC", len(pairs), 2, 8, 0) + body
 
 
-class _ExplodingBackend:
-    def read_effective_file(self, *a, **k):
-        raise AssertionError("a reviewed_ambiguous join must not read its side table")
-
-
 # --- Part A: probe_joins -------------------------------------------------------------------------
-def test_reviewed_ambiguous_join_is_probed_without_reading_side_table():
+def test_reviewed_ambiguous_join_is_probed_by_reading_its_side_table():
+    # E0R.2 T3.1 INVERTED this test. It used to pass an _ExplodingBackend to prove the side table was
+    # never read — which is precisely what made the verdict a quotation of a past review rather than an
+    # observation of this client, so recon could never notice a patch that resolved the join. The
+    # recorded adjudication and its evidence survive; what is new is that they sit beside a live scan.
     spell = _view([[133, 5], [116, 7], [400, 0]], field_count=2)
     id_to_rec = {r.u32(0): r for r in spell.records()}
     jva = {"casting_time_index": {"side_table": "SpellCastTimes", "adjudication": "reviewed_ambiguous",
                                   "evidence": "no admissible independent value evidence disambiguates the FK"}}
-    jp = probe_joins(_ExplodingBackend(), Path("c.MPQ"), (Path("p.MPQ"),), spell, id_to_rec,
-                     SimpleNamespace(), jva)
-    # probed (present) but ambiguous (pair=None), with the recorded marker — NOT omitted.
+    backend = FakeArchiveBackend({"DBFilesClient\\SpellCastTimes.dbc":
+                                  [(Path("p.MPQ"), _side_bytes([(5, 500), (7, 700)]))]})
+    jp = probe_joins(backend, Path("c.MPQ"), (Path("p.MPQ"),), spell, id_to_rec, SimpleNamespace(), jva)
     assert jp["casting_time_index"]["pair"] is None
     assert jp["casting_time_index"]["adjudication"] == "reviewed_ambiguous"
     assert jp["casting_time_index"]["evidence"]
+    assert jp["casting_time_index"]["scanned"] is True
+    assert isinstance(jp["casting_time_index"]["candidates"], list)
 
 
 def test_value_anchor_join_discovers_unique_index_cell():
