@@ -11,7 +11,7 @@ Two gaps at c97d7d5:
     of five files yields a smaller generation with no signal anywhere. It needs its own binding kind.
 
 Captured from the live client (3.3.5a+patch-T), and every one reconciles against the published
-generation a9663d1b:
+generation recorded in the committed acceptance record:
 
     CharacterAdvancementClassTypes   46 rows  ==  coa_client_class_types.jsonl   46
     CharacterAdvancementTabTypes     94 rows  ==  coa_client_tab_types.jsonl     94
@@ -29,6 +29,7 @@ from coa_client_extract.spell_layout import SpellPolicyError, compute_policy_sha
 
 REPO = Path(__file__).resolve().parents[1]
 POLICY_PATH = REPO / "coa_client_extract/data/spell_layout_v2.json"
+RECORD_PATH = REPO / "reports/client_extract/coa_e0r_acceptance_summary.json"
 ANCILLARY = {"CharacterAdvancement", "CharacterAdvancementClassTypes",
              "CharacterAdvancementTabTypes", "CharacterAdvancementEssence", "SkillLineAbility"}
 CONTENT_FILES = {"SpellRankData.json", "SpellToStatSuggestionData.json",
@@ -38,6 +39,18 @@ CONTENT_FILES = {"SpellRankData.json", "SpellToStatSuggestionData.json",
 
 def _policy_doc():
     return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+
+
+def _published_children():
+    """The per-child record counts of the published generation, read from the COMMITTED acceptance
+    record rather than from a generation directory.
+
+    E0R.2 T8.3: these two reconciliations named `gen-a9663d1b.../manifest.json` directly. That path is
+    gitignored (`reports/client_extract/gen-*/`), so the assertions could only ever pass on the machine
+    that produced that generation — they passed locally and failed the moment CI ran them, and they also
+    pinned a generation id that a re-run supersedes. The acceptance record is tracked, carries the same
+    `children` block, and always describes the CURRENT published generation."""
+    return json.loads(RECORD_PATH.read_text(encoding="utf-8"))["children"]
 
 
 def _rehash(doc):
@@ -72,10 +85,7 @@ def test_every_bound_ancillary_table_carries_a_real_header():
 def test_the_ancillary_counts_reconcile_with_the_published_generation():
     """The whole point of binding them: the 1:1 children must equal their source record counts."""
     bound = _policy_doc()["bound"]["tables"]
-    manifest = json.loads(
-        (REPO / "reports/client_extract/gen-a9663d1b410841dd8284cb7538c61185/manifest.json")
-        .read_text(encoding="utf-8"))
-    children = manifest["children"]
+    children = _published_children()
     for child, table in (("coa_client_class_types.jsonl", "CharacterAdvancementClassTypes"),
                          ("coa_client_tab_types.jsonl", "CharacterAdvancementTabTypes"),
                          ("coa_client_essence.jsonl", "CharacterAdvancementEssence")):
@@ -103,11 +113,8 @@ def test_the_policy_declares_every_content_source():
 
 def test_the_content_source_entries_sum_to_the_published_child():
     sources = _policy_doc()["content_sources"]["required_files"]
-    manifest = json.loads(
-        (REPO / "reports/client_extract/gen-a9663d1b410841dd8284cb7538c61185/manifest.json")
-        .read_text(encoding="utf-8"))
     assert sum(s["source_entries"] for s in sources.values()) == \
-        manifest["children"]["coa_client_content.jsonl"]["records"]
+        _published_children()["coa_client_content.jsonl"]["records"]
 
 
 def test_load_spell_policy_rejects_an_incoherent_content_sources_block():
