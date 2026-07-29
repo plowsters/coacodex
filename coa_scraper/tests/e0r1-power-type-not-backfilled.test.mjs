@@ -24,7 +24,7 @@ function withheldRow() {
   }];
   const entry = { spell_id: 700001, entry_id: 1, entry_type: "Ability", name: "Test Spell",
                   damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
-  return buildCanonicalMechanics({ entries: [entry], projection })[0];
+  return [...buildCanonicalMechanics({ entries: [entry], projection })][0];
 }
 
 test("a withheld client power_type is NOT backfilled from the Builder resources hint", () => {

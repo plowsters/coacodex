@@ -57,10 +57,10 @@ test("canonical build makes NO network request and emits no ascension_db provena
   const origHttp = http.request, origHttps = https.request;
   http.request = trap; https.request = trap;                       // network trap
   try {
-    const rows = buildCanonicalMechanics({
+    const rows = [...buildCanonicalMechanics({
       entries: [{ spell_id: 1, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
       projection: [{ spell_id: 1, name: "X", mechanics: {}, raw: {}, coa_attribution: { is_coa: true } }],
-    });
+    })];
     const blob = JSON.stringify(rows);
     assert.ok(!/ascension_db|db\.ascension\.gg/.test(blob));
     assert.ok(!rows.some((r) => (r.provenance || []).some((p) => p.source === "ascension_db")));

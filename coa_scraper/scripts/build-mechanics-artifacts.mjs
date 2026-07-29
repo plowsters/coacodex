@@ -36,7 +36,12 @@ const KIND_BEHAVIOR_ORDER = { pet_action: 0, cooldown: 1, ability: 2, debuff: 3,
 // accepted-but-ignored parameter is a standing invitation to smuggle unproven data back in.
 // `clientById` is the projection LOOKUP the canonical path now streams into (E0R.2 T5.1); `projection`
 // remains for the legacy v2/array callers, which build the same Map from what they already hold.
-export function buildCanonicalMechanics({ entries, projection = [], clientById = null }) {
+//
+// E0R.2 T5.2: a GENERATOR. Rows come out ascending by spell_id, one at a time, and the write loop is
+// the only thing that ever holds one — the artifact is ~3,600 rows, so the win is not the bytes but
+// that the output can be a stream at all. Every statistic folds in beside the write (statsAccumulator),
+// because a generator cannot be walked four more times the way the array was.
+export function* buildCanonicalMechanics({ entries, projection = [], clientById = null }) {
   clientById = clientById || new Map(projection.map((r) => [Number(r.spell_id), r]));
 
   const bySpell = new Map();
@@ -47,7 +52,6 @@ export function buildCanonicalMechanics({ entries, projection = [], clientById =
     bySpell.get(sid).push(entry);
   }
 
-  const rows = [];
   for (const [sid, rawNodes] of [...bySpell.entries()].sort((a, b) => a[0] - b[0])) {
     // Determinism: canonicalize nodes by entry_id so reversing input order is byte-identical.
     const nodes = [...rawNodes].sort((a, b) => Number(a.entry_id) - Number(b.entry_id));
@@ -101,7 +105,7 @@ export function buildCanonicalMechanics({ entries, projection = [], clientById =
       readiness.power_type = { status: "unavailable", reason_code: "no_static_anchor" };
     }
 
-    rows.push({
+    yield {
       schema_version: MECHANICS_SCHEMA_VERSION,
       spell_id: sid,
       name,
@@ -130,9 +134,8 @@ export function buildCanonicalMechanics({ entries, projection = [], clientById =
         spell_icon_id: clientRec?.mechanics?.spell_icon_id ?? null,
         school_mask: clientRec?.mechanics?.school_mask ?? null,
       },
-    });
+    };
   }
-  return rows;
 }
 
 function nameCandidates({ clientRec, nodes }) {
@@ -344,60 +347,74 @@ export const READINESS_FIELDS = ["cooldown_ms", "costs", "gcd_ms", "power_type"]
 // The denominator is rows x READINESS_FIELDS, not "the readiness entries we happened to emit": a row
 // that stops carrying an entry must show up as `absent` rather than shrink the denominator until the
 // ratio looks fine again. Every (row, field) pair lands in exactly one status and one reason bucket.
-export function fieldReadinessCoverage(rows) {
-  const fields = {};
-  for (const field of READINESS_FIELDS) fields[field] = { considered: 0, statuses: {}, reason_codes: {} };
-  const statuses = {}, reasonCodes = {};
+// E0R.2 T5.2: ONE fold over the rows, folded into the write loop. `winnerCounts`, `aggregateCounts`
+// and `fieldReadinessCoverage` were three more passes over a materialized array; a generated row is
+// seen once, so every statistic has to be accumulated as it goes past. The result is defined to be
+// byte-identical to what those three produced — a golden artifact hash and a golden statistics block
+// pin exactly that.
+export function statsAccumulator() {
+  const bySource = {}, byTier = {};
+  const readinessFields = {};
+  for (const field of READINESS_FIELDS) readinessFields[field] = { considered: 0, statuses: {}, reason_codes: {} };
+  const readinessStatuses = {}, readinessReasons = {};
+  let recordCount = 0;
+  let unresolved_conflicts = 0, ineligible_candidates = 0, omitted_fields = 0, kind_disagreements = 0;
   const bump = (into, key) => { into[key] = (into[key] || 0) + 1; };
 
-  for (const row of rows) {
-    const readiness = row.field_readiness || {};
-    for (const field of READINESS_FIELDS) {
-      const entry = readiness[field];
-      const status = entry ? (entry.status ?? "unspecified") : "absent";
-      const reason = entry ? (entry.reason_code ?? "unspecified") : "absent";
-      fields[field].considered += 1;
-      bump(fields[field].statuses, status);
-      bump(fields[field].reason_codes, reason);
-      bump(statuses, status);
-      bump(reasonCodes, reason);
-    }
-  }
   return {
-    schema_version: "coa-mechanics-readiness-coverage-v1",
-    rows: rows.length,
-    fields_considered: rows.length * READINESS_FIELDS.length,
-    statuses, reason_codes: reasonCodes, fields,
+    observe(row) {
+      recordCount += 1;
+
+      const fp = row.field_provenance || {};
+      for (const [field, p] of Object.entries(fp)) {
+        if (p.selected_source) {
+          bySource[field] = bySource[field] || {}; byTier[field] = byTier[field] || {};
+          bump(bySource[field], p.selected_source);
+          bump(byTier[field], p.selected_tier);
+        }
+        if (Array.isArray(p.candidates)) {
+          for (const c of p.candidates) if (c.eligible === false) ineligible_candidates++;
+          if (!p.selected_source && p.candidates.length > 0) omitted_fields++;
+        }
+        if (p.selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT) unresolved_conflicts++;
+      }
+      if (fp.kind && fp.kind.selection_reason === REASON.KIND_NODE_DISAGREEMENT_RESOLVED) kind_disagreements++;
+
+      const readiness = row.field_readiness || {};
+      for (const field of READINESS_FIELDS) {
+        const entry = readiness[field];
+        const status = entry ? (entry.status ?? "unspecified") : "absent";
+        const reason = entry ? (entry.reason_code ?? "unspecified") : "absent";
+        readinessFields[field].considered += 1;
+        bump(readinessFields[field].statuses, status);
+        bump(readinessFields[field].reason_codes, reason);
+        bump(readinessStatuses, status);
+        bump(readinessReasons, reason);
+      }
+    },
+    result() {
+      return {
+        record_count: recordCount,
+        per_field_winner_counts_by_source: bySource,
+        per_field_winner_counts_by_tier: byTier,
+        field_readiness_coverage: {
+          schema_version: "coa-mechanics-readiness-coverage-v1",
+          rows: recordCount,
+          fields_considered: recordCount * READINESS_FIELDS.length,
+          statuses: readinessStatuses, reason_codes: readinessReasons, fields: readinessFields,
+        },
+        counts: { unresolved_conflicts, ineligible_candidates, omitted_fields, kind_disagreements },
+      };
+    },
   };
 }
 
-function winnerCounts(rows) {
-  const bySource = {}; const byTier = {};
-  for (const r of rows) {
-    for (const [f, fp] of Object.entries(r.field_provenance || {})) {
-      if (!fp.selected_source) continue;
-      bySource[f] = bySource[f] || {}; byTier[f] = byTier[f] || {};
-      bySource[f][fp.selected_source] = (bySource[f][fp.selected_source] || 0) + 1;
-      byTier[f][fp.selected_tier] = (byTier[f][fp.selected_tier] || 0) + 1;
-    }
-  }
-  return { bySource, byTier };
-}
-
-function aggregateCounts(rows) {
-  let unresolved_conflicts = 0, ineligible_candidates = 0, omitted_fields = 0, kind_disagreements = 0;
-  for (const r of rows) {
-    const fp = r.field_provenance || {};
-    for (const p of Object.values(fp)) {
-      if (Array.isArray(p.candidates)) {
-        for (const c of p.candidates) if (c.eligible === false) ineligible_candidates++;
-        if (!p.selected_source && p.candidates.length > 0) omitted_fields++;
-      }
-      if (p.selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT) unresolved_conflicts++;
-    }
-    if (fp.kind && fp.kind.selection_reason === REASON.KIND_NODE_DISAGREEMENT_RESOLVED) kind_disagreements++;
-  }
-  return { unresolved_conflicts, ineligible_candidates, omitted_fields, kind_disagreements };
+// The T4.1 entry point, over any iterable — ONE implementation, so the standalone view and the folded
+// one can never disagree about what a denominator is.
+export function fieldReadinessCoverage(rows) {
+  const acc = statsAccumulator();
+  for (const row of rows) acc.observe(row);
+  return acc.result().field_readiness_coverage;
 }
 
 function gitHeadCommit() {
@@ -452,17 +469,22 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
 
   // Stream the OUTPUT serialization: row-by-row write to a temp file with an incremental hash — never a
   // whole-output string or a post-hoc re-read of the artifact (E0R.1 T4.2).
+  // E0R.2 T5.2: and the STATISTICS fold in beside it. `rows` is a one-shot generator now, so this loop
+  // is the only pass over it — the record count is counted here rather than read off a `.length` that
+  // no longer exists.
   const jsonlTmp = `${jsonlPath}.tmp-${process.pid}-${Date.now()}`;
   const outFd = fs.openSync(jsonlTmp, "w");
   const outHash = crypto.createHash("sha256");
+  const stats = statsAccumulator();
   for (const r of rows) {
     const line = Buffer.from(JSON.stringify(r) + "\n");
     fs.writeSync(outFd, line);
     outHash.update(line);
+    stats.observe(r);
   }
   fs.closeSync(outFd);
   const sha = outHash.digest("hex");
-  const { bySource, byTier } = winnerCounts(rows);
+  const measured = stats.result();
   const manifest = {
     schema_version: "coa-mechanics-manifest-v1",
     generated_at: new Date().toISOString(),
@@ -478,14 +500,14 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
       projection: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_path || null, sha256: loaded.projection_sha256 },
       projection_manifest: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_manifest_path || null, sha256: loaded.manifest_sha256 },
     },
-    outputs: { mechanics_jsonl: jsonlName, sha256: sha, record_count: rows.length },
+    outputs: { mechanics_jsonl: jsonlName, sha256: sha, record_count: measured.record_count },
     coverage: loaded.absent ? null : loaded.coverage,
-    per_field_winner_counts_by_source: bySource,
-    per_field_winner_counts_by_tier: byTier,
+    per_field_winner_counts_by_source: measured.per_field_winner_counts_by_source,
+    per_field_winner_counts_by_tier: measured.per_field_winner_counts_by_tier,
     // E0R.2 T4.1: the other half of the picture — the fields with no winning source at all, sized
-    // against an exact rows x fields denominator (see fieldReadinessCoverage).
-    field_readiness_coverage: fieldReadinessCoverage(rows),
-    counts: aggregateCounts(rows),
+    // against an exact rows x fields denominator (see statsAccumulator).
+    field_readiness_coverage: measured.field_readiness_coverage,
+    counts: measured.counts,
   };
 
   // manifest-as-validity-marker: remove previous manifest first, then JSONL, then manifest — each atomic.

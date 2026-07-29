@@ -432,7 +432,7 @@ test("mechanics artifact builder emits client-derived spell mechanics (no Ascens
     mechanics: { school_mask: 8, power_type: 3, cast_time_ms: 0, duration_ms: 12000, range_min_yd: 0, range_max_yd: 30 },
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
-  const mechanicsRows = buildCanonicalMechanics({ entries: [entry], projection });
+  const mechanicsRows = [...buildCanonicalMechanics({ entries: [entry], projection })];
 
   assert.equal(mechanicsRows[0].schema_version, "coa-mechanics-v2");
   assert.equal(mechanicsRows[0].spell_id, 92117);
@@ -619,7 +619,7 @@ test("buildCanonicalMechanics: one row per spell_id, client field wins, schools 
   }];
   const entryA = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const entryB = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
-  const rows = buildCanonicalMechanics({ entries: [entryA, entryB], projection });
+  const rows = [...buildCanonicalMechanics({ entries: [entryA, entryB], projection })];
   assert.equal(rows.length, 1);
   const r = rows[0];
   assert.equal(r.spell_id, 92117);
@@ -643,8 +643,8 @@ test("buildCanonicalMechanics: output is input-node-order-independent (canonical
   }];
   const a = { spell_id: 92117, entry_id: 501, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
   const b = { spell_id: 92117, entry_id: 777, entry_type: "Talent", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["dot"] };
-  const forward = buildCanonicalMechanics({ entries: [a, b], projection });
-  const reversed = buildCanonicalMechanics({ entries: [b, a], projection });
+  const forward = [...buildCanonicalMechanics({ entries: [a, b], projection })];
+  const reversed = [...buildCanonicalMechanics({ entries: [b, a], projection })];
   assert.equal(JSON.stringify(forward), JSON.stringify(reversed));
   assert.deepEqual(forward[0].raw.tags, ["damage", "dot"]); // set-like union, sorted, under raw
 });

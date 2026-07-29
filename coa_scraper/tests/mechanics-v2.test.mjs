@@ -19,7 +19,7 @@ function oneRow() {
     coa_attribution: { is_coa: true, confidence: "high" },
   }];
   const entry = { spell_id: 92117, entry_id: 1, entry_type: "Ability", name: "Adrenal Venom", damage_schools: ["nature"], resources: ["energy"], tags: ["damage"] };
-  return buildCanonicalMechanics({ entries: [entry], projection })[0];
+  return [...buildCanonicalMechanics({ entries: [entry], projection })][0];
 }
 
 test("the builder emits coa-mechanics-v2 with null cooldown/gcd/costs (missing != default)", () => {
@@ -72,11 +72,11 @@ test("buildCanonicalMechanics has no spellRows parameter", () => {
   assert.ok(!/spellRows/.test(declared), `spellRows survives in the signature: ${declared}`);
   assert.ok(!/spellRows/.test(buildMechanicsArtifact.toString().slice(0, buildMechanicsArtifact.toString().indexOf(")"))));
   // an unknown caller passing the retired input cannot smuggle it back in
-  const rows = buildCanonicalMechanics({
+  const rows = [...buildCanonicalMechanics({
     entries: [{ spell_id: 7, entry_id: 1, entry_type: "Ability", name: "X", damage_schools: [], resources: [] }],
     spellRows: [{ spell_id: 7, duration_ms: 9999, period_ms: 3000 }],
     projection: [{ spell_id: 7, name: "X", mechanics: {}, raw: {}, coa_attribution: { is_coa: true } }],
-  });
+  })];
   assert.equal(rows[0].duration_ms, null);
   for (const effect of rows[0].effects) assert.equal(effect.tick_interval_ms ?? null, null);
 });
