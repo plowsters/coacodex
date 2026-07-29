@@ -318,14 +318,106 @@ def observation_accumulator() -> _ObservationAccumulator:
     return _ObservationAccumulator()
 
 
-def _expand_scalar_cell(cell: dict, policy: SpellPolicy) -> dict:
+# === E0R.2 T6.1: kind-aware field descriptors =====================================================
+FIELD_DESCRIPTORS_SCHEMA = "coa-client-spell-fields-v1"
+
+
+class DescriptorError(ValueError):
+    """A staged field-descriptor document disagrees with the policy it claims to describe, or a cell
+    that relies on a descriptor was expanded without one."""
+
+
+def build_field_descriptors(policy_doc: dict) -> dict:
+    """The per-field constants every cell repeats today, hoisted into ONE document derived from the
+    policy: `policy_ref` is 23.6% of the real payload (88.6 MB) with exactly one distinct value per
+    field, `join_name` another 5.9% (22.3 MB).
+
+    KIND-AWARE, because a single `policy_ref` per field cannot reconstruct a resolved join: a join cell
+    carries `components.{index,side_id,side_value}`, each pointing at a DIFFERENT table-field through
+    the join mapping. `index_policy_ref` serves the absent form (null index cell), `components` the
+    resolved one. A scalar-only descriptor would silently lose two thirds of every join cell.
+
+    Bound to `policy_sha256`, because a descriptor is meaningful against exactly one policy.
+    """
+    fields: dict[str, dict] = {}
+    for name in policy_doc["tables"]["Spell"]["fields"]:
+        fields[name] = {"kind": "scalar", "policy_ref": policy_ref("Spell", name)}
+    for jname, join in (policy_doc.get("joins") or {}).items():
+        spec = {"index_field": join["index_field"], "side_table": join["side_table"],
+                "side_value_field": join["side_value_field"]}
+        fields[jname] = {
+            "kind": "join", "join_name": jname,
+            "index_policy_ref": policy_ref("Spell", join["index_field"]),
+            "components": {part: {"policy_ref": policy_ref_component(spec, part)}
+                           for part in ("index", "side_id", "side_value")},
+        }
+    return {"schema_version": FIELD_DESCRIPTORS_SCHEMA, "policy_sha256": policy_doc.get("sha256"),
+            "fields": fields}
+
+
+def require_field_descriptors(staged: dict, policy_doc: dict) -> dict:
+    """Re-derive the descriptors from the policy and require the staged document to equal them.
+
+    Never trust a staged descriptor: it defines what every hoisted cell MEANS, so a tampered one could
+    redefine a field's substrate while keeping compact->rich expansion perfectly self-consistent. The
+    only defence is deriving the expectation independently — on BOTH sides of the trust boundary."""
+    expected = build_field_descriptors(policy_doc)
+    if not isinstance(staged, dict):
+        raise DescriptorError(f"field descriptors must be an object, got {type(staged).__name__}")
+    if staged.get("schema_version") != expected["schema_version"]:
+        raise DescriptorError(f"field descriptors schema_version {staged.get('schema_version')!r} is not "
+                              f"{expected['schema_version']!r}")
+    if staged.get("policy_sha256") != expected["policy_sha256"]:
+        raise DescriptorError(f"field descriptors policy_sha256 {staged.get('policy_sha256')!r} does not "
+                              f"describe this policy ({expected['policy_sha256']!r})")
+    got = staged.get("fields")
+    if not isinstance(got, dict):
+        raise DescriptorError("field descriptors carry no `fields` object")
+    for name in sorted(set(got) ^ set(expected["fields"])):
+        raise DescriptorError(f"field descriptor set differs from the policy at {name!r} "
+                              f"({'staged only' if name in got else 'policy only'})")
+    for name in sorted(expected["fields"]):
+        if got[name] != expected["fields"][name]:
+            raise DescriptorError(f"field descriptor {name!r} differs from the policy-derived one: "
+                                  f"{got[name]!r} != {expected['fields'][name]!r}")
+    return expected
+
+
+def _descriptor_for(field, descriptors) -> dict:
+    if descriptors is None or field is None:
+        raise DescriptorError(
+            f"cell {field!r} carries no inline policy_ref and no descriptors were supplied; refusing to "
+            "guess which policy field it observes")
+    entry = (descriptors.get("fields") or {}).get(field)
+    if entry is None:
+        raise DescriptorError(f"no field descriptor for {field!r}")
+    return entry
+
+
+def _cell_policy_ref(cell: dict, field, descriptors, *, part=None) -> str:
+    """The pointer a cell observes: inline while both encodings are supported (T6.1), from the descriptor
+    once T6.2 hoists it out of the row."""
+    if "policy_ref" in cell:
+        return cell["policy_ref"]
+    entry = _descriptor_for(field, descriptors)
+    if part is not None:
+        return entry["components"][part]["policy_ref"]
+    return entry["index_policy_ref"] if entry["kind"] == "join" else entry["policy_ref"]
+
+
+def _expand_scalar_cell(cell: dict, policy: SpellPolicy, *, field=None, descriptors=None,
+                        part=None) -> dict:
     """Expand ONE compact scalar cell into a canonical rich observation: re-derive `decoded` from the raw
     substrate + the policy kind, and attach the policy field's proof/promotion (CLAIMS a consumer
-    re-verifies, never trusts). The exact inverse of `_compact`, so the compact child expands losslessly."""
-    fp = resolve_policy_ref(policy.doc, cell["policy_ref"])
+    re-verifies, never trusts). The exact inverse of `_compact`, so the compact child expands losslessly.
+
+    E0R.2 T6.1: the pointer may come from the cell (today) or from the field descriptor (T6.2). The rich
+    observation carries it either way — hoisting changes the encoding, never the meaning."""
+    ref = _cell_policy_ref(cell, field, descriptors, part=part)
+    fp = resolve_policy_ref(policy.doc, ref)
     proof = {"integrity": "verified", "layout": fp["layout"], "interpretation": fp["interpretation"]}
     out = {"state": cell["state"], "decoded_reason": cell["decoded_reason"],
-           "proof": proof, "promotion": fp["promotion"], "policy_ref": cell["policy_ref"]}
+           "proof": proof, "promotion": fp["promotion"], "policy_ref": ref}
     if "raw_offset" in cell:                                   # StringObservation substrate
         out["raw_offset"] = cell["raw_offset"]
         out["resolved"] = cell.get("resolved")
@@ -337,27 +429,47 @@ def _expand_scalar_cell(cell: dict, policy: SpellPolicy) -> dict:
     return out
 
 
-def _expand_compact(cell: dict, policy: SpellPolicy) -> dict:
+def _is_join_cell(cell: dict, field, descriptors) -> bool:
+    """A join cell says so inline (T6.1) or is named a join by its descriptor (T6.2). `components` alone
+    is not the test: an ABSENT join carries none."""
+    if "join_name" in cell:
+        return True
+    if "components" in cell:
+        return True
+    if descriptors is None or field is None:
+        return False
+    entry = (descriptors.get("fields") or {}).get(field)
+    return bool(entry) and entry.get("kind") == "join"
+
+
+def _expand_compact(cell: dict, policy: SpellPolicy, *, field=None, descriptors=None) -> dict:
     """Expand a compact raw cell (scalar OR join) into its canonical rich field observation. This is the
     contract-critical inverse of the compact producer: `_expand_compact(full.raw[f], policy)` MUST equal
-    the projection's `field_observations[f]`, so the compact full child is provably lossless."""
-    if "join_name" not in cell:
-        return _expand_scalar_cell(cell, policy)
+    the projection's `field_observations[f]`, so the compact full child is provably lossless.
+
+    E0R.2 T6.1: `field`/`descriptors` supply what a hoisted cell no longer repeats. Both encodings are
+    accepted here — the rich output is identical either way, which is exactly the property that lets
+    T6.2 migrate the producer without a flag day."""
+    if not _is_join_cell(cell, field, descriptors):
+        return _expand_scalar_cell(cell, policy, field=field, descriptors=descriptors)
+    join_name = cell.get("join_name") or _descriptor_for(field, descriptors)["join_name"]
     if "components" not in cell:                              # absent join (null index cell)
-        fp = resolve_policy_ref(policy.doc, cell["policy_ref"])
-        return {"join_name": cell["join_name"], "state": cell["state"],
-                "decoded_reason": cell["decoded_reason"], "policy_ref": cell["policy_ref"],
+        ref = _cell_policy_ref(cell, field, descriptors)
+        fp = resolve_policy_ref(policy.doc, ref)
+        return {"join_name": join_name, "state": cell["state"],
+                "decoded_reason": cell["decoded_reason"], "policy_ref": ref,
                 "proof": {"integrity": "verified", "layout": fp["layout"],
                           "interpretation": fp["interpretation"]}, "promotion": fp["promotion"]}
-    components = {k: _expand_scalar_cell(v, policy) for k, v in cell["components"].items()}
+    components = {k: _expand_scalar_cell(v, policy, field=field, descriptors=descriptors, part=k)
+                  for k, v in cell["components"].items()}
     composed = compose_proof(*(FieldProof(c["proof"]["integrity"], c["proof"]["layout"],
                                           c["proof"]["interpretation"]) for c in components.values()))
-    join = policy.joins.get(cell["join_name"])
+    join = policy.joins.get(join_name)
     decoded = None
     if cell["decoded_reason"] == "decoded" and "side_value" in components:
         sv = components["side_value"]
         decoded = sv["decoded"]["value"] if sv.get("decoded") else sv.get("resolved")
-    return {"join_name": cell["join_name"], "state": cell["state"],
+    return {"join_name": join_name, "state": cell["state"],
             "decoded_reason": cell["decoded_reason"], "components": components,
             "composed_proof": composed.to_dict(), "decoded": decoded,
             "promotion": join.promotion if join is not None else "raw_only"}

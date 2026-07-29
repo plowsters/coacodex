@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { JsonlParseError, readJsonlLinesHashed } from "./jsonl-stream.mjs";
 import { normalizeSchoolMask, normalizePowerType, isPresent } from "./mechanics-normalize.mjs";
 
@@ -264,14 +265,100 @@ export function composeProof(proofs) {
   return { integrity: facet("integrity"), layout: facet("layout"), interpretation: facet("interpretation") };
 }
 
+// === E0R.2 T6.1: kind-aware field descriptors ===================================================
+export const FIELD_DESCRIPTORS_SCHEMA = "coa-client-spell-fields-v1";
+
+export class DescriptorError extends Error {}
+
+// The Node twin of Python spell_record.build_field_descriptors. Derived from the policy, never read off
+// a staged document: a descriptor defines what every hoisted cell MEANS, so accepting one on its own
+// word would let a tampered document redefine a field's substrate while compact->rich expansion stayed
+// perfectly self-consistent. KIND-AWARE, because a resolved join's three components each point at a
+// DIFFERENT table-field through the join mapping and one pointer cannot reconstruct them.
+export function buildFieldDescriptors(policyDoc) {
+  const fields = {};
+  for (const name of Object.keys(policyDoc.tables.Spell.fields)) {
+    fields[name] = { kind: "scalar", policy_ref: policyRef("Spell", name) };
+  }
+  for (const [jname, join] of Object.entries(policyDoc.joins || {})) {
+    fields[jname] = {
+      kind: "join", join_name: jname,
+      index_policy_ref: policyRef("Spell", join.index_field),
+      components: {
+        index: { policy_ref: policyRef("Spell", join.index_field) },
+        side_id: { policy_ref: policyRef(join.side_table, "id") },
+        side_value: { policy_ref: policyRef(join.side_table, join.side_value_field) },
+      },
+    };
+  }
+  return { schema_version: FIELD_DESCRIPTORS_SCHEMA, policy_sha256: policyDoc.sha256 ?? null, fields };
+}
+
+function policyRef(table, field) {
+  if (!table || !field) throw new DescriptorError("policy_ref requires a table and a field");
+  return `/tables/${table}/fields/${field}`;
+}
+
+// Re-derive from the policy and require the staged document to equal it, independently of what Python
+// concluded — two trust boundaries, one canonical document.
+export function requireFieldDescriptors(staged, policyDoc) {
+  const expected = buildFieldDescriptors(policyDoc);
+  if (!staged || typeof staged !== "object") throw new DescriptorError("field descriptors must be an object");
+  if (staged.schema_version !== expected.schema_version) {
+    throw new DescriptorError(`field descriptors schema_version ${staged.schema_version} is not ${expected.schema_version}`);
+  }
+  if (staged.policy_sha256 !== expected.policy_sha256) {
+    throw new DescriptorError(`field descriptors policy_sha256 ${staged.policy_sha256} does not describe this policy (${expected.policy_sha256})`);
+  }
+  const got = staged.fields;
+  if (!got || typeof got !== "object") throw new DescriptorError("field descriptors carry no `fields` object");
+  for (const name of [...new Set([...Object.keys(got), ...Object.keys(expected.fields)])].sort()) {
+    if (!(name in got) || !(name in expected.fields)) {
+      throw new DescriptorError(`field descriptor set differs from the policy at ${name} (${name in got ? "staged only" : "policy only"})`);
+    }
+    if (!isDeepStrictEqual(got[name], expected.fields[name])) {
+      throw new DescriptorError(`field descriptor ${name} differs from the policy-derived one`);
+    }
+  }
+  return expected;
+}
+
+function descriptorFor(field, descriptors) {
+  if (!descriptors || field === undefined || field === null) {
+    throw new DescriptorError(
+      `cell ${field} carries no inline policy_ref and no descriptors were supplied; refusing to guess ` +
+      "which policy field it observes");
+  }
+  const entry = (descriptors.fields || {})[field];
+  if (!entry) throw new DescriptorError(`no field descriptor for ${field}`);
+  return entry;
+}
+
+// The pointer a cell observes: inline while both encodings are supported (T6.1), from the descriptor
+// once T6.2 hoists it out of the row.
+function cellPolicyRef(cell, field, descriptors, part = null) {
+  if ("policy_ref" in cell) return cell.policy_ref;
+  const entry = descriptorFor(field, descriptors);
+  if (part !== null) return entry.components[part].policy_ref;
+  return entry.kind === "join" ? entry.index_policy_ref : entry.policy_ref;
+}
+
+function isJoinCell(cell, field, descriptors) {
+  if ("join_name" in cell || "components" in cell) return true;   // an ABSENT join carries no components
+  if (!descriptors || field === undefined || field === null) return false;
+  const entry = (descriptors.fields || {})[field];
+  return Boolean(entry) && entry.kind === "join";
+}
+
 // Expand ONE compact scalar cell into its canonical rich observation — the exact inverse of the Python
 // producer's _expand_scalar_cell: re-derive proof/promotion from the policy and re-decode from raw.
-function expandScalarCell(cell, policyDoc) {
-  const fp = resolvePolicyRef(policyDoc, cell.policy_ref);
+function expandScalarCell(cell, policyDoc, { field = null, descriptors = null, part = null } = {}) {
+  const ref = cellPolicyRef(cell, field, descriptors, part);
+  const fp = resolvePolicyRef(policyDoc, ref);
   const out = {
     state: cell.state, decoded_reason: cell.decoded_reason,
     proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
-    promotion: fp.promotion, policy_ref: cell.policy_ref,
+    promotion: fp.promotion, policy_ref: ref,
   };
   if ("raw_offset" in cell) {                             // string substrate
     out.raw_offset = cell.raw_offset;
@@ -288,28 +375,32 @@ function expandScalarCell(cell, policyDoc) {
 // Expand a compact raw cell (scalar OR join) into its canonical rich field observation — the contract-
 // critical inverse mirroring Python spell_record._expand_compact, so expandCompact(full.raw[f]) MUST
 // deep-equal the projection's field_observations[f].
-export function expandCompact(cell, policyDoc) {
-  if (!("join_name" in cell)) return expandScalarCell(cell, policyDoc);
+export function expandCompact(cell, policyDoc, { field = null, descriptors = null } = {}) {
+  if (!isJoinCell(cell, field, descriptors)) return expandScalarCell(cell, policyDoc, { field, descriptors });
+  const joinName = cell.join_name ?? descriptorFor(field, descriptors).join_name;
   if (!("components" in cell)) {                          // absent join (null index cell)
-    const fp = resolvePolicyRef(policyDoc, cell.policy_ref);
+    const ref = cellPolicyRef(cell, field, descriptors);
+    const fp = resolvePolicyRef(policyDoc, ref);
     return {
-      join_name: cell.join_name, state: cell.state, decoded_reason: cell.decoded_reason,
-      policy_ref: cell.policy_ref,
+      join_name: joinName, state: cell.state, decoded_reason: cell.decoded_reason,
+      policy_ref: ref,
       proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
       promotion: fp.promotion,
     };
   }
   const components = {};
-  for (const [k, v] of Object.entries(cell.components)) components[k] = expandScalarCell(v, policyDoc);
+  for (const [k, v] of Object.entries(cell.components)) {
+    components[k] = expandScalarCell(v, policyDoc, { field, descriptors, part: k });
+  }
   const composed = composeProof(Object.values(components).map((c) => c.proof));
-  const join = (policyDoc.joins || {})[cell.join_name];
+  const join = (policyDoc.joins || {})[joinName];
   let decoded = null;
   if (cell.decoded_reason === "decoded" && "side_value" in components) {
     const sv = components.side_value;
     decoded = sv.decoded ? sv.decoded.value : (sv.resolved ?? null);
   }
   return {
-    join_name: cell.join_name, state: cell.state, decoded_reason: cell.decoded_reason,
+    join_name: joinName, state: cell.state, decoded_reason: cell.decoded_reason,
     components, composed_proof: composed, decoded,
     promotion: join ? join.promotion : "raw_only",
   };

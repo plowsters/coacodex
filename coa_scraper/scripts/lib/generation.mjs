@@ -4,7 +4,8 @@ import crypto from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
 import { CHUNK, readJsonlLines } from "./jsonl-stream.mjs";
-import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact } from "./mechanics-projection.mjs";
+import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact,
+         buildFieldDescriptors } from "./mechanics-projection.mjs";
 import { SHAPES, ShapeError, installContractValidator } from "./shapes.mjs";
 
 export class GenerationResolveError extends Error {}
@@ -504,6 +505,10 @@ function verifyIconRow(r) {
 // icons), projection ⊆ is_coa within domain, the disjoint v3 dialects, identity/mechanics/attribution
 // agreement, and compact_raw_expands_to_envelope (expand(full.raw) deep-equals projection.field_observations).
 export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
+  // E0R.2 T6.1: derived HERE from the staged policy, never read off the generation — a descriptor says
+  // what every hoisted cell means, so taking one on its word would let the producer and the consumer
+  // agree on a redefinition. Both cell encodings expand identically, so this is inert until T6.2.
+  const descriptors = buildFieldDescriptors(policyDoc);
   const full = new Cursor(fullRows, "full");
   const proj = new Cursor(projRows, "projection");
   const icons = new Cursor(iconRows, "icons");
@@ -528,7 +533,9 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
     if (!("raw" in frow)) throw new GenerationResolveError(`full_is_compact: spell ${sid} missing compact raw`);
     if ("field_observations" in frow) throw new GenerationResolveError(`full_is_compact: spell ${sid} carries field_observations`);
     const expanded = {};
-    for (const [f, cell] of Object.entries(frow.raw)) expanded[f] = expandCompact(cell, policyDoc);
+    for (const [f, cell] of Object.entries(frow.raw)) {
+      expanded[f] = expandCompact(cell, policyDoc, { field: f, descriptors });
+    }
     const isCoa = frow.coa_attribution && frow.coa_attribution.is_coa === true;
     if (isCoa) isCoaCount += 1;
     if (isCoa) {
