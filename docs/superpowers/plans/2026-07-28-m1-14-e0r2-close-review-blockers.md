@@ -94,7 +94,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T6.2 v4 spell rows: hoist + intern (`e0r-v2`, atomic) | **done** | `dee9c4d` — `coa-client-spell-v4` (`s`/`d` codes, pointers + join names hoisted); new immutable `e0r-v2` (e0r-v1 untouched, still supported); `coa_client_spell_fields.json` + `observation_wire_schema.json` staged and re-derived by BOTH validators; corpus rows 7,884→3,678 B; 1023 Py + 311 Node |
 | T6.3 Icon v2: two-child normalized assets (`e0r-v3`, atomic) | **done** | `7cd14f4` — association + asset children, `asset_id = sha256(canonical)[:32]` with collision rejection, four null causes now distinguishable, `equals_referenced_asset_set` + no-dangling/no-orphan/derived-readiness in BOTH validators; new `e0r-v3` (v1/v2 untouched); 1047 Py + 318 Node |
 | T6.4 Cross-revision compatibility matrix | **done** | `9e4163f` — both fixtures now derive what they stage from the REVISION (children, corpus baseline by row schema, registered label); every supported revision validates as a candidate AND resolves through the pointer in both languages; foreign child refused, same child required by v3 / refused by v1, all four encoding directions rejected by shape; v3 and v4 expand to the identical envelope. Found + fixed: `child_schema_version` was declared by every revision and read by nothing; 1068 Py + 339 Node |
-| T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | pending | |
+| T7.1 CI runs `npm test` + `fetch-depth: 0`; path hygiene over tracked text | **done** | `757ce36` — CI runs `npm test` (validate-normalized had never been a merge gate) with `fetch-depth: 0`; `portable_path` states the rule once and the acceptance writer uses it at all four sites; recon source pins now name archives logically, as the topology beside them already did; producer-level gate driven end-to-end (probe catches 7 leaks when reverted); the v2 acceptance record untracked pending T8.1's v3 regeneration; 1078 Py + 339 Node |
 | T7.2 Documentation + ROADMAP corrections | pending | |
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
 | T8.2 Headroom gate committed with the record | pending | |
@@ -340,6 +340,16 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   registry descriptive.
 - **T6.4: the older-revision coverage that already existed proved membership, not encoding.** Its
   synthetic successor was a CLONE of `current`, so no v3 row or flat icon catalog was ever staged.
+- **T7.1: the tracked acceptance record is UNTRACKED until T8.1 regenerates it.** It carried three
+  machine-local paths, and it is a `coa-e0r-acceptance-summary-v2` document — two schema versions
+  behind the current writer (T4.2 moved it to v3; T4.3 added the recon binding, the mechanics block and
+  four coverage denominators). The current code cannot produce that shape, so hand-normalizing it would
+  have shipped a record no run ever produced. **T8.1 must commit the v3 replacement — T8.2's headroom
+  gate reads that file.**
+- **T7.1: the hygiene gate is on the PRODUCER, driven end-to-end.** A tracked artifact is only ever as
+  clean as the writer that made it; the test runs `run_acceptance` over inputs living under an absolute
+  tmp directory and asserts no absolute path survives in the record. Probe verified by reverting the
+  four call sites — it catches 7 leaks.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
