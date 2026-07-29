@@ -265,6 +265,46 @@ export function composeProof(proofs) {
   return { integrity: facet("integrity"), layout: facet("layout"), interpretation: facet("interpretation") };
 }
 
+// === E0R.2 T6.2: the interned observation vocabularies ==========================================
+// Read from the SAME immutable wire schema Python reads. The generation stages a copy so a consumer
+// holding only the generation can decode it; that copy is CHECKED against this one, never consulted.
+export const SPELL_SCHEMA_V3 = "coa-client-spell-v3";
+export const SPELL_SCHEMA_V4 = "coa-client-spell-v4";
+export const FIELD_DESCRIPTORS_CHILD = "coa_client_spell_fields.json";
+export const WIRE_SCHEMA_CHILD = "observation_wire_schema.json";
+
+const WIRE = JSON.parse(fs.readFileSync(
+  new URL("../../../coa_client_extract/data/observation_wire_schema.json", import.meta.url), "utf8"));
+const STATE_NAMES = new Map(Object.entries(WIRE.states).map(([name, code]) => [code, name]));
+const REASON_NAMES = new Map(Object.entries(WIRE.decoded_reasons).map(([name, code]) => [code, name]));
+
+export class WireSchemaError extends Error {}
+
+function nameForCode(map, code, what) {
+  if (!Number.isInteger(code) || !map.has(code)) {
+    throw new WireSchemaError(`${what} code ${JSON.stringify(code)} is outside the closed vocabulary ${JSON.stringify([...map.keys()].sort())}`);
+  }
+  return map.get(code);
+}
+
+export function observationStateName(code) { return nameForCode(STATE_NAMES, code, "state"); }
+export function decodedReasonName(code) { return nameForCode(REASON_NAMES, code, "decoded_reason"); }
+
+// A staged vocabulary taken on its word could renumber `present` and turn every cell in the artifact
+// into a different observation. Check it against the trusted copy instead.
+export function requireObservationWire(staged) {
+  if (!staged || typeof staged !== "object") throw new WireSchemaError("staged wire schema must be an object");
+  if (staged.schema_version !== WIRE.schema_version) {
+    throw new WireSchemaError(`staged wire schema schema_version ${staged.schema_version} is not ${WIRE.schema_version}`);
+  }
+  for (const group of ["states", "decoded_reasons"]) {
+    if (!isDeepStrictEqual(staged[group], WIRE[group])) {
+      throw new WireSchemaError(`staged wire schema ${group} differs from the trusted copy`);
+    }
+  }
+  return WIRE;
+}
+
 // === E0R.2 T6.1: kind-aware field descriptors ===================================================
 export const FIELD_DESCRIPTORS_SCHEMA = "coa-client-spell-fields-v1";
 
@@ -352,11 +392,29 @@ function isJoinCell(cell, field, descriptors) {
 
 // Expand ONE compact scalar cell into its canonical rich observation — the exact inverse of the Python
 // producer's _expand_scalar_cell: re-derive proof/promotion from the policy and re-decode from raw.
-function expandScalarCell(cell, policyDoc, { field = null, descriptors = null, part = null } = {}) {
+const V4_HOISTED_KEYS = ["policy_ref", "join_name", "state", "decoded_reason"];
+
+// The cell's (state, decoded_reason): decoded from the TRUSTED wire schema for a v4 cell, read verbatim
+// from a v3 one. A v4 cell that also repeats a hoisted key is refused rather than reconciled — it could
+// claim a policy_ref the descriptor disagrees with, and there is no principled winner between them.
+function cellVocabulary(cell, rowSchema) {
+  if (rowSchema === SPELL_SCHEMA_V4 || (rowSchema === null && "s" in cell)) {
+    for (const key of V4_HOISTED_KEYS) {
+      if (key in cell) {
+        throw new WireSchemaError(`v4 cell repeats the hoisted key ${key}; the descriptor and the wire schema are the only sources for it`);
+      }
+    }
+    return [observationStateName(cell.s), decodedReasonName(cell.d)];
+  }
+  return [cell.state, cell.decoded_reason];
+}
+
+function expandScalarCell(cell, policyDoc, { field = null, descriptors = null, part = null, rowSchema = null } = {}) {
+  const [state, reason] = cellVocabulary(cell, rowSchema);
   const ref = cellPolicyRef(cell, field, descriptors, part);
   const fp = resolvePolicyRef(policyDoc, ref);
   const out = {
-    state: cell.state, decoded_reason: cell.decoded_reason,
+    state, decoded_reason: reason,
     proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
     promotion: fp.promotion, policy_ref: ref,
   };
@@ -366,7 +424,7 @@ function expandScalarCell(cell, policyDoc, { field = null, descriptors = null, p
   } else {                                                // numeric substrate
     const rawU32 = cell.raw_u32 ?? null;
     out.raw_u32 = rawU32;
-    out.decoded = (cell.decoded_reason === "decoded" && rawU32 !== null)
+    out.decoded = (reason === "decoded" && rawU32 !== null)
       ? { kind: fp.kind, value: redecode(rawU32, fp.kind) } : null;
   }
   return out;
@@ -375,14 +433,17 @@ function expandScalarCell(cell, policyDoc, { field = null, descriptors = null, p
 // Expand a compact raw cell (scalar OR join) into its canonical rich field observation — the contract-
 // critical inverse mirroring Python spell_record._expand_compact, so expandCompact(full.raw[f]) MUST
 // deep-equal the projection's field_observations[f].
-export function expandCompact(cell, policyDoc, { field = null, descriptors = null } = {}) {
-  if (!isJoinCell(cell, field, descriptors)) return expandScalarCell(cell, policyDoc, { field, descriptors });
+export function expandCompact(cell, policyDoc, { field = null, descriptors = null, rowSchema = null } = {}) {
+  if (!isJoinCell(cell, field, descriptors)) {
+    return expandScalarCell(cell, policyDoc, { field, descriptors, rowSchema });
+  }
+  const [state, reason] = cellVocabulary(cell, rowSchema);
   const joinName = cell.join_name ?? descriptorFor(field, descriptors).join_name;
   if (!("components" in cell)) {                          // absent join (null index cell)
     const ref = cellPolicyRef(cell, field, descriptors);
     const fp = resolvePolicyRef(policyDoc, ref);
     return {
-      join_name: joinName, state: cell.state, decoded_reason: cell.decoded_reason,
+      join_name: joinName, state, decoded_reason: reason,
       policy_ref: ref,
       proof: { integrity: "verified", layout: fp.layout, interpretation: fp.interpretation },
       promotion: fp.promotion,
@@ -390,17 +451,17 @@ export function expandCompact(cell, policyDoc, { field = null, descriptors = nul
   }
   const components = {};
   for (const [k, v] of Object.entries(cell.components)) {
-    components[k] = expandScalarCell(v, policyDoc, { field, descriptors, part: k });
+    components[k] = expandScalarCell(v, policyDoc, { field, descriptors, part: k, rowSchema });
   }
   const composed = composeProof(Object.values(components).map((c) => c.proof));
   const join = (policyDoc.joins || {})[joinName];
   let decoded = null;
-  if (cell.decoded_reason === "decoded" && "side_value" in components) {
+  if (reason === "decoded" && "side_value" in components) {
     const sv = components.side_value;
     decoded = sv.decoded ? sv.decoded.value : (sv.resolved ?? null);
   }
   return {
-    join_name: joinName, state: cell.state, decoded_reason: cell.decoded_reason,
+    join_name: joinName, state, decoded_reason: reason,
     components, composed_proof: composed, decoded,
     promotion: join ? join.promotion : "raw_only",
   };

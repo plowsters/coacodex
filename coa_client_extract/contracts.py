@@ -43,6 +43,12 @@ OBSERVATION_STATES = tuple(sorted(load_observation_wire_schema()["states"]))
 DECODED_REASONS = tuple(sorted(load_observation_wire_schema()["decoded_reasons"]))
 
 
+class WireSchemaError(ValueError):
+    """A cell carries a code outside the closed vocabulary, or a staged wire schema disagrees with the
+    trusted copy. Both fail closed: a wrong code silently decoding to a default is the silent loss this
+    milestone exists to prevent."""
+
+
 def observation_state_code(state: str) -> int:
     """Wire code for an observation state. KeyError (fails closed) for anything out of vocabulary —
     an uncodeable cell must never round-trip as a default."""
@@ -51,6 +57,43 @@ def observation_state_code(state: str) -> int:
 
 def decoded_reason_code(reason: str) -> int:
     return load_observation_wire_schema()["decoded_reasons"][reason]
+
+
+def _name_for(group: str, code, what: str) -> str:
+    """The inverse lookup T6.2's coded cells need. Built per call from the cached document — the
+    vocabularies are seven and four entries, and a module-level inverse would be one more thing that
+    can go stale against the file."""
+    for name, value in load_observation_wire_schema()[group].items():
+        if value == code and isinstance(code, int) and not isinstance(code, bool):
+            return name
+    raise WireSchemaError(f"{what} code {code!r} is outside the closed vocabulary "
+                          f"{sorted(load_observation_wire_schema()[group].values())}")
+
+
+def observation_state_name(code) -> str:
+    return _name_for("states", code, "state")
+
+
+def decoded_reason_name(code) -> str:
+    return _name_for("decoded_reasons", code, "decoded_reason")
+
+
+def require_observation_wire(staged: dict) -> dict:
+    """A generation stages the wire schema so a consumer holding ONLY the generation can decode it. It
+    is never the authority: each language decodes with its own trusted copy and checks the staged one
+    against that. A staged vocabulary taken on its word could renumber `present` and turn every cell in
+    the artifact into a different observation."""
+    trusted = load_observation_wire_schema()
+    if not isinstance(staged, dict):
+        raise WireSchemaError(f"staged wire schema must be an object, got {type(staged).__name__}")
+    if staged.get("schema_version") != trusted["schema_version"]:
+        raise WireSchemaError(f"staged wire schema schema_version {staged.get('schema_version')!r} is "
+                              f"not {trusted['schema_version']!r}")
+    for group in ("states", "decoded_reasons"):
+        if staged.get(group) != trusted[group]:
+            raise WireSchemaError(f"staged wire schema {group} differs from the trusted copy: "
+                                  f"{staged.get(group)!r} != {trusted[group]!r}")
+    return trusted
 
 
 # === the GENERATION CONTRACT registry (E0R.2 T1.1) ===

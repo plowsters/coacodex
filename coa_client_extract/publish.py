@@ -16,6 +16,8 @@ from .manifest import build_manifest_v3
 from .spell_layout import compute_policy_sha256, load_spell_policy
 from .shapes import SHAPES, ShapeError
 from .spell_record import _expand_compact as _expand_cell
+from .spell_record import (FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD, build_field_descriptors,
+                           require_field_descriptors)
 from .topology import topology_matches_bound
 
 POINTER_SCHEMA = "coa-client-extract-pointer-v1"
@@ -324,11 +326,16 @@ class _Cursor:
         return self.row
 
 
-def _expand_full_raw(sid, raw, policy):
+def _expand_full_raw(sid, raw, policy, *, descriptors=None, row_schema=None):
     """Expand a full child's compact `raw` block into canonical field observations (the SAME expansion the
-    projection is built from), failing closed on a tampered/unresolvable cell."""
+    projection is built from), failing closed on a tampered/unresolvable cell.
+
+    E0R.2 T6.2: `descriptors` are DERIVED here from the staged policy, never read off the generation —
+    a descriptor says what every hoisted cell means, so accepting the staged one on its word would let a
+    generation redefine its own contents while staying perfectly self-consistent."""
     try:
-        return {f: _expand_cell(cell, policy) for f, cell in raw.items()}
+        return {f: _expand_cell(cell, policy, field=f, descriptors=descriptors, row_schema=row_schema)
+                for f, cell in raw.items()}
     except (KeyError, TypeError, ValueError) as exc:
         raise ResolveError(f"compact_raw_expands_to_envelope: {sid} unresolvable compact cell ({exc})")
 
@@ -405,6 +412,9 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
     # Shape-checked AS the rows stream through the cursors — one pass, no second read and no retained
     # row list (E0R.2 T2.2).
     shapes = shapes or {}
+    # E0R.2 T6.2: derived from the STAGED POLICY, which the trust chain has already bound to the reviewed
+    # one — never from the staged descriptor child, which is checked against this rather than consulted.
+    descriptors = build_field_descriptors(policy.doc)
 
     def _shaped(name):
         rows = _read_jsonl(gen_dir / name)
@@ -436,7 +446,8 @@ def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None
         if "field_observations" in full.row:
             raise ResolveError(f"full_is_compact: spell {sid} full row carries field_observations (rich dialect)")
         _observation_domain(sid, full.row, policy)
-        expanded = _expand_full_raw(sid, full.row["raw"], policy)
+        expanded = _expand_full_raw(sid, full.row["raw"], policy, descriptors=descriptors,
+                                    row_schema=full.row.get("schema_version"))
         is_coa = full.row.get("coa_attribution", {}).get("is_coa") is True
         is_coa_count += 1 if is_coa else 0
         if is_coa:
@@ -743,6 +754,22 @@ def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
         raise ResolveError(f"generation_contract: {exc}") from exc
 
 
+def _require_staged_decoders(gen_dir: Path, contract: dict, policy) -> None:
+    """The staged descriptor and wire-schema children must equal what this validator derives itself.
+    Skipped for a contract revision that does not register them, so an `e0r-v1` generation still
+    validates — the revision, not the code, decides which children exist."""
+    from .contracts import WireSchemaError, require_observation_wire
+
+    for name, check in ((FIELD_DESCRIPTORS_CHILD, lambda doc: require_field_descriptors(doc, policy.doc)),
+                        (WIRE_SCHEMA_CHILD, require_observation_wire)):
+        if name not in contract["children"]:
+            continue
+        try:
+            check(json.loads((gen_dir / name).read_text(encoding="utf-8")))
+        except (OSError, ValueError, WireSchemaError) as exc:
+            raise ResolveError(f"{name}: {exc}") from exc
+
+
 def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = None) -> dict:
     """Validate a staged CANDIDATE generation by path (not via the pointer): the manifest is a candidate,
     the staged contract agrees three ways, every child the contract requires is present and per-child
@@ -780,6 +807,12 @@ def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = Non
                 "authenticates an added child rather than rejecting it")
 
     policy = _trusted_policy(gen_dir, manifest, lock_path)
+    # E0R.2 T6.2: a v4 row is decodable only through these two, so they are checked against TRUSTED
+    # sources rather than read. The descriptors are re-derived from the (already trust-chained) policy;
+    # the wire schema is compared with this validator's own copy. A staged descriptor taken on its word
+    # could redefine what every hoisted cell observes while the generation stayed self-consistent, and a
+    # staged vocabulary could renumber `present` and change every cell in the artifact at once.
+    _require_staged_decoders(gen_dir, contract, policy)
     children_meta = manifest.get("children", {})
     # Cardinalities that do not depend on the merge-join first, so a truncated generation fails fast.
     for name, spec in contract["children"].items():

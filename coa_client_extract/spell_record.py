@@ -3,7 +3,9 @@ from __future__ import annotations
 import struct
 
 from .archive_plan import family_of
-from .contracts import policy_ref, policy_ref_component, resolve_policy_ref
+from .contracts import (WireSchemaError, decoded_reason_code, decoded_reason_name, policy_ref,
+                        policy_ref_component, observation_state_code, observation_state_name,
+                        resolve_policy_ref)
 from .recordview import DbcView
 from .spell_layout import FieldPolicy, SpellPolicy
 from .spell_proof import (
@@ -13,6 +15,15 @@ from .spell_proof import (
 
 SCHEMA = "coa-client-spell-v2"
 SCHEMA_V3 = "coa-client-spell-v3"
+# E0R.2 T6.2. v4 is v3 with the per-cell CONSTANTS removed: `policy_ref` (23.6% of the real payload,
+# 88.6 MB, one distinct value per field) and `join_name` (5.9%, 22.3 MB) move to the staged field
+# descriptors, and the two closed vocabularies (`state` 9.7%, `decoded_reason` 14.8%) become the integer
+# codes `s`/`d`. The PROJECTION stays v3: `_expand_compact` absorbs the change, so
+# `expand_compact(full.raw) == projection.field_observations` is still literally true.
+SPELL_SCHEMA_V3 = SCHEMA_V3
+SPELL_SCHEMA_V4 = "coa-client-spell-v4"
+FIELD_DESCRIPTORS_CHILD = "coa_client_spell_fields.json"
+WIRE_SCHEMA_CHILD = "observation_wire_schema.json"
 _CUSTOM_ID_FLOOR = 100_000
 
 
@@ -180,7 +191,7 @@ def _emit_school(rec, fp: FieldPolicy, obs, allowed_bits, sink):
 
 # --- E0R streaming compact-raw v3 producer ---------------------------------------------------------
 #
-# iter_spell_records STREAMS coa-client-spell-v3 rows: identity + normalized `mechanics` + a compact
+# iter_spell_records STREAMS coa-client-spell-v4 rows: identity + normalized `mechanics` + a compact
 # `raw` block (enough to reconstruct eligibility, plus a policy_ref, but NO per-row evidence text — Node
 # re-derives proof/promotion from the pinned policy via policy_ref). A normalized value is emitted only
 # when its full promotion predicate holds; the compact raw is retained regardless.
@@ -191,17 +202,33 @@ def _join_spec(join) -> dict:
             "side_value_field": join.side_value_field}
 
 
-def _compact(obs_dict: dict, *, policy_ref_str: str) -> dict:
-    """A compact raw cell: retain enough raw to reconstruct eligibility + a policy_ref, and DROP the
-    per-row proof/evidence text. A string observation keeps raw_offset + resolved (a string cannot be
-    re-decoded from an offset); a numeric cell keeps raw_u32."""
-    out = {"state": obs_dict["state"], "decoded_reason": obs_dict["decoded_reason"],
-           "policy_ref": policy_ref_str}
+def _compact(obs_dict: dict, *, policy_ref_str: str = None) -> dict:
+    """A compact raw cell (E0R.2 T6.2: v4). Retain only the SUBSTRATE plus the two interned vocabulary
+    codes; the policy pointer and the join name come from the staged field descriptors, and the per-row
+    proof/evidence text is dropped entirely (Node re-derives it from the policy).
+
+    A string observation keeps raw_offset + resolved (a string cannot be re-decoded from an offset); a
+    numeric cell keeps raw_u32. `policy_ref_str` is accepted and ignored — the call sites still name the
+    pointer they mean, which is what makes the descriptor derivation checkable against them."""
+    out = {"s": observation_state_code(obs_dict["state"]),
+           "d": decoded_reason_code(obs_dict["decoded_reason"])}
     if "raw_offset" in obs_dict:                       # StringObservation
         out["raw_offset"] = obs_dict["raw_offset"]
         out["resolved"] = obs_dict.get("resolved")
     else:                                              # numeric Envelope
         out["raw_u32"] = obs_dict.get("raw_u32")
+    return out
+
+
+def compact_cell_v4(cell: dict) -> dict:
+    """Re-encode a v3 compact cell as a v4 one. Used to migrate fixtures and to prove, cell by cell,
+    that the two encodings expand to the same rich observation."""
+    substrate = {k: v for k, v in cell.items()
+                 if k in ("raw_u32", "raw_offset", "resolved")}
+    out = {"s": observation_state_code(cell["state"]), "d": decoded_reason_code(cell["decoded_reason"]),
+           **substrate}
+    if "components" in cell:
+        out["components"] = {k: compact_cell_v4(v) for k, v in cell["components"].items()}
     return out
 
 
@@ -247,12 +274,15 @@ def _resolve_join(rec, join, sf, policy, side_id_maps):
 
 
 def _compact_join(jname, join, jo_dict) -> dict:
+    """v4: the join name and every component pointer come from the descriptor for this field, so a join
+    cell is its two vocabulary codes plus (when resolved) three component substrates."""
     if "absent" in jo_dict:
         a = jo_dict["absent"]
-        return {"join_name": jname, "state": a["state"], "decoded_reason": a["decoded_reason"],
-                "policy_ref": policy_ref("Spell", join.index_field)}
+        return {"s": observation_state_code(a["state"]),
+                "d": decoded_reason_code(a["decoded_reason"])}
     spec = _join_spec(join)
-    return {"join_name": jname, "state": jo_dict["state"], "decoded_reason": jo_dict["decoded_reason"],
+    return {"s": observation_state_code(jo_dict["state"]),
+            "d": decoded_reason_code(jo_dict["decoded_reason"]),
             "components": {k: _compact(v, policy_ref_str=policy_ref_component(spec, k))
                            for k, v in jo_dict["components"].items()}}
 
@@ -296,7 +326,10 @@ class _ObservationAccumulator:
             entry = self.fields.get(field)
             if entry is None:
                 entry = self.fields[field] = {"cells": 0, "states": {}, "decoded_reasons": {}}
-            state, reason = cell.get("state"), cell.get("decoded_reason")
+            # E0R.2 T6.2: a v4 cell carries interned codes. Coverage is reported in the VOCABULARY
+            # NAMES either way — a consumer reading `{"1": 12}` learns nothing about which state that is.
+            state, reason = ((observation_state_name(cell["s"]), decoded_reason_name(cell["d"]))
+                             if "s" in cell else (cell.get("state"), cell.get("decoded_reason")))
             self.cells += 1
             entry["cells"] += 1
             self.states[state] = self.states.get(state, 0) + 1
@@ -405,18 +438,38 @@ def _cell_policy_ref(cell: dict, field, descriptors, *, part=None) -> str:
     return entry["index_policy_ref"] if entry["kind"] == "join" else entry["policy_ref"]
 
 
+_V4_HOISTED_KEYS = ("policy_ref", "join_name", "state", "decoded_reason")
+
+
+def _vocabulary(cell: dict, row_schema) -> tuple[str, str]:
+    """The cell's (state, decoded_reason), decoded from the trusted wire schema for a v4 cell and read
+    verbatim from a v3 one. A v4 cell that ALSO repeats a hoisted key is refused rather than
+    reconciled: it could claim a policy_ref the descriptor disagrees with, and there is no principled
+    winner between them."""
+    if row_schema == SPELL_SCHEMA_V4 or (row_schema is None and "s" in cell):
+        for key in _V4_HOISTED_KEYS:
+            if key in cell:
+                raise WireSchemaError(
+                    f"v4 cell repeats the hoisted key {key!r}; the descriptor and the wire schema are "
+                    "the only sources for it")
+        return observation_state_name(cell.get("s")), decoded_reason_name(cell.get("d"))
+    return cell["state"], cell["decoded_reason"]
+
+
 def _expand_scalar_cell(cell: dict, policy: SpellPolicy, *, field=None, descriptors=None,
-                        part=None) -> dict:
+                        part=None, row_schema=None) -> dict:
     """Expand ONE compact scalar cell into a canonical rich observation: re-derive `decoded` from the raw
     substrate + the policy kind, and attach the policy field's proof/promotion (CLAIMS a consumer
     re-verifies, never trusts). The exact inverse of `_compact`, so the compact child expands losslessly.
 
-    E0R.2 T6.1: the pointer may come from the cell (today) or from the field descriptor (T6.2). The rich
-    observation carries it either way — hoisting changes the encoding, never the meaning."""
+    E0R.2 T6.1/T6.2: the pointer comes from the cell (v3) or from the field descriptor (v4), and the
+    vocabulary members are interned codes in v4. The rich observation is identical either way — the
+    encoding changed, never the meaning."""
+    state, reason = _vocabulary(cell, row_schema)
     ref = _cell_policy_ref(cell, field, descriptors, part=part)
     fp = resolve_policy_ref(policy.doc, ref)
     proof = {"integrity": "verified", "layout": fp["layout"], "interpretation": fp["interpretation"]}
-    out = {"state": cell["state"], "decoded_reason": cell["decoded_reason"],
+    out = {"state": state, "decoded_reason": reason,
            "proof": proof, "promotion": fp["promotion"], "policy_ref": ref}
     if "raw_offset" in cell:                                   # StringObservation substrate
         out["raw_offset"] = cell["raw_offset"]
@@ -425,7 +478,7 @@ def _expand_scalar_cell(cell: dict, policy: SpellPolicy, *, field=None, descript
         raw_u32 = cell.get("raw_u32")
         out["raw_u32"] = raw_u32
         out["decoded"] = ({"kind": fp["kind"], "value": _redecode(raw_u32, fp["kind"])}
-                          if cell["decoded_reason"] == "decoded" and raw_u32 is not None else None)
+                          if reason == "decoded" and raw_u32 is not None else None)
     return out
 
 
@@ -442,47 +495,58 @@ def _is_join_cell(cell: dict, field, descriptors) -> bool:
     return bool(entry) and entry.get("kind") == "join"
 
 
-def _expand_compact(cell: dict, policy: SpellPolicy, *, field=None, descriptors=None) -> dict:
+def _expand_compact(cell: dict, policy: SpellPolicy, *, field=None, descriptors=None,
+                    row_schema=None) -> dict:
     """Expand a compact raw cell (scalar OR join) into its canonical rich field observation. This is the
     contract-critical inverse of the compact producer: `_expand_compact(full.raw[f], policy)` MUST equal
     the projection's `field_observations[f]`, so the compact full child is provably lossless.
 
-    E0R.2 T6.1: `field`/`descriptors` supply what a hoisted cell no longer repeats. Both encodings are
-    accepted here — the rich output is identical either way, which is exactly the property that lets
-    T6.2 migrate the producer without a flag day."""
+    Dispatches on the ROW's schema version, so both encodings stay readable: `e0r-v1` remains a
+    supported contract revision, and a generation published under it must still expand years later.
+    `row_schema=None` infers from the cell, which is what the pre-T6.2 call sites relied on."""
     if not _is_join_cell(cell, field, descriptors):
-        return _expand_scalar_cell(cell, policy, field=field, descriptors=descriptors)
+        return _expand_scalar_cell(cell, policy, field=field, descriptors=descriptors,
+                                   row_schema=row_schema)
+    state, reason = _vocabulary(cell, row_schema)
     join_name = cell.get("join_name") or _descriptor_for(field, descriptors)["join_name"]
     if "components" not in cell:                              # absent join (null index cell)
         ref = _cell_policy_ref(cell, field, descriptors)
         fp = resolve_policy_ref(policy.doc, ref)
-        return {"join_name": join_name, "state": cell["state"],
-                "decoded_reason": cell["decoded_reason"], "policy_ref": ref,
+        return {"join_name": join_name, "state": state,
+                "decoded_reason": reason, "policy_ref": ref,
                 "proof": {"integrity": "verified", "layout": fp["layout"],
                           "interpretation": fp["interpretation"]}, "promotion": fp["promotion"]}
-    components = {k: _expand_scalar_cell(v, policy, field=field, descriptors=descriptors, part=k)
+    components = {k: _expand_scalar_cell(v, policy, field=field, descriptors=descriptors, part=k,
+                                         row_schema=row_schema)
                   for k, v in cell["components"].items()}
     composed = compose_proof(*(FieldProof(c["proof"]["integrity"], c["proof"]["layout"],
                                           c["proof"]["interpretation"]) for c in components.values()))
     join = policy.joins.get(join_name)
     decoded = None
-    if cell["decoded_reason"] == "decoded" and "side_value" in components:
+    if reason == "decoded" and "side_value" in components:
         sv = components["side_value"]
         decoded = sv["decoded"]["value"] if sv.get("decoded") else sv.get("resolved")
-    return {"join_name": join_name, "state": cell["state"],
-            "decoded_reason": cell["decoded_reason"], "components": components,
+    return {"join_name": join_name, "state": state,
+            "decoded_reason": reason, "components": components,
             "composed_proof": composed.to_dict(), "decoded": decoded,
             "promotion": join.promotion if join is not None else "raw_only"}
 
 
-def project_v3_row(compact_row: dict, policy: SpellPolicy) -> dict:
+def project_v3_row(compact_row: dict, policy: SpellPolicy, descriptors: dict = None) -> dict:
     """Build a coa-client-spell-projection-v3 row from a compact full child row: identity + normalized
     mechanics + attribution, and the compact `raw` EXPANDED into rich `field_observations`. The projection
-    carries NO compact `raw` (the two v3 dialects are deliberately disjoint — full=compact, projection=rich)."""
+    carries NO compact `raw` (the two v3 dialects are deliberately disjoint — full=compact, projection=rich).
+
+    E0R.2 T6.2: the projection schema does NOT move with the full child's. Expansion absorbs the v4
+    encoding, so `expand_compact(full.raw) == projection.field_observations` stays literally true and the
+    consumer's dialect is untouched."""
+    descriptors = descriptors if descriptors is not None else build_field_descriptors(policy.doc)
+    row_schema = compact_row.get("schema_version")
     return {"schema_version": PROJECTION_SCHEMA_V3,
             "spell_id": compact_row["spell_id"], "name": compact_row.get("name"),
             "mechanics": compact_row["mechanics"], "coa_attribution": compact_row["coa_attribution"],
-            "field_observations": {f: _expand_compact(cell, policy)
+            "field_observations": {f: _expand_compact(cell, policy, field=f, descriptors=descriptors,
+                                                      row_schema=row_schema)
                                    for f, cell in compact_row["raw"].items()}}
 
 
@@ -499,7 +563,7 @@ def _side_maps(side_views: dict) -> dict:
 
 
 def iter_spell_records(spell_view, side_views, *, policy, provenance, coa_spell_ids=None):
-    """Stream coa-client-spell-v3 rows. String joins (SpellIcon.path) are emitted by the icon catalog,
+    """Stream coa-client-spell-v4 rows. String joins (SpellIcon.path) are emitted by the icon catalog,
     not here, so `mechanics` stays numeric.
 
     `coa_attribution.is_coa` is AUTHORITATIVE: a spell is CoA iff its id is in `coa_spell_ids` — the set
@@ -565,7 +629,7 @@ def iter_spell_records(spell_view, side_views, *, policy, provenance, coa_spell_
             mech[jname] = value if _join_normalized(join, idx_fp, id_fp, val_fp, jo) else None
             raw[jname] = _compact_join(jname, join, jo_dict)
 
-        yield {"schema_version": SCHEMA_V3, "spell_id": spell_id, "name": name_val,
+        yield {"schema_version": SPELL_SCHEMA_V4, "spell_id": spell_id, "name": name_val,
                "mechanics": mech, "raw": raw,
                "coa_attribution": {"is_coa": spell_id in coa_ids, "status": "unknown",
                                    "archive_family": archive_family,

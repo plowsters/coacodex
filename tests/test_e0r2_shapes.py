@@ -14,16 +14,27 @@ import copy
 
 import pytest
 
-from coa_client_extract.contracts import load_current_contract
+from coa_client_extract.contracts import (decoded_reason_code, load_contract_registry,
+                                          load_supported_contract)
 from coa_client_extract.shapes import SHAPES, ShapeError
 
 from tests.golden import golden_rows, producer_spell_rows
 
 
-def test_the_contract_names_exactly_the_implemented_shapes():
-    """A contract shape with no validator is a gate that silently does nothing."""
-    contracted = {spec["shape"] for spec in load_current_contract()[1]["children"].values()}
+def test_every_supported_revisions_shapes_are_implemented_and_nothing_else_is():
+    """A contract shape with no validator is a gate that silently does nothing.
+
+    E0R.2 T6.2: the union over SUPPORTED revisions, not just `current`. A revision stays in the registry
+    so generations published under it remain resolvable — which is only true while the shapes it names
+    are still implemented. `full_spell_row_v3` is exactly that case: retired from the current contract,
+    retained here."""
+    registry = load_contract_registry()
+    contracted = set()
+    for revision, entry in registry["supported"].items():
+        contract = load_supported_contract(revision, entry["sha256"])
+        contracted |= {spec["shape"] for spec in contract["children"].values()}
     assert contracted == set(SHAPES)
+    assert "full_spell_row_v3" in contracted, "a supported revision's shape may never be deleted"
 
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
@@ -49,7 +60,7 @@ def test_the_producer_rows_satisfy_the_same_shapes_as_the_corpus():
     """The corpus is a hand-authored subset. Holding the REAL rows to the same validators is what stops
     the corpus drifting into a shape the producer never emits."""
     full, projection, icon = producer_spell_rows()
-    SHAPES["full_spell_row_v3"](full)
+    SHAPES["full_spell_row_v4"](full)
     SHAPES["projection_row_v3"](projection)
     SHAPES["icon_row_v1"](icon)
 
@@ -157,10 +168,10 @@ def test_mechanics_values_may_be_null_but_the_keys_may_not_be_absent():
     full, _, _ = producer_spell_rows()
     row = copy.deepcopy(full)
     row["mechanics"] = {k: None for k in row["mechanics"]}
-    SHAPES["full_spell_row_v3"](row)
+    SHAPES["full_spell_row_v4"](row)
     row["mechanics"]["power_type"] = "3"
     with pytest.raises(ShapeError, match="power_type"):
-        SHAPES["full_spell_row_v3"](row)
+        SHAPES["full_spell_row_v4"](row)
 
 
 def test_a_domain_gated_school_mask_row_is_structurally_valid():
@@ -170,8 +181,8 @@ def test_a_domain_gated_school_mask_row_is_structurally_valid():
     row = copy.deepcopy(full)
     row["mechanics"] = {**row["mechanics"], "school_mask": None}
     row["raw"]["school_mask"] = {**row["raw"]["school_mask"],
-                                 "decoded_reason": "value_out_of_domain"}
-    SHAPES["full_spell_row_v3"](row)
+                                 "d": decoded_reason_code("value_out_of_domain")}   # v4: the code
+    SHAPES["full_spell_row_v4"](row)
 
 
 # --- ancillary rows ---

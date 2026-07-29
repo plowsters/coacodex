@@ -29,9 +29,9 @@ def test_regenerate_peak_rss_is_bounded_as_records_scale():
 def test_add_jsonl_consumes_a_generator_without_materializing(tmp_path):
     from coa_client_extract.publish import GenerationWriter
     gw = GenerationWriter(tmp_path)
-    gw.add_jsonl("coa_client_spell.jsonl", ({"schema_version": "coa-client-spell-v3", "spell_id": i}
+    gw.add_jsonl("coa_client_spell.jsonl", ({"schema_version": "coa-client-spell-v4", "spell_id": i}
                                             for i in range(1, 5001)),
-                 schema_version="coa-client-spell-v3")
+                 schema_version="coa-client-spell-v4")
     meta = gw._children["coa_client_spell.jsonl"]
     assert meta["records"] == 5000
     lines = (gw.gen_dir / "coa_client_spell.jsonl").read_text().splitlines()

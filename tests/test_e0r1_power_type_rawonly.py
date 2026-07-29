@@ -5,6 +5,7 @@ has no static anchor and value 7 is an unknown symbol; the honest state emits NO
 records `decoded_reason: "proof_withheld"` in the retained raw, for every value (in-domain 0-6 AND 7)."""
 import struct
 
+from coa_client_extract.contracts import decoded_reason_name
 from coa_client_extract.recordview import open_view
 from coa_client_extract.spell_layout import load_default_policy
 from coa_client_extract.spell_record import iter_spell_records
@@ -33,7 +34,7 @@ def test_streaming_withholds_power_type_decode_for_every_value():
     assert len(rows) == 3
     for row, raw_val in zip(rows, [3, 0, 7]):
         assert row["mechanics"]["power_type"] is None                        # no normalized value
-        assert row["raw"]["power_type"]["decoded_reason"] == "proof_withheld"  # withheld, not decoded
+        assert decoded_reason_name(row["raw"]["power_type"]["d"]) == "proof_withheld"  # not decoded
         assert row["raw"]["power_type"]["raw_u32"] == raw_val                 # raw retained (incl. 7)
 
 
@@ -44,4 +45,4 @@ def test_normalized_power_type_still_decodes_when_verified():
     rows = list(iter_spell_records(view, side_views(), policy=v2_policy(),
                                    provenance={"effective_archive": "patch-T.MPQ"}))
     assert rows[0]["mechanics"]["power_type"] == 3
-    assert rows[0]["raw"]["power_type"]["decoded_reason"] == "decoded"
+    assert decoded_reason_name(rows[0]["raw"]["power_type"]["d"]) == "decoded"

@@ -5,7 +5,8 @@ import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
 import { CHUNK, readJsonlLines } from "./jsonl-stream.mjs";
 import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact,
-         buildFieldDescriptors } from "./mechanics-projection.mjs";
+         buildFieldDescriptors, requireFieldDescriptors, requireObservationWire,
+         FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD } from "./mechanics-projection.mjs";
 import { SHAPES, ShapeError, installContractValidator } from "./shapes.mjs";
 
 export class GenerationResolveError extends Error {}
@@ -269,6 +270,24 @@ function topologyMismatches(report, bound) {
 }
 
 // The reviewed policy the cardinality rules resolve against, in three separately-messaged steps.
+// The staged descriptor/wire children must equal what this validator derives itself. Skipped for a
+// revision that does not register them, so an `e0r-v1` generation still resolves — the revision decides
+// which children exist, not the code.
+function requireStagedDecoders(genDir, contract, policyDoc) {
+  const checks = [
+    [FIELD_DESCRIPTORS_CHILD, (doc) => requireFieldDescriptors(doc, policyDoc)],
+    [WIRE_SCHEMA_CHILD, requireObservationWire],
+  ];
+  for (const [name, check] of checks) {
+    if (!(name in contract.children)) continue;
+    try {
+      check(JSON.parse(fs.readFileSync(path.join(genDir, name), "utf8")));
+    } catch (e) {
+      throw new GenerationResolveError(`${name}: ${e.message}`);
+    }
+  }
+}
+
 function trustedPolicy(genDir, manifest, policyDoc, lock) {
   // 1. the staged policy IS the locally supported policy (recomputed, never self-declared).
   try { assertPolicyLock(policyDoc, lock); }
@@ -534,7 +553,7 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
     if ("field_observations" in frow) throw new GenerationResolveError(`full_is_compact: spell ${sid} carries field_observations`);
     const expanded = {};
     for (const [f, cell] of Object.entries(frow.raw)) {
-      expanded[f] = expandCompact(cell, policyDoc, { field: f, descriptors });
+      expanded[f] = expandCompact(cell, policyDoc, { field: f, descriptors, rowSchema: frow.schema_version });
     }
     const isCoa = frow.coa_attribution && frow.coa_attribution.is_coa === true;
     if (isCoa) isCoaCount += 1;
@@ -635,6 +654,10 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
   try { lock = JSON.parse(fs.readFileSync(lockPath, "utf8")); }
   catch (e) { throw new GenerationResolveError(`policy lock unreadable: ${e.message}`); }
   trustedPolicy(dir, manifest, policyDoc, lock);
+  // E0R.2 T6.2: a v4 row is decodable only through these two, so they are checked against TRUSTED
+  // sources rather than read. Derived INDEPENDENTLY of Python — two boundaries agreeing only because
+  // one told the other is not agreement.
+  requireStagedDecoders(dir, contract, policyDoc);
   const childrenMeta = manifest.children || {};
   // Cardinalities that do not depend on the merge-join first, so a truncated generation fails fast.
   for (const [name, spec] of Object.entries(contract.children)) {

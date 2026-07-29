@@ -9,13 +9,14 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { ANCILLARY_TABLES, bindPolicyDoc, loadCorpus, topologyReportFor } from "./candidate.mjs";
 import { goldenRows } from "./golden.mjs";
-import { expandCompact } from "../../scripts/lib/mechanics-projection.mjs";
+import { FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD, buildFieldDescriptors, expandCompact }
+  from "../../scripts/lib/mechanics-projection.mjs";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, generationContractSha256,
          loadCurrentContract, validateCandidateByPath } from "../../scripts/lib/generation.mjs";
 
 const SCHEMA_FOR = {
-  "coa_client_spell.jsonl": "coa-client-spell-v3",
+  "coa_client_spell.jsonl": "coa-client-spell-v4",
   "coa_client_spell_coa.jsonl": "coa-client-spell-projection-v3",
   "coa_client_spell_projection.manifest.json": "coa-client-spell-projection-manifest-v3",
   "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v1",
@@ -26,6 +27,8 @@ const SCHEMA_FOR = {
   "coa_client_tab_types.jsonl": "coa-client-tab-types-v1",
   "coa_client_essence.jsonl": "coa-client-essence-v1",
   "spell_layout_v2.json": "coa-spell-layout-v2",
+  [FIELD_DESCRIPTORS_CHILD]: "coa-client-spell-fields-v1",
+  [WIRE_SCHEMA_CHILD]: "coa-observation-wire-v1",
   [GENERATION_CONTRACT_CHILD]: GENERATION_CONTRACT_SCHEMA,
 };
 
@@ -53,7 +56,7 @@ function writeDoc(genDir, name, doc) {
 
 function build(n, root) {
   const corpus = loadCorpus();
-  const fullT = corpus.validFull()[0];               // spell-1 template (is_coa)
+  const fullT = corpus.validFull()[0];               // spell-1 template (is_coa), v4-encoded
   const iconT = corpus.validIcons()[0];
   const genDir = path.join(root, "gen-c1");
   fs.mkdirSync(genDir, { recursive: true });
@@ -72,7 +75,10 @@ function build(n, root) {
       full.spell_id = i;
       full.raw.id.raw_u32 = i;
       const fobs = {};
-      for (const [f, cell] of Object.entries(full.raw)) fobs[f] = expandCompact(cell, corpus.policy);
+      const descriptors = buildFieldDescriptors(corpus.policy);
+      for (const [f, cell] of Object.entries(full.raw)) {
+        fobs[f] = expandCompact(cell, corpus.policy, { field: f, descriptors, rowSchema: full.schema_version });
+      }
       yield JSON.stringify({ schema_version: "coa-client-spell-projection-v3", spell_id: i,
                              name: full.name, mechanics: full.mechanics,
                              coa_attribution: full.coa_attribution, field_observations: fobs }) + "\n";
@@ -103,6 +109,10 @@ function build(n, root) {
     spellRecords: n, ancillaryRecords: Object.fromEntries(ANCILLARY_TABLES.map((t) => [t, 0])),
     contentEntries: 0 });
   children["spell_layout_v2.json"] = writeDoc(genDir, "spell_layout_v2.json", policy);
+  // E0R.2 T6.2: a v4 row needs both to be decodable, so the probe stages what a real generation ships.
+  children[FIELD_DESCRIPTORS_CHILD] = writeDoc(genDir, FIELD_DESCRIPTORS_CHILD, buildFieldDescriptors(policy));
+  children[WIRE_SCHEMA_CHILD] = writeDoc(genDir, WIRE_SCHEMA_CHILD, JSON.parse(fs.readFileSync(
+    new URL("../../../coa_client_extract/data/observation_wire_schema.json", import.meta.url), "utf8")));
   const [contractRevision, contract] = loadCurrentContract();
   children[GENERATION_CONTRACT_CHILD] = writeDoc(genDir, GENERATION_CONTRACT_CHILD, contract);
 

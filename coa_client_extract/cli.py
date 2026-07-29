@@ -50,7 +50,10 @@ def regenerate(
     import time as _time
     from .recordview import open_view
     from .spell_layout import load_default_policy
-    from .spell_record import iter_spell_records, observation_accumulator, project_v3_row
+    from .contracts import load_observation_wire_schema
+    from .spell_record import (FIELD_DESCRIPTORS_CHILD, FIELD_DESCRIPTORS_SCHEMA,
+                               WIRE_SCHEMA_CHILD, build_field_descriptors, iter_spell_records,
+                               observation_accumulator, project_v3_row)
     from .spell_icons import iter_icon_catalog, icon_coverage
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
@@ -292,7 +295,7 @@ def regenerate(
     base_manifest["benchmark_env"] = benchmark_env()   # reproducible env pin for the budget (T4.3)
     gw = GenerationWriter(out_dir)
     gw.add_jsonl_lines("coa_client_spell.jsonl", _spool_lines(full_spool, full_index),
-                       schema_version="coa-client-spell-v3")
+                       schema_version="coa-client-spell-v4")
     gw.add_jsonl("coa_client_spell_coa.jsonl", _projection_rows(),
                  schema_version="coa-client-spell-projection-v3")
     gw.add_json("coa_client_spell_projection.manifest.json", projection_manifest,
@@ -308,6 +311,14 @@ def regenerate(
     gw.add_jsonl("coa_client_tab_types.jsonl", tab_type_records, schema_version="coa-client-tab-types-v1")
     gw.add_jsonl("coa_client_essence.jsonl", essence_records, schema_version="coa-client-essence-v1")
     gw.add_json("spell_layout_v2.json", policy.doc, schema_version="coa-spell-layout-v2")  # reviewed policy child
+    # E0R.2 T6.2: a v4 row is only decodable WITH these two. The descriptors carry what every cell used
+    # to repeat (policy_ref, join_name); the wire schema carries what `s`/`d` mean. Both travel with the
+    # generation so a consumer holding only the generation can read it — and both are re-derived from
+    # trusted sources by each validator rather than believed.
+    gw.add_json(FIELD_DESCRIPTORS_CHILD, build_field_descriptors(policy.doc),
+                schema_version=FIELD_DESCRIPTORS_SCHEMA)
+    gw.add_json(WIRE_SCHEMA_CHILD, load_observation_wire_schema(),
+                schema_version="coa-observation-wire-v1")
     # The contract the generation is produced under travels WITH it (E0R.2 T1.1): staged as a child so a
     # consumer can re-check the generation under its own contract, and named in `binding` so the staged
     # copy is covered by candidate_trust_sha256 rather than trusted on its own word.

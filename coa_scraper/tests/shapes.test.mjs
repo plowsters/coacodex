@@ -8,14 +8,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SHAPES, ShapeError } from "../scripts/lib/shapes.mjs";
-import { loadCurrentContract } from "../scripts/lib/generation.mjs";
+import { loadContractRegistry, loadSupportedContract } from "../scripts/lib/generation.mjs";
+import fs from "node:fs";
+const WIRE_REASONS = JSON.parse(fs.readFileSync(
+  new URL("../../coa_client_extract/data/observation_wire_schema.json", import.meta.url),
+  "utf8")).decoded_reasons;
 import { goldenDocuments, goldenRows, producerSpellRows } from "./helpers/golden.mjs";
 
 const SHAPE_NAMES = Object.keys(SHAPES).sort();
 
-test("the contract names exactly the implemented shapes", () => {
-  const contracted = new Set(Object.values(loadCurrentContract()[1].children).map((s) => s.shape));
+test("every SUPPORTED revision's shapes are implemented, and nothing else is", () => {
+  // E0R.2 T6.2: the union over SUPPORTED revisions, not just `current`. A revision stays in the
+  // registry so generations published under it remain resolvable — which is only true if the shapes it
+  // names are still implemented. `full_spell_row_v3` is exactly that case: retired from the current
+  // contract, retained here.
+  const registry = loadContractRegistry();
+  const contracted = new Set();
+  for (const [revision, entry] of Object.entries(registry.supported)) {
+    const contract = loadSupportedContract(revision, entry.sha256);
+    for (const spec of Object.values(contract.children)) contracted.add(spec.shape);
+  }
   assert.deepEqual([...contracted].sort(), SHAPE_NAMES);
+  assert.ok(contracted.has("full_spell_row_v3"), "a supported revision's shape may never be deleted");
 });
 
 test("Node implements exactly the shapes Python implements", () => {
@@ -42,7 +56,7 @@ for (const shape of SHAPE_NAMES) {
 
 test("the producer rows satisfy the same shapes as the corpus", () => {
   const { full, projection, icon } = producerSpellRows();
-  SHAPES.full_spell_row_v3(full);
+  SHAPES.full_spell_row_v4(full);
   SHAPES.projection_row_v3(projection);
   SHAPES.icon_row_v1(icon);
 });
@@ -127,16 +141,16 @@ test("a string observation may resolve to null but not to a number", () => {
 test("mechanics values may be null but the keys may not be absent", () => {
   const { full } = producerSpellRows();
   for (const key of Object.keys(full.mechanics)) full.mechanics[key] = null;
-  SHAPES.full_spell_row_v3(full);
+  SHAPES.full_spell_row_v4(full);
   full.mechanics.power_type = "3";
-  assert.throws(() => SHAPES.full_spell_row_v3(full), /power_type/);
+  assert.throws(() => SHAPES.full_spell_row_v4(full), /power_type/);
 });
 
 test("a domain-gated school_mask row is structurally valid", () => {
   const { full } = producerSpellRows();
   full.mechanics.school_mask = null;
-  full.raw.school_mask.decoded_reason = "value_out_of_domain";
-  SHAPES.full_spell_row_v3(full);
+  full.raw.school_mask.d = WIRE_REASONS.value_out_of_domain;   // v4: the interned code, not the name
+  SHAPES.full_spell_row_v4(full);
 });
 
 // --- ancillary rows ---

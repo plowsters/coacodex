@@ -1,4 +1,5 @@
 # tests/test_publish_e0r.py
+from coa_client_extract.contracts import decoded_reason_code, observation_state_code
 import pytest
 from pathlib import Path
 from coa_client_extract.publish import (
@@ -27,19 +28,18 @@ def _domain_raw(sid):
     and the join UNRESOLVED (index_zero) — which is still an observation, not an absence."""
     policy = v2_policy()
     joins = set(policy.doc.get("joins", {}))
+    unresolved, present = observation_state_code("unresolved"), observation_state_code("present")
     raw = {}
+    # E0R.2 T6.2 (v4): the pointer and the join name come from the descriptors, the vocabulary is
+    # interned. What each cell MEANS is unchanged — only what it repeats.
     for field in policy.artifact_contract["required_raw_observations"]:
         if field in joins:
-            spec = policy.doc["joins"][field]
-            raw[field] = {"join_name": field, "state": "unresolved", "decoded_reason": "index_zero",
-                          "policy_ref": f"/tables/Spell/fields/{spec['index_field']}"}
+            raw[field] = {"s": unresolved, "d": decoded_reason_code("index_zero")}
         elif policy.doc["tables"]["Spell"]["fields"][field]["kind"] == "string":
-            raw[field] = {"state": "unresolved", "decoded_reason": "not_present",
-                          "policy_ref": f"/tables/Spell/fields/{field}",
+            raw[field] = {"s": unresolved, "d": decoded_reason_code("not_present"),
                           "raw_offset": 0, "resolved": None}
         else:
-            raw[field] = {"state": "present", "decoded_reason": "decoded",
-                          "policy_ref": f"/tables/Spell/fields/{field}", "raw_u32": sid}
+            raw[field] = {"s": present, "d": decoded_reason_code("decoded"), "raw_u32": sid}
     return raw
 
 
@@ -50,17 +50,19 @@ def _domain_mechanics():
 
 def _full(sid, **extra):
     # the COMPACT full-child dialect: carries `raw`, never `field_observations`
-    return {"schema_version": "coa-client-spell-v3", "spell_id": sid, "coa_attribution": {"is_coa": True},
+    return {"schema_version": "coa-client-spell-v4", "spell_id": sid, "coa_attribution": {"is_coa": True},
             "name": None, "mechanics": _domain_mechanics(), "raw": _domain_raw(sid), **extra}
 
 
 def _proj(sid, **extra):
     # the RICH projection dialect: carries `field_observations`, never `raw`
-    from coa_client_extract.spell_record import _expand_compact
+    from coa_client_extract.spell_record import _expand_compact, build_field_descriptors
     policy = v2_policy()
+    descriptors = build_field_descriptors(policy.doc)
     return {"schema_version": "coa-client-spell-projection-v3", "spell_id": sid,
             "coa_attribution": {"is_coa": True}, "name": None, "mechanics": _domain_mechanics(),
-            "field_observations": {f: _expand_compact(cell, policy)
+            "field_observations": {f: _expand_compact(cell, policy, field=f, descriptors=descriptors,
+                                                      row_schema="coa-client-spell-v4")
                                    for f, cell in _domain_raw(sid).items()}, **extra}
 
 

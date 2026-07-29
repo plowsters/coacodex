@@ -958,6 +958,12 @@ function writeGenerationFixture(root, projRecords) {
     "coa_client_tab_types.jsonl": jsonl([]),
     "coa_client_essence.jsonl": jsonl([]),
     "spell_layout_v2.json": Buffer.from(JSON.stringify({ schema_version: "coa-spell-layout-v2" })),
+    // E0R.2 T6.2 added both to the contract: a v4 generation is not decodable without them, so the
+    // resolver requires them and this fixture stages them.
+    "coa_client_spell_fields.json": Buffer.from(JSON.stringify(
+      { schema_version: "coa-client-spell-fields-v1", policy_sha256: "x", fields: {} })),
+    "observation_wire_schema.json": fs.readFileSync(
+      new URL("../../coa_client_extract/data/observation_wire_schema.json", import.meta.url)),
     [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(loadCurrentContract()[1])),
   };
   const children = {};

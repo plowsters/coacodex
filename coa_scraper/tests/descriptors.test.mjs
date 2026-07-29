@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 
 import { DescriptorError, FIELD_DESCRIPTORS_SCHEMA, buildFieldDescriptors, expandCompact,
          requireFieldDescriptors } from "../scripts/lib/mechanics-projection.mjs";
+import { validateCandidateByPath } from "../scripts/lib/generation.mjs";
+import { buildCandidate } from "./helpers/candidate.mjs";
 
 const CORPUS = path.join(fileURLToPath(new URL("../../tests/golden/e0r1_corpus/", import.meta.url)));
 
@@ -128,3 +130,25 @@ for (const [name, mutate, match] of [
     assert.throws(() => requireFieldDescriptors(staged, doc), match);
   });
 }
+
+// === E0R.2 T6.2 — the generation-level gate ======================================================
+// A staged decoder is checked against what this validator derives, not read. Independently of Python:
+// two boundaries agreeing only because one told the other is not agreement.
+
+test("a generation whose staged descriptor disagrees with its policy is rejected", () => {
+  const { genDir, lockPath } = buildCandidate({
+    forgeDescriptors: (d) => { d.fields.power_type.policy_ref = "/tables/Spell/fields/school_mask"; } });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /power_type/);
+});
+
+test("a generation whose staged wire schema renumbers a code is rejected", () => {
+  // The sharpest case: renumbering `present` changes what EVERY cell in the artifact says, at once,
+  // with every hash still valid.
+  const { genDir, lockPath } = buildCandidate({ forgeWire: (w) => { w.states.present = 7; } });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /states/);
+});
+
+test("the honest generation validates", () => {
+  const { genDir, lockPath } = buildCandidate();
+  assert.doesNotThrow(() => validateCandidateByPath(genDir, { lockPath }));
+});

@@ -16,12 +16,13 @@ import tempfile
 from pathlib import Path
 
 CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
+CORPUS_V4 = Path(__file__).resolve().parent / "golden" / "e0r2_corpus_v4"
 
 _GENERATION: Path | None = None
 
 
-def _corpus_row(name: str, case: str) -> dict:
-    for line in (CORPUS / name).read_text().splitlines():
+def _corpus_row(name: str, case: str, corpus: Path = CORPUS) -> dict:
+    for line in (corpus / name).read_text().splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
@@ -65,6 +66,16 @@ _CORPUS_SHAPES = {
     "projection_row_v3": ("projection_rows.jsonl", "valid"),
     "icon_row_v1": ("icons.jsonl", "valid_icon"),
 }
+# E0R.2 T6.2: the v4 baseline lives in its own corpus directory BESIDE the v3 one, because `e0r-v1`
+# stays a supported revision and its rows must keep validating against the shape they were produced
+# with. Everything else in the corpus is shared — the projection dialect does not change in v4.
+_CORPUS_V4_SHAPES = {
+    "full_spell_row_v4": ("full_rows.jsonl", "valid_full"),
+}
+_PRODUCER_DOC_SHAPES_V4 = {
+    "spell_field_descriptors_v1": "coa_client_spell_fields.json",
+    "observation_wire_v1": "observation_wire_schema.json",
+}
 _PRODUCER_ROW_SHAPES = {
     "content_row_v1": "coa_client_content.jsonl",
     "advancement_row_v1": "coa_client_advancement.jsonl",
@@ -83,6 +94,10 @@ _PRODUCER_DOC_SHAPES = {
 def golden_rows(shape: str) -> dict:
     if shape in _CORPUS_SHAPES:
         return _corpus_row(*_CORPUS_SHAPES[shape])
+    if shape in _CORPUS_V4_SHAPES:
+        return _corpus_row(*_CORPUS_V4_SHAPES[shape], corpus=CORPUS_V4)
+    if shape in _PRODUCER_DOC_SHAPES_V4:
+        return _document(_PRODUCER_DOC_SHAPES_V4[shape])
     if shape in _PRODUCER_ROW_SHAPES:
         return _first_row(_PRODUCER_ROW_SHAPES[shape])
     if shape in _PRODUCER_DOC_SHAPES:

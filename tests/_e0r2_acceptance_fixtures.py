@@ -25,7 +25,7 @@ from pathlib import Path
 from coa_client_extract.publish import GenerationWriter
 from coa_client_extract.spell_mechanics import SCHEMA as RECON_SCHEMA
 from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract, staged_writer)
+                                  stage_generation_contract, staged_writer, stage_v4_documents)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -51,7 +51,7 @@ def stage_minimal(root) -> GenerationWriter:
     """A generation with every required child but no bound policy — used only where the test is about
     something upstream of the T4.3 identity check."""
     gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell.jsonl", [], schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell.jsonl", [], schema_version="coa-client-spell-v4")
     gw.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
     gw.add_json("coa_client_spell_projection.manifest.json",
                 {"schema_version": "coa-client-spell-projection-manifest-v3"},
@@ -64,6 +64,7 @@ def stage_minimal(root) -> GenerationWriter:
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                 schema_version="coa-spell-layout-v2")
+    stage_v4_documents(gw)
     stage_generation_contract(gw)
     return gw
 

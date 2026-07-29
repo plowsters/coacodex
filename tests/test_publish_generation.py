@@ -13,7 +13,7 @@ from coa_client_extract.publish import (
 )
 
 from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract)
+                                  stage_generation_contract, stage_v4_documents)
 
 
 def _base():
@@ -35,8 +35,8 @@ def _binding():
 def _publish(root, *, spell_id=1, inv=None):
     w = GenerationWriter(root)
     w.add_jsonl("coa_client_spell.jsonl",
-                [{"schema_version": "coa-client-spell-v3", "spell_id": spell_id, "raw": {}, "mechanics": {},
-                  "coa_attribution": {"is_coa": False}}], schema_version="coa-client-spell-v3")
+                [{"schema_version": "coa-client-spell-v4", "spell_id": spell_id, "raw": {}, "mechanics": {},
+                  "coa_attribution": {"is_coa": False}}], schema_version="coa-client-spell-v4")
     w.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
     w.add_json("coa_client_spell_projection.manifest.json",
                {"schema_version": "coa-client-spell-projection-manifest-v3"},
@@ -49,6 +49,7 @@ def _publish(root, *, spell_id=1, inv=None):
                schema_version="coa-client-archive-plan-v1")
     w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                schema_version="coa-spell-layout-v2")
+    stage_v4_documents(w)
     stage_generation_contract(w)
     candidate = w.publish_candidate(base_manifest=_base(), binding=_binding(),
                                     unknown_symbol_inventory=inv or {"power_type": [7], "school_bits": []})

@@ -43,7 +43,7 @@ def test_spell_805775_is_current_adrenal_venom(tmp_path):
     venom = by_id[805775]
     # The full-table child is the compact client-DBC v3 row: identity + normalized mechanics + attribution
     # + compact raw; per-row provenance/proof are hoisted to the manifest binding (design A4).
-    assert venom["schema_version"] == "coa-client-spell-v3"
+    assert venom["schema_version"] == "coa-client-spell-v4"
     assert "Adrenal Venom" in venom["name"]
     assert "Fang Venom" not in venom["name"]  # not the stale db value
     assert venom["coa_attribution"]["policy_sha256"]           # v3: policy pinned on the row's attribution

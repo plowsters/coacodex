@@ -10,10 +10,14 @@ import crypto from "node:crypto";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, REQUIRED_CHILDREN,
          generationContractSha256, loadCurrentContract } from "../../scripts/lib/generation.mjs";
+import { FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD, buildFieldDescriptors }
+  from "../../scripts/lib/mechanics-projection.mjs";
 import { goldenRows } from "./golden.mjs";
 
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CORPUS = new URL("../../../tests/golden/e0r1_corpus/", import.meta.url);
+const CORPUS_V4 = new URL("../../../tests/golden/e0r2_corpus_v4/", import.meta.url);
+const WIRE_SCHEMA_PATH = new URL("../../../coa_client_extract/data/observation_wire_schema.json", import.meta.url);
 
 // E0R.2 T2.1: a fixture must stage a policy that actually BINDS a source domain, sized to what it
 // stages, or the cardinality rules have nothing to resolve against. Mirrors tests/_e0r2_fixtures.py.
@@ -94,16 +98,23 @@ export function topologyReportFor(doc) {
 export function loadCorpus() {
   const rows = (name) => fs.readFileSync(new URL(name, CORPUS), "utf8")
     .split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  // E0R.2 T6.2: the v4 full rows live BESIDE the v3 ones (e0r-v1 stays supported, so the v3 baseline
+  // must keep validating). Everything else — policy, projection, icons — is shared: the projection
+  // dialect does not change in v4, and a second copy could only drift.
+  const v4Rows = (name) => fs.readFileSync(new URL(name, CORPUS_V4), "utf8")
+    .split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
   const strip = (r) => { const { case: _c, golden_accept: _g, ...rest } = r; return rest; };
   const pick = (list, ...cases) => list.filter((r) => cases.includes(r.case)).map(strip);
   return {
     policy: JSON.parse(fs.readFileSync(new URL("policy.json", CORPUS), "utf8")),
     projection: rows("projection_rows.jsonl"),
     full: rows("full_rows.jsonl"),
+    fullV4: v4Rows("full_rows.jsonl"),
     icons: rows("icons.jsonl"),
     pick, strip,
     // the valid baselines (case "valid"/"valid_full"/"valid_icon"), stripped of the corpus labels
-    validFull() { return pick(rows("full_rows.jsonl"), "valid_full"); },
+    validFull() { return pick(v4Rows("full_rows.jsonl"), "valid_full"); },
+    validFullV3() { return pick(rows("full_rows.jsonl"), "valid_full"); },
     validProj() { return pick(rows("projection_rows.jsonl"), "valid"); },
     validIcons() { return pick(rows("icons.jsonl"), "valid_icon"); },
   };
@@ -114,7 +125,7 @@ function countRecords(buf) {
 }
 
 const SCHEMA_FOR = {
-  "coa_client_spell.jsonl": "coa-client-spell-v3",
+  "coa_client_spell.jsonl": "coa-client-spell-v4",
   "coa_client_spell_coa.jsonl": "coa-client-spell-projection-v3",
   "coa_client_spell_projection.manifest.json": "coa-client-spell-projection-manifest-v3",
   "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v1",
@@ -125,6 +136,8 @@ const SCHEMA_FOR = {
   "coa_client_tab_types.jsonl": "coa-client-tab-types-v1",
   "coa_client_essence.jsonl": "coa-client-essence-v1",
   "spell_layout_v2.json": "coa-spell-layout-v2",
+  [FIELD_DESCRIPTORS_CHILD]: "coa-client-spell-fields-v1",
+  [WIRE_SCHEMA_CHILD]: "coa-observation-wire-v1",
   [GENERATION_CONTRACT_CHILD]: GENERATION_CONTRACT_SCHEMA,
 };
 
@@ -132,18 +145,18 @@ const SCHEMA_FOR = {
 // `current` — is what the validator checks. Nothing is faked: both files are real, validated documents.
 export function writeTwoRevisionRegistry(dir) {
   const [, v1] = loadCurrentContract();
-  const v2 = { ...structuredClone(v1), revision: "e0r-v2",
+  const v2 = { ...structuredClone(v1), revision: "e0r-test-successor",
                note: "IMMUTABLE. Successor revision used to prove an older revision stays resolvable." };
   fs.mkdirSync(dir, { recursive: true });
-  for (const [doc, name] of [[v1, "e0r-v1.json"], [v2, "e0r-v2.json"]]) {
+  for (const [doc, name] of [[v1, "e0r-current.json"], [v2, "e0r-test-successor.json"]]) {
     fs.writeFileSync(path.join(dir, name), JSON.stringify(doc, null, 2) + "\n");
   }
   fs.writeFileSync(path.join(dir, "index.json"), JSON.stringify({
     schema_version: "coa-generation-contract-index-v1",
-    current: "e0r-v2",
+    current: "e0r-test-successor",
     supported: {
-      "e0r-v1": { path: "e0r-v1.json", sha256: generationContractSha256(v1) },
-      "e0r-v2": { path: "e0r-v2.json", sha256: generationContractSha256(v2) },
+      [v1.revision]: { path: "e0r-current.json", sha256: generationContractSha256(v1) },
+      "e0r-test-successor": { path: "e0r-test-successor.json", sha256: generationContractSha256(v2) },
     },
   }, null, 2) + "\n");
   // A directory URL (trailing slash) so `new URL(entry.path, dir)` resolves inside it.
@@ -156,6 +169,20 @@ export function writeTwoRevisionRegistry(dir) {
 //   {contract: [revision, doc]} stages and binds an explicit revision instead of `current`;
 //   {contractMutate} tampers the STAGED copy (the binding follows it, so the registry leg fires);
 //   {bindOverride} desynchronizes the binding from the staged copy (so the binding leg fires).
+// The two v4 decoder children, with knobs so a test can stage one that DISAGREES with the policy or
+// with the trusted vocabulary — the only way to prove the validator derives them instead of reading them.
+function stagedDescriptors(policy, opts) {
+  const doc = buildFieldDescriptors(policy);
+  if (opts.forgeDescriptors) opts.forgeDescriptors(doc);
+  return doc;
+}
+
+function stagedWire(opts) {
+  const doc = JSON.parse(fs.readFileSync(WIRE_SCHEMA_PATH, "utf8"));
+  if (opts.forgeWire) opts.forgeWire(doc);
+  return doc;
+}
+
 export function buildCandidate(opts = {}) {
   const corpus = loadCorpus();
   const full = opts.full || corpus.validFull();
@@ -198,6 +225,9 @@ export function buildCandidate(opts = {}) {
     "coa_client_tab_types.jsonl": jsonl(rows("tab_type_row_v1", ancillaryCounts.CharacterAdvancementTabTypes)),
     "coa_client_essence.jsonl": jsonl(rows("essence_row_v1", ancillaryCounts.CharacterAdvancementEssence)),
     "spell_layout_v2.json": Buffer.from(JSON.stringify(policy)),
+    // E0R.2 T6.2: a v4 row is only decodable WITH these two, so a generation ships both.
+    [FIELD_DESCRIPTORS_CHILD]: Buffer.from(JSON.stringify(stagedDescriptors(policy, opts))),
+    [WIRE_SCHEMA_CHILD]: Buffer.from(JSON.stringify(stagedWire(opts))),
     [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(contract)),
   };
   if (opts.truncateChild) {

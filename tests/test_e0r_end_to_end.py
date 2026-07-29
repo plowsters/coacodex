@@ -16,7 +16,7 @@ from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_vie
 from tests._e0r2_fixtures import (ANCILLARY_TABLES, GENEROUS_CEILINGS, bind_policy_doc, clean_budget,
                                   generation_contract_binding,
                                   policy_binding, stage_generation_contract, validate_staged,
-                                  write_lock)
+                                  write_lock, stage_v4_documents)
 
 
 def _resolver(path):
@@ -38,7 +38,7 @@ def _stage_full_generation(root: Path):
     icons = sorted(iter_icon_catalog(spell_dbc(), icon_side_views(), policy=v2_icon_policy(),
                                      asset_resolver=_resolver), key=lambda r: r["spell_id"])
     gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v4")
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
     gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
     from tests.golden import golden_rows
@@ -53,6 +53,7 @@ def _stage_full_generation(root: Path):
                                  ancillary_records={t: 0 for t in ANCILLARY_TABLES}, content_entries=0)
     write_lock(gw.root, policy_doc)
     gw.add_json("spell_layout_v2.json", policy_doc, schema_version="coa-spell-layout-v2")
+    stage_v4_documents(gw, policy_doc)
     staged = stage_generation_contract(gw)
     binding = {**policy_binding(policy_doc), **generation_contract_binding(staged), "derivations": {
         "coa_client_advancement.jsonl": {"source": "CharacterAdvancement", "kept": 0, "rejected": 0},

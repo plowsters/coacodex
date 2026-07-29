@@ -180,8 +180,120 @@ function cols(value, where) {
   }
 }
 
+// --- E0R.2 T6.2: the v4 (hoisted + interned) compact dialect ------------------------------------
+// REGISTERED BESIDE v3, never in place of it: `e0r-v1` stays a supported contract revision, so a
+// generation published under it must still validate. What v4 drops is the DUAL-ENCODING tolerance
+// within one schema — a v4 cell that repeats a hoisted key could contradict the descriptor.
+const V4_SUBSTRATE = ["raw_u32", "raw_offset", "resolved"];
+const STATE_CODES = new Set(Object.values(WIRE.states));
+const REASON_CODES = new Set(Object.values(WIRE.decoded_reasons));
+
+function codedVocabulary(cell, where) {
+  for (const [key, codes, what] of [["s", STATE_CODES, "state"], ["d", REASON_CODES, "decoded_reason"]]) {
+    const code = cell[key];
+    if (!Number.isInteger(code) || !codes.has(code)) {
+      fail(`${where}.${key}`, `${what} code ${JSON.stringify(code)} is outside the closed vocabulary ${JSON.stringify([...codes].sort())}`);
+    }
+  }
+}
+
+function observationV4(cell, where, { part = false } = {}) {
+  obj(cell, where);
+  codedVocabulary(cell, where);
+  for (const key of ["policy_ref", "join_name", "state", "decoded_reason"]) {
+    if (key in cell) fail(`${where}.${key}`, "is hoisted into the field descriptors in v4 and must not be repeated");
+  }
+  keys(cell, { required: ["s", "d"],
+               optional: part ? V4_SUBSTRATE : [...V4_SUBSTRATE, "components"], where });
+  if ("raw_u32" in cell) int(cell.raw_u32, `${where}.raw_u32`, { nullable: true });
+  if ("raw_offset" in cell) {
+    int(cell.raw_offset, `${where}.raw_offset`, { nullable: true });
+    str(cell.resolved, `${where}.resolved`, { nullable: true });
+  }
+  if ("components" in cell) {
+    const components = obj(cell.components, `${where}.components`);
+    const unknown = Object.keys(components).filter((k) => !JOIN_PARTS.has(k)).sort();
+    if (unknown.length) fail(`${where}.components`, `unknown join part(s) ${JSON.stringify(unknown)}`);
+    for (const [name, component] of Object.entries(components)) {
+      observationV4(component, `${where}.components.${name}`, { part: true });
+    }
+  }
+}
+
 export const SHAPES = {
   full_spell_row_v3: (row) => spellRow(row, { rich: false, schemaVersion: "coa-client-spell-v3", where: "full_spell_row_v3" }),
+
+  full_spell_row_v4(row) {
+    const where = "full_spell_row_v4";
+    obj(row, where);
+    keys(row, { required: ["schema_version", "spell_id", "name", "mechanics", "coa_attribution", "raw"],
+                optional: ["description"], where });
+    if (row.schema_version !== "coa-client-spell-v4") fail(`${where}.schema_version`, `${row.schema_version} != coa-client-spell-v4`);
+    int(row.spell_id, `${where}.spell_id`);
+    str(row.name, `${where}.name`, { nullable: true });
+    const mechanics = obj(row.mechanics, `${where}.mechanics`);
+    for (const [key, value] of Object.entries(mechanics)) num(value, `${where}.mechanics.${key}`, { nullable: true });
+    attribution(row.coa_attribution, `${where}.coa_attribution`);
+    const cells = obj(row.raw, `${where}.raw`);
+    if (!Object.keys(cells).length) fail(`${where}.raw`, "carries no observations: a row with no substrate is not lossless");
+    for (const [field, cell] of Object.entries(cells)) observationV4(cell, `${where}.raw.${field}`);
+    return row;
+  },
+
+  // Structure only. WHETHER the descriptors describe this policy is answered by requireFieldDescriptors
+  // re-deriving them — a shape has no policy to check against.
+  spell_field_descriptors_v1(doc) {
+    const where = "spell_field_descriptors_v1";
+    obj(doc, where);
+    keys(doc, { required: ["schema_version", "policy_sha256", "fields"], where });
+    if (doc.schema_version !== "coa-client-spell-fields-v1") fail(`${where}.schema_version`, doc.schema_version);
+    str(doc.policy_sha256, `${where}.policy_sha256`);
+    const fields = obj(doc.fields, `${where}.fields`);
+    if (!Object.keys(fields).length) fail(`${where}.fields`, "describes no field: a v4 row would be undecodable");
+    for (const [name, entry] of Object.entries(fields)) {
+      const at = `${where}.fields.${name}`;
+      obj(entry, at);
+      if (entry.kind === "scalar") {
+        keys(entry, { required: ["kind", "policy_ref"], where: at });
+        str(entry.policy_ref, `${at}.policy_ref`);
+      } else if (entry.kind === "join") {
+        keys(entry, { required: ["kind", "join_name", "index_policy_ref", "components"], where: at });
+        str(entry.join_name, `${at}.join_name`);
+        str(entry.index_policy_ref, `${at}.index_policy_ref`);
+        const components = obj(entry.components, `${at}.components`);
+        const got = Object.keys(components).sort();
+        if (got.length !== JOIN_PARTS.size || got.some((k) => !JOIN_PARTS.has(k))) {
+          fail(`${at}.components`, `must describe exactly ${JSON.stringify([...JOIN_PARTS].sort())}; a resolved join cannot be reconstructed from fewer`);
+        }
+        for (const [part, component] of Object.entries(components)) {
+          obj(component, `${at}.components.${part}`);
+          keys(component, { required: ["policy_ref"], where: `${at}.components.${part}` });
+          str(component.policy_ref, `${at}.components.${part}.policy_ref`);
+        }
+      } else {
+        fail(`${at}.kind`, `${JSON.stringify(entry.kind)} not in ("scalar", "join")`);
+      }
+    }
+    return doc;
+  },
+
+  // Structure only; whether it EQUALS the trusted copy is decided by requireObservationWire.
+  observation_wire_v1(doc) {
+    const where = "observation_wire_v1";
+    obj(doc, where);
+    keys(doc, { required: ["schema_version", "states", "decoded_reasons"], optional: ["note"], where });
+    if (doc.schema_version !== "coa-observation-wire-v1") fail(`${where}.schema_version`, doc.schema_version);
+    for (const group of ["states", "decoded_reasons"]) {
+      const table = obj(doc[group], `${where}.${group}`);
+      const entries = Object.entries(table);
+      if (!entries.length) fail(`${where}.${group}`, "is empty");
+      for (const [name, code] of entries) int(code, `${where}.${group}.${name}`);
+      if (new Set(entries.map(([, c]) => c)).size !== entries.length) {
+        fail(`${where}.${group}`, "codes are not unique; a cell would decode to two different names");
+      }
+    }
+    return doc;
+  },
 
   projection_row_v3: (row) => spellRow(row, { rich: true, schemaVersion: "coa-client-spell-projection-v3", where: "projection_row_v3" }),
 

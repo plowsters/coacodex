@@ -7,7 +7,8 @@ compact child is provably lossless.
 """
 from coa_client_extract.spell_layout import load_default_policy
 from coa_client_extract.spell_record import (
-    iter_spell_records, project_v3_row, _expand_compact, PROJECTION_SCHEMA_V3)
+    iter_spell_records, project_v3_row, _expand_compact, build_field_descriptors,
+    PROJECTION_SCHEMA_V3)
 from tests._spell_fixtures import spell_dbc, side_views, v2_policy
 
 
@@ -38,11 +39,16 @@ def test_projection_preserves_identity_mechanics_attribution():
 
 
 def test_expand_compact_is_the_cross_child_inverse_for_every_field():
+    """E0R.2 T6.2: a v4 cell no longer carries its own pointer, so expansion is handed the field name and
+    the policy-derived descriptors — the same two the validators derive. The EQUALITY is unchanged, which
+    is the point: the encoding moved, the contract did not."""
     policy = v2_policy()
+    descriptors = build_field_descriptors(policy.doc)
     compact = _compact_by_id()[133]
     proj = project_v3_row(compact, policy)
     for f, cell in compact["raw"].items():
-        assert _expand_compact(cell, policy) == proj["field_observations"][f], f
+        assert _expand_compact(cell, policy, field=f, descriptors=descriptors,
+                               row_schema=compact["schema_version"]) == proj["field_observations"][f], f
 
 
 def test_resolved_join_expands_with_components_and_decoded():

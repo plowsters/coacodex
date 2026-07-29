@@ -182,26 +182,33 @@ def test_candidate_trust_covers_the_bound_contract_hash(tmp_path):
 
 # --- the property the whole design exists for: an OLDER supported revision still resolves ---
 
+SUCCESSOR = "e0r-test-successor"
+
+
 def _install_two_revision_registry(tmp_path, monkeypatch):
     """A real second revision on disk, with `current` moved to it. Nothing is faked: both files are
     authored, validated and hash-pinned exactly as the shipped registry is."""
+    # The successor is named for its ROLE, not `e0r-vN`: T6.2 shipped a real e0r-v2, and a synthetic
+    # revision sharing a shipped name would be checked against the shipped digest and fail for a reason
+    # that has nothing to do with what the test is about.
     _, v1 = load_current_contract()
     v1 = copy.deepcopy(v1)
     v2 = copy.deepcopy(v1)
-    v2["revision"] = "e0r-v2"
+    v2["revision"] = SUCCESSOR
     v2["note"] = "IMMUTABLE. Successor revision used to prove an older revision stays resolvable."
 
     contracts_dir = tmp_path / "generation_contracts"
     contracts_dir.mkdir(parents=True)
-    for doc, name in ((v1, "e0r-v1.json"), (v2, "e0r-v2.json")):
+    for doc, name in ((v1, f"{v1['revision']}.json"), (v2, f"{SUCCESSOR}.json")):
         (contracts_dir / name).write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
                                           encoding="utf-8")
     (contracts_dir / "index.json").write_text(json.dumps({
         "schema_version": "coa-generation-contract-index-v1",
-        "current": "e0r-v2",
+        "current": SUCCESSOR,
         "supported": {
-            "e0r-v1": {"path": "e0r-v1.json", "sha256": generation_contract_sha256(v1)},
-            "e0r-v2": {"path": "e0r-v2.json", "sha256": generation_contract_sha256(v2)},
+            v1["revision"]: {"path": f"{v1['revision']}.json",
+                             "sha256": generation_contract_sha256(v1)},
+            SUCCESSOR: {"path": f"{SUCCESSOR}.json", "sha256": generation_contract_sha256(v2)},
         },
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -215,22 +222,22 @@ def test_a_generation_under_a_NON_CURRENT_but_supported_revision_still_validates
     """Rollback and predecessor-chain resolution depend on this: WS6 adds e0r-v2 and moves `current`,
     and every generation published under e0r-v1 must remain independently resolvable."""
     v1, _ = _install_two_revision_registry(tmp_path / "registry", monkeypatch)
-    assert load_current_contract()[0] == "e0r-v2"          # the generation below is NOT under `current`
+    assert load_current_contract()[0] == SUCCESSOR         # the generation below is NOT under `current`
 
-    gen = stage_minimal_generation(tmp_path / "dist", contract=("e0r-v1", v1))
+    gen = stage_minimal_generation(tmp_path / "dist", contract=(v1["revision"], v1))
     resolved = validate_staged(gen)
-    assert resolved["manifest"]["binding"]["generation_contract"]["revision"] == "e0r-v1"
+    assert resolved["manifest"]["binding"]["generation_contract"]["revision"] == v1["revision"]
 
 
 def test_a_revision_dropped_from_the_registry_stops_resolving(tmp_path, monkeypatch):
     """The converse: membership is what is checked, so removing a revision is a real, visible decision
     rather than a silent one."""
     v1, _ = _install_two_revision_registry(tmp_path / "registry", monkeypatch)
-    gen = stage_minimal_generation(tmp_path / "dist", contract=("e0r-v1", v1))
+    gen = stage_minimal_generation(tmp_path / "dist", contract=(v1["revision"], v1))
 
     index_path = contracts_mod.CONTRACTS_DIR / "index.json"
     index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["supported"].pop("e0r-v1")
+    index["supported"].pop(v1["revision"])
     index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     contracts_mod._REGISTRY_CACHE = None
     contracts_mod._CONTRACT_CACHE.clear()

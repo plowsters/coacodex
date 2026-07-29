@@ -13,7 +13,7 @@ two together is the shared golden corpus, which every shape validator runs again
 """
 from __future__ import annotations
 
-from .contracts import DECODED_REASONS, OBSERVATION_STATES
+from .contracts import DECODED_REASONS, OBSERVATION_STATES, load_observation_wire_schema
 
 _PROOF_FACETS = ("integrity", "layout", "interpretation")
 _PROMOTIONS = ("normalized", "raw_only")
@@ -222,6 +222,121 @@ def _spell_row(row, *, rich: bool, schema_version: str, where: str) -> dict:
 
 def full_spell_row_v3(row):
     return _spell_row(row, rich=False, schema_version="coa-client-spell-v3", where="full_spell_row_v3")
+
+
+# --- E0R.2 T6.2: the v4 (hoisted + interned) compact dialect -------------------------------------
+# RETAINED beside v3, not replacing it: `e0r-v1` stays a supported contract revision, so a generation
+# published under it must still validate. What v4 removes is the DUAL-ENCODING tolerance within one
+# schema — a v4 cell that repeats a hoisted key could contradict the descriptor, and there is no
+# principled winner between them.
+_V4_SUBSTRATE = ("raw_u32", "raw_offset", "resolved")
+
+
+def _coded_vocabulary(cell: dict, where: str) -> None:
+    states = load_observation_wire_schema()["states"]
+    reasons = load_observation_wire_schema()["decoded_reasons"]
+    for key, table, what in (("s", states, "state"), ("d", reasons, "decoded_reason")):
+        code = cell.get(key)
+        if isinstance(code, bool) or not isinstance(code, int) or code not in set(table.values()):
+            _fail(f"{where}.{key}", f"{what} code {code!r} is outside the closed vocabulary "
+                                    f"{sorted(set(table.values()))}")
+
+
+def _observation_v4(cell, where: str, *, part: bool = False) -> None:
+    """One v4 compact cell: two vocabulary codes plus a substrate. The join name and every policy
+    pointer live in the staged descriptors, so a cell that carries one is malformed rather than
+    generous."""
+    _obj(cell, where)
+    _coded_vocabulary(cell, where)
+    for key in ("policy_ref", "join_name", "state", "decoded_reason"):
+        if key in cell:
+            _fail(f"{where}.{key}", "is hoisted into the field descriptors in v4 and must not be repeated")
+    optional = _V4_SUBSTRATE if part else _V4_SUBSTRATE + ("components",)
+    _keys(cell, required=("s", "d"), optional=optional, where=where)
+    if "raw_u32" in cell:
+        _int(cell["raw_u32"], f"{where}.raw_u32", allow_null=True)
+    if "raw_offset" in cell:
+        _int(cell["raw_offset"], f"{where}.raw_offset", allow_null=True)
+        _str(cell["resolved"], f"{where}.resolved", allow_null=True)
+    if "components" in cell:
+        components = _obj(cell["components"], f"{where}.components")
+        unknown = sorted(set(components) - set(_JOIN_PARTS))
+        if unknown:
+            _fail(f"{where}.components", f"unknown join part(s) {unknown}")
+        for name, component in components.items():
+            _observation_v4(component, f"{where}.components.{name}", part=True)
+
+
+def full_spell_row_v4(row):
+    where = "full_spell_row_v4"
+    _obj(row, where)
+    _keys(row, required=("schema_version", "spell_id", "name", "mechanics", "coa_attribution", "raw"),
+          optional=("description",), where=where)
+    if row["schema_version"] != "coa-client-spell-v4":
+        _fail(f"{where}.schema_version", f"{row['schema_version']!r} != 'coa-client-spell-v4'")
+    _int(row["spell_id"], f"{where}.spell_id")
+    _str(row["name"], f"{where}.name", allow_null=True)
+    _mechanics(row["mechanics"], f"{where}.mechanics")
+    _attribution(row["coa_attribution"], f"{where}.coa_attribution")
+    cells = _obj(row["raw"], f"{where}.raw")
+    if not cells:
+        _fail(f"{where}.raw", "carries no observations: a row with no substrate is not lossless")
+    for field, cell in cells.items():
+        _observation_v4(cell, f"{where}.raw.{field}")
+    return row
+
+
+def spell_field_descriptors_v1(doc):
+    """Structure only. WHETHER the descriptors describe this policy is a semantic question, answered by
+    `spell_record.require_field_descriptors` re-deriving them — a shape has no policy to check against."""
+    where = "spell_field_descriptors_v1"
+    _obj(doc, where)
+    _keys(doc, required=("schema_version", "policy_sha256", "fields"), where=where)
+    if doc["schema_version"] != "coa-client-spell-fields-v1":
+        _fail(f"{where}.schema_version", f"{doc['schema_version']!r}")
+    _str(doc["policy_sha256"], f"{where}.policy_sha256")
+    fields = _obj(doc["fields"], f"{where}.fields")
+    if not fields:
+        _fail(f"{where}.fields", "describes no field: a v4 row would be undecodable")
+    for name, entry in fields.items():
+        at = f"{where}.fields.{name}"
+        _obj(entry, at)
+        if entry.get("kind") == "scalar":
+            _keys(entry, required=("kind", "policy_ref"), where=at)
+            _str(entry["policy_ref"], f"{at}.policy_ref")
+        elif entry.get("kind") == "join":
+            _keys(entry, required=("kind", "join_name", "index_policy_ref", "components"), where=at)
+            _str(entry["join_name"], f"{at}.join_name")
+            _str(entry["index_policy_ref"], f"{at}.index_policy_ref")
+            components = _obj(entry["components"], f"{at}.components")
+            if set(components) != set(_JOIN_PARTS):
+                _fail(f"{at}.components", f"must describe exactly {sorted(_JOIN_PARTS)}; a resolved join "
+                                          "cannot be reconstructed from fewer")
+            for part, component in components.items():
+                _obj(component, f"{at}.components.{part}")
+                _keys(component, required=("policy_ref",), where=f"{at}.components.{part}")
+                _str(component["policy_ref"], f"{at}.components.{part}.policy_ref")
+        else:
+            _fail(f"{at}.kind", f"{entry.get('kind')!r} not in ('scalar', 'join')")
+    return doc
+
+
+def observation_wire_v1(doc):
+    """Structure only; `contracts.require_observation_wire` decides whether it equals the trusted copy."""
+    where = "observation_wire_v1"
+    _obj(doc, where)
+    _keys(doc, required=("schema_version", "states", "decoded_reasons"), optional=("note",), where=where)
+    if doc["schema_version"] != "coa-observation-wire-v1":
+        _fail(f"{where}.schema_version", f"{doc['schema_version']!r}")
+    for group in ("states", "decoded_reasons"):
+        table = _obj(doc[group], f"{where}.{group}")
+        if not table:
+            _fail(f"{where}.{group}", "is empty")
+        for name, code in table.items():
+            _int(code, f"{where}.{group}.{name}")
+        if len(set(table.values())) != len(table):
+            _fail(f"{where}.{group}", "codes are not unique; a cell would decode to two different names")
+    return doc
 
 
 def projection_row_v3(row):
@@ -441,6 +556,11 @@ def generation_contract_v1(doc):
 
 SHAPES = {
     "full_spell_row_v3": full_spell_row_v3,
+    # E0R.2 T6.2: v4 is REGISTERED BESIDE v3, never in place of it — `e0r-v1` stays supported, so a
+    # generation published under it must still validate against the shape it was produced with.
+    "full_spell_row_v4": full_spell_row_v4,
+    "spell_field_descriptors_v1": spell_field_descriptors_v1,
+    "observation_wire_v1": observation_wire_v1,
     "projection_row_v3": projection_row_v3,
     "icon_row_v1": icon_row_v1,
     "content_row_v1": content_row_v1,

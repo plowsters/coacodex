@@ -257,7 +257,7 @@ def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
     gen_dir = resolved["gen_dir"]
     # --- the client-DBC spell child is now the compact v3 row (identity + mechanics + coa_attribution) ---
     spell = json.loads((gen_dir / "coa_client_spell.jsonl").read_text().splitlines()[0])
-    assert spell["schema_version"] == "coa-client-spell-v3"
+    assert spell["schema_version"] == "coa-client-spell-v4"
     assert spell["spell_id"] == 805775 and spell["name"] == "Adrenal Venom"
     assert spell["coa_attribution"]["is_coa"] is True          # id-floor attribution (>= 100000)
     assert spell["coa_attribution"]["id_range"] == "high"

@@ -15,7 +15,7 @@ from coa_client_extract.publish import (
 )
 
 from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract)
+                                  stage_generation_contract, stage_v4_documents)
 
 
 def _binding():
@@ -26,8 +26,8 @@ def _binding():
 def _publish(root, *, validation=None, budget=None):
     w = GenerationWriter(root)
     w.add_jsonl("coa_client_spell.jsonl",
-                [{"schema_version": "coa-client-spell-v3", "spell_id": 1, "raw": {}, "mechanics": {},
-                  "coa_attribution": {"is_coa": False}}], schema_version="coa-client-spell-v3")
+                [{"schema_version": "coa-client-spell-v4", "spell_id": 1, "raw": {}, "mechanics": {},
+                  "coa_attribution": {"is_coa": False}}], schema_version="coa-client-spell-v4")
     w.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
     w.add_json("coa_client_spell_projection.manifest.json",
                {"schema_version": "coa-client-spell-projection-manifest-v3"},
@@ -40,6 +40,7 @@ def _publish(root, *, validation=None, budget=None):
                schema_version="coa-client-archive-plan-v1")
     w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                schema_version="coa-spell-layout-v2")
+    stage_v4_documents(w)
     stage_generation_contract(w)
     base = build_manifest(backend_name="fake", backend_version="v1", stormlib_version=None,
                           client_root="/x", client_build="3.3.5a+patch-CZZ", outputs={},

@@ -17,7 +17,7 @@ from tests.test_client_extract_cli import (
     _bound_spell_policy, _client, _fake_backend, _synthetic_layouts,
 )
 from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract)
+                                  stage_generation_contract, stage_v4_documents)
 
 
 def _regenerate(client_root, out, tmp_path, **kwargs):
@@ -62,7 +62,7 @@ def _stage_minimal(root):
     """Stage every REQUIRED_CHILD with a minimal body (the strict resolver checks the registry; the
     cross-child semantics are validated at the cli layer, not by finalize)."""
     gw = GenerationWriter(root)
-    gw.add_jsonl("coa_client_spell.jsonl", [], schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell.jsonl", [], schema_version="coa-client-spell-v4")
     gw.add_jsonl("coa_client_spell_coa.jsonl", [], schema_version="coa-client-spell-projection-v3")
     gw.add_json("coa_client_spell_projection.manifest.json",
                 {"schema_version": "coa-client-spell-projection-manifest-v3"},
@@ -75,6 +75,7 @@ def _stage_minimal(root):
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                 schema_version="coa-spell-layout-v2")
+    stage_v4_documents(gw)
     stage_generation_contract(gw)
     return gw
 

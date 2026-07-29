@@ -19,10 +19,15 @@ from pathlib import Path
 
 from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
                                           generation_contract_sha256, load_current_contract)
+from coa_client_extract.contracts import load_observation_wire_schema
 from coa_client_extract.publish import GenerationWriter
 from coa_client_extract.spell_layout import compute_policy_sha256, derive_artifact_contract
+from coa_client_extract.spell_record import (FIELD_DESCRIPTORS_CHILD, FIELD_DESCRIPTORS_SCHEMA,
+                                             SPELL_SCHEMA_V4, WIRE_SCHEMA_CHILD,
+                                             build_field_descriptors)
 
 CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
+CORPUS_V4 = Path(__file__).resolve().parent / "golden" / "e0r2_corpus_v4"
 
 # The ancillary CoA tables the contract's cardinality rules name. Bound TOPOLOGY-ONLY (no `fields`),
 # exactly as T0.2 bound them in the real policy.
@@ -85,6 +90,18 @@ def bind_policy_doc(doc: dict, *, spell_records: int, ancillary_records: dict | 
     return doc
 
 
+def stage_v4_documents(gw, policy_doc: dict | None = None) -> None:
+    """Stage the two children a v4 row needs to be decodable (E0R.2 T6.2). A generation without them is
+    incomplete under `e0r-v2`, so every fixture that stages a generation by hand stages these too."""
+    gw.add_json(FIELD_DESCRIPTORS_CHILD,
+                build_field_descriptors(policy_doc) if policy_doc is not None
+                else {"schema_version": FIELD_DESCRIPTORS_SCHEMA, "policy_sha256": "0" * 64,
+                      "fields": {}},
+                schema_version=FIELD_DESCRIPTORS_SCHEMA)
+    gw.add_json(WIRE_SCHEMA_CHILD, load_observation_wire_schema(),
+                schema_version="coa-observation-wire-v1")
+
+
 def topology_report_for(doc: dict) -> dict:
     """The `binding.topology` a producer would have recorded for this bound policy — matching it
     facet-for-facet, so `topology_matches_bound` is empty."""
@@ -142,9 +159,11 @@ def stage_generation_contract(gw: GenerationWriter, *, mutate=None, contract=Non
 
 # --- the golden corpus baseline ---
 
-def corpus_rows(name: str, *cases: str) -> list[dict]:
-    """Corpus rows for the given cases, stripped of the corpus labels."""
-    rows = [json.loads(line) for line in (CORPUS / name).read_text().splitlines() if line.strip()]
+def corpus_rows(name: str, *cases: str, corpus: Path = None) -> list[dict]:
+    """Corpus rows for the given cases, stripped of the corpus labels. `corpus` selects the v3 baseline
+    (default) or the v4 one — both are committed, because `e0r-v1` stays supported (T6.2)."""
+    rows = [json.loads(line) for line in ((corpus or CORPUS) / name).read_text().splitlines()
+            if line.strip()]
     return [{k: v for k, v in r.items() if k not in ("case", "golden_accept")}
             for r in rows if r["case"] in cases]
 
@@ -173,6 +192,8 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
                     advancement_derivation=None, content_derivation=None, drop_derivations=False,
                     forge_manifest_topology_record_count=None, forge_staged_policy_bound_record_count=None,
                     forge_manifest_policy_sha256=None, unbind_staged_policy=False,
+                    # --- v4 decoder knobs (T6.2): the two children a hoisted row needs ---
+                    forge_descriptors=None, forge_wire=None,
                     return_writer=False):
     """A COMPLETE staged candidate whose policy is sized to what it stages, so the honest case validates
     and each knob breaks exactly one rule. Returns the generation directory.
@@ -180,7 +201,7 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
     The three spell children come from the shared golden corpus (the same rows Node validates), so the
     cross-child merge-join has real work to do rather than being trivially satisfied by empty files.
     """
-    full = corpus_rows("full_rows.jsonl", "valid_full") if full is None else full
+    full = corpus_rows("full_rows.jsonl", "valid_full", corpus=CORPUS_V4) if full is None else full
     proj = corpus_rows("projection_rows.jsonl", "valid") if proj is None else proj
     icons = corpus_rows("icons.jsonl", "valid_icon") if icons is None else icons
     ancillary_counts = {**{t: 2 for t in ANCILLARY_TABLES}, **(ancillary_counts or {})}
@@ -222,7 +243,7 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
 
     gw = GenerationWriter(root)
     write_lock(gw.root, policy)      # the HONEST policy: a forged staged copy is caught against this
-    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
+    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version=SPELL_SCHEMA_V4)
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
     gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
     from tests.golden import golden_rows
@@ -233,6 +254,17 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
     gw.add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"),
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", staged_policy, schema_version="coa-spell-layout-v2")
+    # E0R.2 T6.2: a v4 row is only decodable WITH these two, so every complete generation ships them.
+    # Derived from the HONEST policy — a fixture that derived them from a forged staged copy would be
+    # self-consistent and prove nothing.
+    descriptors = build_field_descriptors(policy)
+    if forge_descriptors is not None:
+        forge_descriptors(descriptors)
+    wire = copy.deepcopy(load_observation_wire_schema())
+    if forge_wire is not None:
+        forge_wire(wire)
+    gw.add_json(FIELD_DESCRIPTORS_CHILD, descriptors, schema_version=FIELD_DESCRIPTORS_SCHEMA)
+    gw.add_json(WIRE_SCHEMA_CHILD, wire, schema_version="coa-observation-wire-v1")
 
     binding: dict = dict(policy_binding(policy))
     if forge_staged_policy_bound_record_count is not None or unbind_staged_policy:

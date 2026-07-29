@@ -202,19 +202,19 @@ test("rewriting the bound hash after the fact breaks the trust digest", () => {
 
 test("a generation under a non-current but supported revision still validates", (t) => {
   const { contractsDir, v1 } = writeTwoRevisionRegistry(path.join(tmpdir(t), "generation_contracts"));
-  const { genDir, lockPath } = buildCandidate({ contract: ["e0r-v1", v1] });
-  assert.equal(loadCurrentContract(contractsDir)[0], "e0r-v2");   // NOT the revision the generation uses
+  const { genDir, lockPath } = buildCandidate({ contract: [v1.revision, v1] });
+  assert.equal(loadCurrentContract(contractsDir)[0], "e0r-test-successor");   // NOT the revision the generation uses
   assert.doesNotThrow(() => validateCandidateByPath(genDir, { lockPath, contractsDir }));
 });
 
 test("a revision dropped from the registry stops resolving", (t) => {
   const dir = path.join(tmpdir(t), "generation_contracts");
   const { contractsDir, v1 } = writeTwoRevisionRegistry(dir);
-  const { genDir, lockPath } = buildCandidate({ contract: ["e0r-v1", v1] });
+  const { genDir, lockPath } = buildCandidate({ contract: [v1.revision, v1] });
 
   const indexPath = path.join(dir, "index.json");
   const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
-  delete index.supported["e0r-v1"];
+  delete index.supported[v1.revision];
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
   assert.throws(() => validateCandidateByPath(genDir, { lockPath, contractsDir }),
     (e) => e instanceof GenerationResolveError && /not the supported contract/.test(e.message));
