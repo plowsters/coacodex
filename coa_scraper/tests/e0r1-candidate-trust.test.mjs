@@ -42,7 +42,7 @@ test("a manifest field changed after the trust digest FAILS (digest no longer co
 test("a policy child not matching the lock FAILS", () => {
   const { genDir, lockPath } = buildCandidate({
     lock: { schema_version: "coa-spell-layout-lock-v1", sha256: "f".repeat(64) } });
-  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /policy child not matched by the lock/);
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /staged policy is not the supported policy/);
 });
 
 test("a required field omitted from BOTH mechanics and raw FAILS (full-domain iteration)", () => {

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { loadCorpus } from "./candidate.mjs";
+import { ANCILLARY_TABLES, bindPolicyDoc, loadCorpus, topologyReportFor } from "./candidate.mjs";
 import { expandCompact } from "../../scripts/lib/mechanics-projection.mjs";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, generationContractSha256,
@@ -96,20 +96,30 @@ function build(n, root) {
     children[name] = writeChild(genDir, name, []);
   }
   children["coa_client_archive_plan.json"] = writeDoc(genDir, "coa_client_archive_plan.json", { schema_version: SCHEMA_FOR["coa_client_archive_plan.json"] });
-  children["spell_layout_v2.json"] = writeDoc(genDir, "spell_layout_v2.json", corpus.policy);
+  // E0R.2 T2.1: the probe's policy is bound and sized to what it stages, so the candidate validator's
+  // cardinality gate is part of what the RSS measurement covers rather than something it skips.
+  const policy = bindPolicyDoc(corpus.policy, {
+    spellRecords: n, ancillaryRecords: Object.fromEntries(ANCILLARY_TABLES.map((t) => [t, 0])),
+    contentEntries: 0 });
+  children["spell_layout_v2.json"] = writeDoc(genDir, "spell_layout_v2.json", policy);
   const [contractRevision, contract] = loadCurrentContract();
   children[GENERATION_CONTRACT_CHILD] = writeDoc(genDir, GENERATION_CONTRACT_CHILD, contract);
 
   const manifest = { schema_version: "coa-client-extract-manifest-v3", generation_id: "c1",
                      publication_state: "candidate", published_at: 1753100000123456789,
                      predecessor_generation_id: null, children,
-                     binding: { generation_contract: {
+                     binding: {
+                       policy_sha256: policy.sha256, topology: topologyReportFor(policy),
+                       derivations: {
+                         "coa_client_advancement.jsonl": { source: "CharacterAdvancement", kept: 0, rejected: 0 },
+                         "coa_client_content.jsonl": { source: "content_json", source_entries: 0, kept: 0, rejected: 0 } },
+                       generation_contract: {
                        schema_version: GENERATION_CONTRACT_SCHEMA, revision: contractRevision,
                        sha256: generationContractSha256(contract) } } };
   manifest.candidate_trust_sha256 = candidateTrustSha256FromText(JSON.stringify(manifest));
   fs.writeFileSync(path.join(genDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   fs.writeFileSync(path.join(root, "spell_layout.lock.json"),
-                   JSON.stringify({ schema_version: "coa-spell-layout-lock-v1", sha256: corpus.policy.sha256 }));
+                   JSON.stringify({ schema_version: "coa-spell-layout-lock-v1", sha256: policy.sha256 }));
 }
 
 const [mode, a, b] = process.argv.slice(2);

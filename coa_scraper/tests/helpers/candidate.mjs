@@ -14,6 +14,82 @@ import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, REQUIRED_CHILDRE
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CORPUS = new URL("../../../tests/golden/e0r1_corpus/", import.meta.url);
 
+// E0R.2 T2.1: a fixture must stage a policy that actually BINDS a source domain, sized to what it
+// stages, or the cardinality rules have nothing to resolve against. Mirrors tests/_e0r2_fixtures.py.
+export const ANCILLARY_TABLES = ["CharacterAdvancement", "CharacterAdvancementClassTypes",
+                                 "CharacterAdvancementTabTypes", "CharacterAdvancementEssence"];
+const ANCILLARY_CHILD_FOR = {
+  CharacterAdvancementClassTypes: "coa_client_class_types.jsonl",
+  CharacterAdvancementTabTypes: "coa_client_tab_types.jsonl",
+  CharacterAdvancementEssence: "coa_client_essence.jsonl",
+};
+const CLIENT_BUILD = "3.3.5a+fixture";
+
+function sortDeep(v) {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = sortDeep(v[k]);
+    return out;
+  }
+  return v;
+}
+
+// The SAME canonical policy digest Python's compute_policy_sha256 produces (sha256 field excluded).
+function policySha256(doc) {
+  const { sha256: _omit, ...rest } = doc;
+  return crypto.createHash("sha256").update(JSON.stringify(sortDeep(rest))).digest("hex");
+}
+
+function fakeTableBinding(name, recordCount) {
+  return {
+    sha256: sha(Buffer.from(`fixture:${name}`, "utf8")),
+    header: { magic: "WDBC", record_count: recordCount, field_count: 2, record_size: 8, string_block_size: 1 },
+    source: { member: `DBFilesClient\\${name}.dbc`, effective_archive: "common.MPQ", patch_chain: [] },
+  };
+}
+
+export function bindPolicyDoc(doc, { spellRecords, ancillaryRecords = {}, contentEntries = 2 } = {}) {
+  const out = structuredClone(doc);
+  for (const name of ANCILLARY_TABLES) {
+    if (!out.tables[name]) out.tables[name] = { expected_field_count: 2, key_cell: 0, unique: true };
+  }
+  out.required_tables = Object.keys(out.tables).sort();
+  out.expected_absent = [];
+  const counts = {};
+  for (const name of Object.keys(out.tables)) counts[name] = ancillaryRecords[name] ?? 1;
+  counts.Spell = spellRecords;
+  out.bound = { client_build: CLIENT_BUILD, expected_absent: [], tables: {} };
+  for (const name of Object.keys(out.tables)) out.bound.tables[name] = fakeTableBinding(name, counts[name]);
+  out.content_sources = { directory: "Content", required_files: {
+    "SpellRankData.json": { kind: "spell_rank", sha256: "0".repeat(64), source_entries: contentEntries } } };
+  delete out.sha256;
+  out.sha256 = policySha256(out);
+  return out;
+}
+
+// A policy with `bound: null` was never proven against a client capture. Rehashed so the lock still
+// matches it honestly — the validator must refuse it for being unbound, not for a hash mismatch.
+export function unbindPolicyDoc(doc) {
+  const out = structuredClone(doc);
+  out.bound = null;
+  delete out.sha256;
+  out.sha256 = policySha256(out);
+  return out;
+}
+
+export function topologyReportFor(doc) {
+  const tables = {};
+  for (const [name, t] of Object.entries(doc.bound.tables)) {
+    tables[name] = { sha256: t.sha256, header: t.header, member: t.source.member,
+                     effective_archive: t.source.effective_archive, patch_chain: t.source.patch_chain,
+                     key_unique: true, dense: true };
+  }
+  return { client_build: doc.bound.client_build, tables,
+           expected_absent_ok: true, expected_absent_set: [...(doc.bound.expected_absent || [])],
+           blocking: [] };
+}
+
 export function loadCorpus() {
   const rows = (name) => fs.readFileSync(new URL(name, CORPUS), "utf8")
     .split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
@@ -84,8 +160,17 @@ export function buildCandidate(opts = {}) {
   const full = opts.full || corpus.validFull();
   const proj = opts.proj || corpus.validProj();
   const icons = opts.icons || corpus.validIcons();
-  const policy = opts.policy || corpus.policy;
   const drop = new Set(opts.drop || []);
+  const ancillaryCounts = { ...Object.fromEntries(ANCILLARY_TABLES.map((t) => [t, 2])),
+                            ...(opts.ancillaryCounts || {}) };
+  const advancementSource = opts.advancementSource ?? 3;
+  const advancementKept = opts.advancementKept ?? 2;
+  const contentEntries = opts.contentEntries ?? 2;
+  ancillaryCounts.CharacterAdvancement = advancementSource;
+  // The policy is SIZED to what this fixture stages, so the honest case validates and a knob breaks
+  // exactly one correspondence rather than the fixture never having established it.
+  const policy = opts.policy || bindPolicyDoc(corpus.policy, {
+    spellRecords: full.length, ancillaryRecords: ancillaryCounts, contentEntries });
   const [contractRevision, contractBase] = opts.contract || loadCurrentContract();
   const contract = structuredClone(contractBase);
   if (opts.contractMutate) opts.contractMutate(contract);
@@ -94,27 +179,48 @@ export function buildCandidate(opts = {}) {
   const genDir = path.join(root, "gen-c1");
   fs.mkdirSync(genDir, { recursive: true });
 
-  const jsonl = (rows) => Buffer.from(rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
+  const jsonl = (list) => Buffer.from(list.map((r) => JSON.stringify(r)).join("\n") + (list.length ? "\n" : ""));
+  // Placeholder ancillary rows: their CONTENT is not validated until T2.2's shapes; what matters is
+  // that the fixture can stage a count the policy's bound actually states.
+  const rows = (schema, n) => Array.from({ length: n }, (_, i) => ({ schema_version: schema, row: i }));
   const contents = {
     "coa_client_spell.jsonl": jsonl(full),
     "coa_client_spell_coa.jsonl": jsonl(proj),
     "coa_client_spell_icons.jsonl": jsonl(icons),
     "coa_client_spell_projection.manifest.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-spell-projection-manifest-v3" })),
-    "coa_client_content.jsonl": jsonl([]),
+    "coa_client_content.jsonl": jsonl(rows("coa-client-content-v1", contentEntries)),
     "coa_client_archive_plan.json": Buffer.from(JSON.stringify({ schema_version: "coa-client-archive-plan-v1" })),
-    "coa_client_advancement.jsonl": jsonl([]),
-    "coa_client_class_types.jsonl": jsonl([]),
-    "coa_client_tab_types.jsonl": jsonl([]),
-    "coa_client_essence.jsonl": jsonl([]),
+    "coa_client_advancement.jsonl": jsonl(rows("coa-client-advancement-v1", advancementKept)),
+    "coa_client_class_types.jsonl": jsonl(rows("coa-client-class-types-v1", ancillaryCounts.CharacterAdvancementClassTypes)),
+    "coa_client_tab_types.jsonl": jsonl(rows("coa-client-tab-types-v1", ancillaryCounts.CharacterAdvancementTabTypes)),
+    "coa_client_essence.jsonl": jsonl(rows("coa-client-essence-v1", ancillaryCounts.CharacterAdvancementEssence)),
     "spell_layout_v2.json": Buffer.from(JSON.stringify(policy)),
     [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(contract)),
   };
+  if (opts.truncateChild) {
+    // Applied AFTER the policy is sized, so the knob breaks the correspondence rather than the fixture
+    // never having established it.
+    const [name, keep] = opts.truncateChild;
+    const kept = contents[name].toString("utf8").split("\n").filter((l) => l.trim()).slice(0, keep);
+    contents[name] = Buffer.from(kept.length ? kept.join("\n") + "\n" : "");
+  }
+  if (opts.duplicateJsonDocument) {
+    // Two concatenated documents, registered HONESTLY: scanChild counts every non-JSONL child as exactly
+    // one record regardless of content, so only parsing can catch the second document.
+    const name = opts.duplicateJsonDocument;
+    contents[name] = Buffer.concat([contents[name], contents[name]]);
+  }
+
   const children = {};
   for (const [name, body] of Object.entries(contents)) {
     if (drop.has(name)) continue;
     fs.writeFileSync(path.join(genDir, name), body);
     const records = name.endsWith(".jsonl") ? countRecords(body) : 1;
     children[name] = { sha256: sha(body), byte_length: body.length, records, schema_version: SCHEMA_FOR[name] };
+  }
+  if (opts.extraChild) {
+    const [name, body] = opts.extraChild;      // on disk but NOT registered: the whitelist case
+    fs.writeFileSync(path.join(genDir, name), Buffer.from(body));
   }
 
   // A staged generation BINDS what it stages by default; desynchronizing the two is something a test
@@ -128,7 +234,17 @@ export function buildCandidate(opts = {}) {
     schema_version: "coa-client-extract-manifest-v3", generation_id: "c1",
     publication_state: "candidate", published_at: 1753100000123456789,
     predecessor_generation_id: null, children,
-    binding: opts.dropBinding ? {} : { generation_contract: boundContract },
+    binding: {
+      policy_sha256: policy.sha256,
+      topology: opts.topology || topologyReportFor(policy),
+      derivations: opts.derivations || {
+        "coa_client_advancement.jsonl": { source: "CharacterAdvancement", kept: advancementKept,
+                                          rejected: advancementSource - advancementKept },
+        "coa_client_content.jsonl": { source: "content_json", source_entries: contentEntries,
+                                      kept: contentEntries, rejected: 0 },
+      },
+      ...(opts.dropBinding ? {} : { generation_contract: boundContract }),
+    },
   };
   if (opts.mutateManifest) manifest = opts.mutateManifest(manifest) || manifest;
   manifest.candidate_trust_sha256 = opts.trustOverride || candidateTrustSha256FromText(JSON.stringify(manifest));

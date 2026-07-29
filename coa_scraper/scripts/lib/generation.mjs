@@ -224,6 +224,161 @@ function stagedContract(genDir, manifest, contractsDir) {
   return loadSupportedContract(bound.revision, stagedSha, contractsDir);
 }
 
+// === POLICY-ROOTED CARDINALITY (E0R.2 T2.1) ===
+// `min_records: 1` was never a domain gate: a one-spell generation passes it, and so does a
+// one-class-type generation. Deriving the expectation from `manifest.binding.topology` would be
+// circular — a malformed candidate sets that count to 1, writes one row, recomputes the trust digest and
+// satisfies the equality. The REVIEWED POLICY states the count, and the policy is pinned by the lock.
+
+// Facet-for-facet comparison of a recorded topology report against a policy's structured `bound`
+// (mirrors Python topology.topology_matches_bound). Returns the list of mismatches; empty means the
+// recorded topology IS the reviewed capture.
+function topologyMismatches(report, bound) {
+  if (!bound) return [{ table: "*", field: "bound", reason: "policy has no bound" }];
+  const mism = [];
+  const tables = (report && report.tables) || {};
+  if (report?.client_build !== bound.client_build) mism.push({ table: "*", field: "client_build", reason: "build_mismatch" });
+  const want = bound.tables || {};
+  const wantNames = Object.keys(want).sort(), gotNames = Object.keys(tables).sort();
+  if (!sameSet(wantNames, gotNames)) mism.push({ table: "*", field: "table_set", reason: "required_table_set_differs" });
+  for (const [name, w] of Object.entries(want)) {
+    const got = tables[name];
+    if (!got) { mism.push({ table: name, field: "*", reason: "missing_from_client" }); continue; }
+    const pairs = [["sha256", got.sha256, w.sha256], ["header", got.header, w.header],
+                   ["member", got.member, w.source.member],
+                   ["effective_archive", got.effective_archive, w.source.effective_archive],
+                   ["patch_chain", got.patch_chain, w.source.patch_chain]];
+    for (const [field, a, b] of pairs) {
+      if (!isDeepStrictEqual(a, b)) mism.push({ table: name, field, reason: `${field}_differs` });
+    }
+  }
+  const wantAbsent = [...(bound.expected_absent || [])].sort();
+  const gotAbsent = [...((report && report.expected_absent_set) || [])].sort();
+  if (!sameSet(wantAbsent, gotAbsent)) mism.push({ table: "*", field: "expected_absent", reason: "expected_absent_set_differs" });
+  if (report && report.expected_absent_ok !== true) mism.push({ table: "*", field: "expected_absent", reason: "expected_absent_present" });
+  return mism;
+}
+
+// The reviewed policy the cardinality rules resolve against, in three separately-messaged steps.
+function trustedPolicy(genDir, manifest, policyDoc, lock) {
+  // 1. the staged policy IS the locally supported policy (recomputed, never self-declared).
+  try { assertPolicyLock(policyDoc, lock); }
+  catch (e) { throw new GenerationResolveError(`staged policy is not the supported policy: ${e.message}`); }
+  // 2. the manifest binds that same policy.
+  const bound = (manifest.binding || {}).policy_sha256;
+  if (bound !== policyDoc.sha256) {
+    throw new GenerationResolveError(
+      `binding.policy_sha256 ${String(bound).slice(0, 16)} != the staged policy child ${String(policyDoc.sha256).slice(0, 16)}`);
+  }
+  if (!policyDoc.bound) {
+    throw new GenerationResolveError(
+      "staged policy is unbound (bound: null): it was never proven against a client capture, so the " +
+      "generation has no provable source domain");
+  }
+  // 3. the recorded topology IS the reviewed bound, facet for facet.
+  const mism = topologyMismatches((manifest.binding || {}).topology || {}, policyDoc.bound);
+  if (mism.length) {
+    throw new GenerationResolveError(`binding.topology does not match the reviewed bound: ${JSON.stringify(mism)}`);
+  }
+  return policyDoc;
+}
+
+function sourceRecordCount(policyDoc, table, child) {
+  const t = (policyDoc.bound.tables || {})[table];
+  if (!t) {
+    throw new GenerationResolveError(
+      `child ${child} cites source table ${table}, which the reviewed policy does not bind; its cardinality cannot be evaluated`);
+  }
+  return t.header.record_count;
+}
+
+function declaredDerivation(manifest, child, keys) {
+  const declared = (((manifest.binding || {}).derivations) || {})[child];
+  const got = declared && typeof declared === "object" && !Array.isArray(declared) ? Object.keys(declared).sort() : null;
+  if (!got || !sameSet(got, [...keys].sort())) {
+    throw new GenerationResolveError(
+      `child ${child} needs a binding.derivations entry with exactly ${[...keys].sort().join(", ")}`);
+  }
+  for (const key of keys) {
+    if (key === "source") continue;
+    if (!Number.isInteger(declared[key]) || declared[key] < 0) {
+      throw new GenerationResolveError(`child ${child} derivation ${key} must be a non-negative integer`);
+    }
+  }
+  return declared;
+}
+
+// Rules whose expectation the streaming merge-join derives, resolved AFTER it. They cross-check two
+// independently-derived numbers; the merge-join stays the authoritative row-level enforcement.
+const CROSS_CHILD_RULES = new Set(["equals_full_spell_records", "equals_is_coa_full_records"]);
+
+function resolveCardinality(genDir, name, spec, records, policyDoc, manifest, counts) {
+  const rule = spec.cardinality.rule;
+  if (rule === "single_document") {
+    if (records !== 1) throw new GenerationResolveError(`single_document: child ${name} carries ${records} records, not 1`);
+    // scanChild registers `records: 1` for every non-JSONL child unconditionally, so only PARSING can
+    // catch two concatenated documents — and this is the only thing checking a JSON child is well-formed.
+    try { JSON.parse(fs.readFileSync(path.join(genDir, name), "utf8")); }
+    catch (e) { throw new GenerationResolveError(`single_document: child ${name} is not a single JSON document (${e.message})`); }
+  } else if (rule === "min") {
+    if (records < spec.cardinality.min) {
+      throw new GenerationResolveError(`min: child ${name} carries ${records} records, below the floor ${spec.cardinality.min}`);
+    }
+  } else if (rule === "reviewed_bound_record_count" || rule === "derived_from_source_topology") {
+    const expected = sourceRecordCount(policyDoc, spec.cardinality.source_table, name);
+    if (records !== expected) {
+      throw new GenerationResolveError(
+        `${rule}: child ${name} carries ${records} records but the reviewed bound for ${spec.cardinality.source_table} states ${expected}`);
+    }
+  } else if (rule === "declared_derivation") {
+    const table = spec.cardinality.source_table;
+    const declared = declaredDerivation(manifest, name, ["source", "kept", "rejected"]);
+    if (declared.source !== table) {
+      throw new GenerationResolveError(
+        `declared_derivation: child ${name} derivation names source ${declared.source}, but the contract states ${table}`);
+    }
+    const expected = sourceRecordCount(policyDoc, table, name);
+    if (declared.kept + declared.rejected !== expected) {
+      throw new GenerationResolveError(
+        `declared_derivation: child ${name} accounting does not close — kept ${declared.kept} + rejected ${declared.rejected} != reviewed source ${expected}`);
+    }
+    if (declared.kept !== records) {
+      throw new GenerationResolveError(`declared_derivation: child ${name} declares ${declared.kept} kept but carries ${records} records`);
+    }
+  } else if (rule === "declared_content_derivation") {
+    const declared = declaredDerivation(manifest, name, ["source", "source_entries", "kept", "rejected"]);
+    if (declared.source !== "content_json") {
+      throw new GenerationResolveError(
+        `declared_content_derivation: child ${name} derivation names source ${declared.source}, not content_json`);
+    }
+    const reviewed = Object.values(((policyDoc.content_sources || {}).required_files) || {})
+      .reduce((n, f) => n + f.source_entries, 0);
+    if (declared.source_entries !== reviewed) {
+      throw new GenerationResolveError(
+        `declared_content_derivation: child ${name} declares ${declared.source_entries} source entries but the reviewed content_sources state ${reviewed}`);
+    }
+    if (declared.kept + declared.rejected !== reviewed) {
+      throw new GenerationResolveError(
+        `declared_content_derivation: child ${name} accounting does not close — kept ${declared.kept} + rejected ${declared.rejected} != reviewed source ${reviewed}`);
+    }
+    if (declared.kept !== records) {
+      throw new GenerationResolveError(`declared_content_derivation: child ${name} declares ${declared.kept} kept but carries ${records} records`);
+    }
+  } else if (rule === "equals_full_spell_records") {
+    if (records !== counts.full) {
+      throw new GenerationResolveError(
+        `equals_full_spell_records: child ${name} carries ${records} records but the full spell child carries ${counts.full}`);
+    }
+  } else if (rule === "equals_is_coa_full_records") {
+    if (records !== counts.is_coa) {
+      throw new GenerationResolveError(
+        `equals_is_coa_full_records: child ${name} carries ${records} records but the full child holds ${counts.is_coa} is_coa spells`);
+    }
+  } else {
+    throw new GenerationResolveError(`child ${name} cardinality rule ${rule} has no resolver`);
+  }
+}
+
 const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
 
 const CHUNK = 1 << 20;
@@ -352,7 +507,9 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
   const proj = new Cursor(projRows, "projection");
   const icons = new Cursor(iconRows, "icons");
   let anyConverted = false;
+  let fullCount = 0, isCoaCount = 0;
   while (full.row !== null) {
+    fullCount += 1;
     const frow = full.row;
     const sid = frow.spell_id;
     // The icon catalog advances in LOCKSTEP with the full table (exact 1:1 domain): a missing, orphan, or
@@ -374,6 +531,7 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
     const expanded = {};
     for (const [f, cell] of Object.entries(frow.raw)) expanded[f] = expandCompact(cell, policyDoc);
     const isCoa = frow.coa_attribution && frow.coa_attribution.is_coa === true;
+    if (isCoa) isCoaCount += 1;
     if (isCoa) {
       if (proj.row === null || proj.row.spell_id !== sid) {
         throw new GenerationResolveError(`projection_is_coa_subset: ${sid} missing from projection`);
@@ -398,6 +556,9 @@ export function crossChild(fullRows, projRows, iconRows, policyDoc, manifest) {
   if (anyConverted && !("coa_client_spell_icons.bundle.tar" in (manifest.children || {}))) {
     throw new GenerationResolveError("icon bundle required: a converted row exists but no bundle child is registered");
   }
+  // Tallies the cursors derived themselves, so the contract can cross-check them against the
+  // manifest-registered record counts (E0R.2 T2.1).
+  return { full: fullCount, is_coa: isCoaCount };
 }
 
 function sha256(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
@@ -449,13 +610,32 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
   for (const name of requiredChildrenFor(contract)) {
     if (!(name in children)) throw new GenerationResolveError(`required child ${name} missing from the candidate generation`);
   }
-  // The staged policy child must match the committed lock (recomputed, never self-trusted).
+  // The contract is a WHITELIST. candidate_trust_sha256 AUTHENTICATES an added child — it covers
+  // `children`, so a child added to both the manifest and the directory is self-consistent — but
+  // authenticating is not rejecting. Unregistered files on disk are refused too.
+  const registered = new Set(Object.keys(contract.children));
+  const present = new Set([...Object.keys(children), ...fs.readdirSync(dir)]);
+  for (const name of [...present].sort()) {
+    if (!registered.has(name) && !RESERVED.has(name)) {
+      throw new GenerationResolveError(
+        `unregistered child ${name}: the contract is a whitelist, and candidate trust authenticates an ` +
+        "added child rather than rejecting it");
+    }
+  }
+  // The staged policy child must match the committed lock (recomputed, never self-trusted), the manifest
+  // must bind that same policy, and the recorded topology must BE the reviewed capture (E0R.2 T2.1).
   const policyDoc = JSON.parse(fs.readFileSync(children["spell_layout_v2.json"], "utf8"));
   let lock;
   try { lock = JSON.parse(fs.readFileSync(lockPath, "utf8")); }
   catch (e) { throw new GenerationResolveError(`policy lock unreadable: ${e.message}`); }
-  try { assertPolicyLock(policyDoc, lock); }
-  catch (e) { throw new GenerationResolveError(`policy child not matched by the lock: ${e.message}`); }
+  trustedPolicy(dir, manifest, policyDoc, lock);
+  const childrenMeta = manifest.children || {};
+  // Cardinalities that do not depend on the merge-join first, so a truncated generation fails fast.
+  for (const [name, spec] of Object.entries(contract.children)) {
+    if (!CROSS_CHILD_RULES.has(spec.cardinality.rule) && name in childrenMeta) {
+      resolveCardinality(dir, name, spec, childrenMeta[name].records, policyDoc, manifest, {});
+    }
+  }
   // Row semantics over the full required domain, verified AS the rows stream through the cross-child
   // cursors — one pass, no retained row arrays (E0R.1 T4.2). Every full row's required scalars are present
   // (not just in row.raw); every projection row's claims + biconditional + value agreement re-derive from
@@ -467,11 +647,16 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
       yield row;
     }
   };
-  crossChild(
+  const counts = crossChild(
     verified(readJsonlLines(children["coa_client_spell.jsonl"]), verifyFullRowAgainstPolicy),
     verified(readJsonlLines(children["coa_client_spell_coa.jsonl"]), verifyRowAgainstPolicy),
     readJsonlLines(children["coa_client_spell_icons.jsonl"]),
     policyDoc, manifest);
+  for (const [name, spec] of Object.entries(contract.children)) {
+    if (CROSS_CHILD_RULES.has(spec.cardinality.rule) && name in childrenMeta) {
+      resolveCardinality(dir, name, spec, childrenMeta[name].records, policyDoc, manifest, counts);
+    }
+  }
   return { genDir: dir, manifest, children };
 }
 

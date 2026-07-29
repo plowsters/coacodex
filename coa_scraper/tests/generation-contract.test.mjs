@@ -18,7 +18,8 @@ import {
   loadContractRegistry, loadCurrentContract, requiredChildrenFor, validateCandidateByPath,
   validateContractRegistry, validateGenerationContract,
 } from "../scripts/lib/generation.mjs";
-import { buildCandidate, writeTwoRevisionRegistry } from "./helpers/candidate.mjs";
+import { bindPolicyDoc, buildCandidate, loadCorpus, topologyReportFor, unbindPolicyDoc,
+         writeTwoRevisionRegistry } from "./helpers/candidate.mjs";
 
 const REPO = new URL("../../", import.meta.url).pathname;
 
@@ -217,6 +218,87 @@ test("a revision dropped from the registry stops resolving", (t) => {
   fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
   assert.throws(() => validateCandidateByPath(genDir, { lockPath, contractsDir }),
     (e) => e instanceof GenerationResolveError && /not the supported contract/.test(e.message));
+});
+
+// --- T2.1: policy-rooted cardinality, mirrored (independent implementation, same rules) ---
+
+test("Node accepts the honest candidate the cardinality cases mutate", () => {
+  const { genDir, lockPath } = buildCandidate();
+  assert.doesNotThrow(() => validateCandidateByPath(genDir, { lockPath }));
+});
+
+test("Node rejects a truncated full child against the reviewed bound", () => {
+  const corpus = loadCorpus();
+  // Size the policy to THREE spells, then stage two: the correspondence is broken on purpose.
+  const policy = bindPolicyDoc(corpus.policy, { spellRecords: 3 });
+  const { genDir, lockPath } = buildCandidate({ policy, full: corpus.validFull().slice(0, 2),
+                                                proj: corpus.validProj().slice(0, 2),
+                                                icons: corpus.validIcons().slice(0, 2) });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /reviewed_bound_record_count/);
+});
+
+for (const child of ["coa_client_class_types.jsonl", "coa_client_tab_types.jsonl",
+                     "coa_client_essence.jsonl"]) {
+  test(`Node gates the one-to-one ancillary child ${child}`, () => {
+    const { genDir, lockPath } = buildCandidate({ truncateChild: [child, 1] });
+    assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /derived_from_source_topology/);
+  });
+}
+
+test("Node rejects a declared derivation whose accounting does not close", () => {
+  const { genDir, lockPath } = buildCandidate({
+    derivations: { "coa_client_advancement.jsonl": { source: "CharacterAdvancement", kept: 2, rejected: 0 },
+                   "coa_client_content.jsonl": { source: "content_json", source_entries: 2, kept: 2, rejected: 0 } },
+  });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /declared_derivation/);
+});
+
+test("Node rejects a content derivation that disagrees with the reviewed source entries", () => {
+  const { genDir, lockPath } = buildCandidate({
+    derivations: { "coa_client_advancement.jsonl": { source: "CharacterAdvancement", kept: 2, rejected: 1 },
+                   "coa_client_content.jsonl": { source: "content_json", source_entries: 99, kept: 2, rejected: 0 } },
+  });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /declared_content_derivation/);
+});
+
+test("Node rejects a candidate that rewrites its own topology to match a truncation", () => {
+  const corpus = loadCorpus();
+  const policy = bindPolicyDoc(corpus.policy, { spellRecords: 3 });
+  const topology = topologyReportFor(policy);
+  topology.tables.Spell.header = { ...topology.tables.Spell.header, record_count: 1 };
+  const { genDir, lockPath } = buildCandidate({ policy, topology,
+                                                full: corpus.validFull().slice(0, 1),
+                                                proj: corpus.validProj().slice(0, 1),
+                                                icons: corpus.validIcons().slice(0, 1) });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }),
+    /topology does not match the reviewed bound/);
+});
+
+test("Node rejects a manifest policy hash that disagrees with the staged policy", () => {
+  const corpus = loadCorpus();
+  const policy = bindPolicyDoc(corpus.policy, { spellRecords: 3 });
+  const { genDir, lockPath } = buildCandidate({ policy,
+                                                mutateManifest: (m) => { m.binding.policy_sha256 = "0".repeat(64); } });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /binding\.policy_sha256/);
+});
+
+test("Node rejects an unbound staged policy", () => {
+  const corpus = loadCorpus();
+  const bound = bindPolicyDoc(corpus.policy, { spellRecords: 3 });
+  const topology = topologyReportFor(bound);      // captured before the bound is removed
+  const unbound = unbindPolicyDoc(bound);         // rehashed, so the lock still matches it honestly
+  const { genDir, lockPath } = buildCandidate({ policy: unbound, topology });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /unbound/);
+});
+
+test("Node rejects an unregistered child", () => {
+  const { genDir, lockPath } = buildCandidate({ extraChild: ["smuggled.jsonl", '{"x":1}\n'] });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /unregistered child/);
+});
+
+test("Node rejects a JSON child carrying two concatenated documents", () => {
+  const { genDir, lockPath } = buildCandidate({ duplicateJsonDocument: "coa_client_archive_plan.json" });
+  assert.throws(() => validateCandidateByPath(genDir, { lockPath }), /single_document/);
 });
 
 test("requiredChildrenFor reads the generation's own contract, not current", () => {
