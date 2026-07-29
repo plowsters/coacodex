@@ -12,6 +12,8 @@ from coa_client_extract.publish import (
     candidate_trust_sha256, prune_generations, resolve_active_generation,
 )
 
+from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+
 
 def _base():
     return build_manifest(backend_name="fake", backend_version="v1", stormlib_version=None,
@@ -22,7 +24,8 @@ def _base():
 def _binding():
     return {"source_dbc": {"Spell": {"sha256": "a" * 64, "header": {"records": 208431, "record_size": 936},
                                      "archive": "patch-T.MPQ"}},
-            "policy_sha256": "p" * 64, "anchor_set_sha256": "an" * 32, "enum_policy_sha256": "en" * 32}
+            "policy_sha256": "p" * 64, "anchor_set_sha256": "an" * 32, "enum_policy_sha256": "en" * 32,
+            **generation_contract_binding()}
 
 
 # A minimal-but-COMPLETE v3 published generation: every REQUIRED_CHILDREN present, finalized with both trust
@@ -45,6 +48,7 @@ def _publish(root, *, spell_id=1, inv=None):
                schema_version="coa-client-archive-plan-v1")
     w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                schema_version="coa-spell-layout-v2")
+    stage_generation_contract(w)
     candidate = w.publish_candidate(base_manifest=_base(), binding=_binding(),
                                     unknown_symbol_inventory=inv or {"power_type": [7], "school_bits": []})
     m = w.finalize_and_publish(candidate_manifest=candidate,

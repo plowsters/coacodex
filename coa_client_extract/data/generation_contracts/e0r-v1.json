@@ -1,0 +1,107 @@
+{
+  "schema_version": "coa-generation-contract-v1",
+  "revision": "e0r-v1",
+  "note": "IMMUTABLE. The E0R child contract, staged as a generation child and identified in manifest.binding by revision + sha256, so a generation is always interpreted under the contract it was produced with and older revisions stay resolvable. Never edit this file - add a new revision.",
+  "observation_wire_schema": {
+    "schema_version": "coa-observation-wire-v1",
+    "sha256": "5d9b743d34eb5b5a1eaa31552a72e559c7f6ac6045d8ce7c57cdaebb6fbd02c0"
+  },
+  "children": {
+    "coa_client_spell.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-spell-v3",
+      "row_schema_version": "coa-client-spell-v3",
+      "optional": false,
+      "cardinality": {"rule": "reviewed_bound_record_count", "source_table": "Spell"},
+      "shape": "full_spell_row_v3"
+    },
+    "coa_client_spell_coa.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-spell-projection-v3",
+      "row_schema_version": "coa-client-spell-projection-v3",
+      "optional": false,
+      "cardinality": {"rule": "equals_is_coa_full_records"},
+      "shape": "projection_row_v3"
+    },
+    "coa_client_spell_icons.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-spell-icons-v1",
+      "row_schema_version": "coa-client-spell-icons-v1",
+      "optional": false,
+      "cardinality": {"rule": "equals_full_spell_records"},
+      "shape": "icon_row_v1"
+    },
+    "coa_client_spell_projection.manifest.json": {
+      "kind": "json",
+      "child_schema_version": "coa-client-spell-projection-manifest-v3",
+      "row_schema_version": null,
+      "optional": false,
+      "cardinality": {"rule": "single_document"},
+      "shape": "projection_manifest_v3"
+    },
+    "spell_layout_v2.json": {
+      "kind": "json",
+      "child_schema_version": "coa-spell-layout-v2",
+      "row_schema_version": null,
+      "optional": false,
+      "cardinality": {"rule": "single_document"},
+      "shape": "spell_policy_v2"
+    },
+    "generation_contract.json": {
+      "kind": "json",
+      "child_schema_version": "coa-generation-contract-v1",
+      "row_schema_version": null,
+      "optional": false,
+      "cardinality": {"rule": "single_document"},
+      "shape": "generation_contract_v1"
+    },
+    "coa_client_archive_plan.json": {
+      "kind": "json",
+      "child_schema_version": "coa-client-archive-plan-v1",
+      "row_schema_version": null,
+      "optional": false,
+      "cardinality": {"rule": "single_document"},
+      "shape": "archive_plan_v1"
+    },
+    "coa_client_content.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-content-v1",
+      "row_schema_version": "coa-client-content-v1",
+      "optional": false,
+      "cardinality": {"rule": "declared_content_derivation"},
+      "shape": "content_row_v1"
+    },
+    "coa_client_advancement.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-advancement-v1",
+      "row_schema_version": "coa-client-advancement-v1",
+      "optional": false,
+      "cardinality": {"rule": "declared_derivation", "source_table": "CharacterAdvancement"},
+      "shape": "advancement_row_v1"
+    },
+    "coa_client_class_types.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-class-types-v1",
+      "row_schema_version": "coa-client-class-types-v1",
+      "optional": false,
+      "cardinality": {"rule": "derived_from_source_topology", "source_table": "CharacterAdvancementClassTypes"},
+      "shape": "class_type_row_v1"
+    },
+    "coa_client_tab_types.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-tab-types-v1",
+      "row_schema_version": "coa-client-tab-types-v1",
+      "optional": false,
+      "cardinality": {"rule": "derived_from_source_topology", "source_table": "CharacterAdvancementTabTypes"},
+      "shape": "tab_type_row_v1"
+    },
+    "coa_client_essence.jsonl": {
+      "kind": "jsonl",
+      "child_schema_version": "coa-client-essence-v1",
+      "row_schema_version": "coa-client-essence-v1",
+      "optional": false,
+      "cardinality": {"rule": "derived_from_source_topology", "source_table": "CharacterAdvancementEssence"},
+      "shape": "essence_row_v1"
+    }
+  }
+}

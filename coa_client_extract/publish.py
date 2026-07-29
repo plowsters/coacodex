@@ -9,7 +9,9 @@ import time
 import uuid
 from pathlib import Path
 
-from .contracts import CANDIDATE_MUTABLE_KEYS, ICON_ASSET_STATUSES
+from .contracts import (CANDIDATE_MUTABLE_KEYS, ContractError, GENERATION_CONTRACT_CHILD,
+                        ICON_ASSET_STATUSES, generation_contract_sha256, load_current_contract,
+                        load_supported_contract, validate_generation_contract)
 from .manifest import build_manifest_v3
 from .spell_layout import load_spell_policy
 from .spell_record import _expand_compact as _expand_cell
@@ -20,14 +22,20 @@ MANIFEST_NAME = "manifest.json"
 LOCK_NAME = ".publish.lock"
 _RESERVED = {MANIFEST_NAME, POINTER_NAME, LOCK_NAME}
 
-# Every child a complete E0R generation MUST carry (design A5). The manifest is NOT a child.
-REQUIRED_CHILDREN = (
-    "coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
-    "coa_client_spell_projection.manifest.json", "coa_client_spell_icons.jsonl",
-    "coa_client_content.jsonl", "coa_client_archive_plan.json",
-    "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
-    "coa_client_tab_types.jsonl", "coa_client_essence.jsonl", "spell_layout_v2.json",
-)
+# The PRODUCER's target: what regenerate must emit today, derived from the CURRENT contract revision
+# rather than restated as a constant (design A5; E0R.2 T1.1). The manifest is NOT a child; the contract
+# IS one, so a consumer can re-check the generation under the contract it was produced with.
+CURRENT_REQUIRED_CHILDREN = tuple(sorted(load_current_contract()[1]["children"]))
+# Back-compat alias for existing importers; new code should say which one it means.
+REQUIRED_CHILDREN = CURRENT_REQUIRED_CHILDREN
+
+
+def required_children_for(contract: dict) -> tuple[str, ...]:
+    """A RESOLVER's requirement comes from the generation's own verified staged contract, never from
+    `current`. Deriving it from `current` would make every generation published under an older revision
+    unresolvable the moment a new revision ships — breaking rollback and the predecessor chain the
+    publish transaction reads (E0R.2 T1.1)."""
+    return tuple(sorted(n for n, s in contract["children"].items() if not s["optional"]))
 
 
 def candidate_trust_sha256(manifest: dict) -> str:
@@ -369,6 +377,30 @@ def _validate_children_by_path(gen_dir: Path, manifest: dict) -> dict:
     return resolved
 
 
+def _staged_contract(gen_dir: Path) -> dict:
+    """The contract the generation was PRODUCED under: read from its own staged child, then dispatched
+    through the TRUSTED registry (E0R.2 T1.1).
+
+    The staged bytes are untrusted input — deriving the required-child set from them without the registry
+    check would let a tampered contract declare its own (empty) requirements. Dispatch is by canonical
+    digest, so a re-serialized staged copy (indented, key-sorted) of a supported revision matches while
+    any semantic edit does not. Returns the registry's copy, which the hash proves identical."""
+    path = gen_dir / GENERATION_CONTRACT_CHILD
+    if not path.is_file():
+        raise ResolveError(
+            f"required child {GENERATION_CONTRACT_CHILD!r} missing: the generation does not declare "
+            "the contract it was produced under")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ResolveError(f"staged generation contract is not valid JSON: {exc}") from exc
+    try:
+        validate_generation_contract(doc)
+        return load_supported_contract(doc["revision"], generation_contract_sha256(doc))
+    except ContractError as exc:
+        raise ResolveError(f"staged generation contract rejected: {exc}") from exc
+
+
 def validate_candidate_generation(gen_dir: Path) -> dict:
     """Validate a staged CANDIDATE generation by path (not via the pointer): the manifest is a candidate,
     every REQUIRED_CHILDREN is present and per-child valid, the streaming cross-child merge-join holds,
@@ -383,7 +415,7 @@ def validate_candidate_generation(gen_dir: Path) -> dict:
     if manifest.get("candidate_trust_sha256") != candidate_trust_sha256(manifest):
         raise ResolveError("candidate_trust_sha256 does not cover the manifest")
     resolved = _validate_children_by_path(gen_dir, manifest)
-    for name in REQUIRED_CHILDREN:
+    for name in required_children_for(_staged_contract(gen_dir)):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the candidate generation")
     _cross_child(gen_dir, manifest.get("children", {}))
@@ -448,7 +480,7 @@ def resolve_active_generation(root: Path) -> dict:
         if not meta.get("schema_version"):
             raise ResolveError(f"child {name!r} missing schema_version")
         resolved[name] = child_path
-    for name in REQUIRED_CHILDREN:
+    for name in required_children_for(_staged_contract(gen_dir)):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the published generation")
     return {"generation_id": gen_id, "gen_dir": gen_dir, "manifest": manifest, "children": resolved}

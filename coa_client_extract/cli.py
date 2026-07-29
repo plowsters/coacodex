@@ -54,6 +54,8 @@ def regenerate(
     from .spell_icons import iter_icon_catalog, icon_coverage
     from .topology import verify_source_topology, topology_matches_bound
     from .publish import GenerationWriter, validate_candidate_generation, PublishError
+    from .contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
+                            generation_contract_sha256, load_current_contract)
     from .spell_mechanics import benchmark_env, policy_budget_report, three_part_budget, DEFAULT_BUDGET
     from .errors import ClientBindingError
 
@@ -297,9 +299,18 @@ def regenerate(
     gw.add_jsonl("coa_client_tab_types.jsonl", tab_type_records, schema_version="coa-client-tab-types-v1")
     gw.add_jsonl("coa_client_essence.jsonl", essence_records, schema_version="coa-client-essence-v1")
     gw.add_json("spell_layout_v2.json", policy.doc, schema_version="coa-spell-layout-v2")  # reviewed policy child
+    # The contract the generation is produced under travels WITH it (E0R.2 T1.1): staged as a child so a
+    # consumer can re-check the generation under its own contract, and named in `binding` so the staged
+    # copy is covered by candidate_trust_sha256 rather than trusted on its own word.
+    contract_revision, generation_contract = load_current_contract()
+    gw.add_json(GENERATION_CONTRACT_CHILD, generation_contract,
+                schema_version=GENERATION_CONTRACT_SCHEMA)
 
     binding = {"topology": topology, "provenance": provenance, "policy_sha256": policy.sha256,
-               "anchor_set_sha256": policy.anchor_sha256, "enum_policy_sha256": policy.enum_sha256}
+               "anchor_set_sha256": policy.anchor_sha256, "enum_policy_sha256": policy.enum_sha256,
+               "generation_contract": {"schema_version": GENERATION_CONTRACT_SCHEMA,
+                                       "revision": contract_revision,
+                                       "sha256": generation_contract_sha256(generation_contract)}}
     # === the transaction window: candidate -> validation -> parity -> budget -> pointer flip. The publish
     # lock is held from publish_candidate's predecessor read; ANY failure before the flip aborts (lock
     # released, pointer untouched, the candidate left never-pointer-resolvable) (design A5, E0R.1 T3.4). ===

@@ -14,9 +14,12 @@ from coa_client_extract.publish import (
     candidate_trust_sha256, resolve_active_generation,
 )
 
+from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+
 
 def _binding():
-    return {"source_dbc": {}, "policy_sha256": "p" * 64, "anchor_set_sha256": "a" * 32, "enum_policy_sha256": "e" * 32}
+    return {"source_dbc": {}, "policy_sha256": "p" * 64, "anchor_set_sha256": "a" * 32,
+            "enum_policy_sha256": "e" * 32, **generation_contract_binding()}
 
 
 def _publish(root, *, validation=None, budget=None):
@@ -36,6 +39,7 @@ def _publish(root, *, validation=None, budget=None):
                schema_version="coa-client-archive-plan-v1")
     w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                schema_version="coa-spell-layout-v2")
+    stage_generation_contract(w)
     base = build_manifest(backend_name="fake", backend_version="v1", stormlib_version=None,
                           client_root="/x", client_build="3.3.5a+patch-CZZ", outputs={},
                           archive_plan={"schema_version": "coa-client-archive-plan-v1"})

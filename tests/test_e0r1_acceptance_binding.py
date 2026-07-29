@@ -19,6 +19,8 @@ import pytest
 from coa_client_extract.cli import AcceptanceError, write_acceptance_summary
 from coa_client_extract.publish import GenerationWriter
 
+from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
+
 VERIFIED_RECON = {
     "schema_version": "coa-mechanics-recon-v2",
     "status": "verified",
@@ -43,12 +45,15 @@ def _stage_minimal(root):
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                 schema_version="coa-spell-layout-v2")
+    stage_generation_contract(gw)
     return gw
 
 
 def _publish(root, *, base_manifest=None):
     gw = _stage_minimal(root)
-    candidate = gw.publish_candidate(base_manifest=base_manifest or {}, binding={"policy_sha256": "abc123"})
+    candidate = gw.publish_candidate(base_manifest=base_manifest or {},
+                                     binding={"policy_sha256": "abc123",
+                                              **generation_contract_binding()})
     gw.finalize_and_publish(candidate_manifest=candidate,
                             validation={"python": True, "node": True},
                             budget={"within_budget": True})

@@ -16,6 +16,7 @@ from coa_client_extract.publish import (
 from tests.test_client_extract_cli import (
     _bound_spell_policy, _client, _fake_backend, _synthetic_layouts,
 )
+from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
 
 
 def _regenerate(client_root, out, tmp_path, **kwargs):
@@ -73,6 +74,7 @@ def _stage_minimal(root):
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},
                 schema_version="coa-spell-layout-v2")
+    stage_generation_contract(gw)
     return gw
 
 
@@ -86,12 +88,12 @@ def test_finalize_rejects_stale_predecessor(tmp_path):
     # A staged its candidate first and published; B's candidate still names A's predecessor (None) —
     # finalizing B must FAIL (no last-writer-win) and leave A live.
     gw_a = _stage_minimal(tmp_path)
-    _finalize(gw_a, gw_a.publish_candidate(base_manifest={}, binding={}))
+    _finalize(gw_a, gw_a.publish_candidate(base_manifest={}, binding=generation_contract_binding()))
 
     gw_b = _stage_minimal(tmp_path)
     real_predecessor = gw_b._predecessor
     gw_b._predecessor = lambda: None                        # simulate a pre-A (stale) predecessor read
-    candidate_b = gw_b.publish_candidate(base_manifest={}, binding={})
+    candidate_b = gw_b.publish_candidate(base_manifest={}, binding=generation_contract_binding())
     gw_b._predecessor = real_predecessor                    # finalize revalidates against the REAL pointer
     with pytest.raises(PublishError, match="changed since the candidate was staged"):
         _finalize(gw_b, candidate_b)
@@ -103,14 +105,14 @@ def test_concurrent_publishers_serialize_and_chain(tmp_path):
     # B's publish_candidate BLOCKS while A holds the publish lock; once A finalizes, B proceeds and its
     # candidate records A as predecessor — the chain never loses a generation.
     gw_a = _stage_minimal(tmp_path)
-    candidate_a = gw_a.publish_candidate(base_manifest={}, binding={})   # lock now held by A
+    candidate_a = gw_a.publish_candidate(base_manifest={}, binding=generation_contract_binding())   # lock now held by A
 
     staged = threading.Event()
     result = {}
 
     def publish_b():
         gw_b = _stage_minimal(tmp_path)
-        result["candidate"] = gw_b.publish_candidate(base_manifest={}, binding={})
+        result["candidate"] = gw_b.publish_candidate(base_manifest={}, binding=generation_contract_binding())
         result["writer"] = gw_b
         staged.set()
 
@@ -129,7 +131,7 @@ def test_abort_releases_the_publish_lock(tmp_path):
     # A failed AFTER staging its candidate (validation/budget/parity): abort_publication releases the lock
     # without touching the pointer, so the next publisher is not deadlocked.
     gw_a = _stage_minimal(tmp_path)
-    gw_a.publish_candidate(base_manifest={}, binding={})
+    gw_a.publish_candidate(base_manifest={}, binding=generation_contract_binding())
     gw_a.abort_publication()
     with pytest.raises(ResolveError):                       # nothing was ever published
         resolve_active_generation(tmp_path)
@@ -138,7 +140,7 @@ def test_abort_releases_the_publish_lock(tmp_path):
     done = threading.Event()
 
     def publish_b():
-        candidate = gw_b.publish_candidate(base_manifest={}, binding={})
+        candidate = gw_b.publish_candidate(base_manifest={}, binding=generation_contract_binding())
         _finalize(gw_b, candidate)
         done.set()
 

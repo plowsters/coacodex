@@ -5,6 +5,7 @@ from coa_client_extract.publish import (
     GenerationWriter, candidate_trust_sha256, validate_candidate_generation, ResolveError,
 )
 from tests._spell_fixtures import v2_policy
+from tests._e0r2_fixtures import generation_contract_binding, stage_generation_contract
 
 
 def _full(sid, **extra):
@@ -43,7 +44,8 @@ def _stage(root: Path, *, full=None, proj=None, icons=None):
     gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", v2_policy().doc, schema_version="coa-spell-layout-v2")
-    gw.publish_candidate(base_manifest={}, binding={})
+    stage_generation_contract(gw)
+    gw.publish_candidate(base_manifest={}, binding=generation_contract_binding())
     return gw
 
 
