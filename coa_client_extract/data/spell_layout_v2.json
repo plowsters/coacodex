@@ -249,11 +249,11 @@
         "header": {
           "field_count": 234,
           "magic": "WDBC",
-          "record_count": 208447,
+          "record_count": 208776,
           "record_size": 936,
-          "string_block_size": 13256963
+          "string_block_size": 13284455
         },
-        "sha256": "c8cd440dc9ad23e9cd0f03e0021daee6aa93a91197c6b14b30cb43ec8b909fc4",
+        "sha256": "fc9d91cacf354e1578bcfc979dc140bd3bc3efe233de5b02196ef54cf6c59e4f",
         "source": {
           "effective_archive": "patch-T.MPQ",
           "member": "DBFilesClient\\Spell.dbc",
@@ -302,9 +302,9 @@
           "magic": "WDBC",
           "record_count": 16354,
           "record_size": 8,
-          "string_block_size": 654241
+          "string_block_size": 654236
         },
-        "sha256": "14c60e7da6a536f5d31b89bf9861d56ce08bcdca7fde676ae727c5ae5a1f2977",
+        "sha256": "b8f1c1ffffef9f8ffaf3ff1b292bc903131edad3d44a70709ef20a02d51ddf3a",
         "source": {
           "effective_archive": "patch-S.MPQ",
           "member": "DBFilesClient\\SpellIcon.dbc",
@@ -408,7 +408,7 @@
   ],
   "reviewed": true,
   "schema_version": "coa-spell-layout-v2",
-  "sha256": "7ef96cec199bbc7b3f217d7ee67eaee23af717f3c6cbba608227eaa45273c69a",
+  "sha256": "5fbd5b5d2f303bd4212685cc3e3052a0013e637db10c5a7237738e7e95607b11",
   "tables": {
     "Spell": {
       "expected_field_count": 234,
