@@ -101,16 +101,29 @@ def _proof(fp) -> FieldProof:
     return FieldProof("verified", fp.layout, fp.interpretation)
 
 
+def _readiness(*, availability: str | None = None, proven_empty: bool = False) -> str:
+    """What the row claims about its own resolvability.
+
+    DERIVED from the referenced asset's AVAILABILITY, never from whether a reference exists: a proven
+    path whose BLP member is absent from the chain is referenced and still unavailable.
+
+    `verified_empty` is the third value and it is not a shade of `unavailable` — `unavailable` claims the
+    value is unknown, while this claims the client PROVES the path is the empty string (E0R.2 T8.1; the
+    readiness vocabulary already pairs `verified_empty` with `proven_empty` for exactly this).
+    """
+    if proven_empty:
+        return "verified_empty"
+    return "available" if availability == "source_only" else "unavailable"
+
+
 def _association(spell_id: int, fk: int | None, asset_ref: str | None, *, state: str, reason: str,
-                 availability: str | None = None) -> dict:
-    """One association row. `readiness` is DERIVED from the referenced asset's AVAILABILITY, not from
-    whether a reference exists: a proven path whose BLP member is absent from the chain is referenced and
-    still unavailable. The cross-child check re-derives the same value rather than trusting this one, so
-    it is a convenience for consumers, never an authority."""
+                 availability: str | None = None, proven_empty: bool = False) -> dict:
+    """One association row. The cross-child check re-derives `readiness` rather than trusting this one,
+    so it is a convenience for consumers, never an authority."""
     return {"schema_version": ASSOCIATION_SCHEMA, "spell_id": spell_id, "spell_icon_id": fk,
             "asset_ref": asset_ref, "s": observation_state_code(state),
             "d": decoded_reason_code(reason),
-            "readiness": "available" if availability == "source_only" else "unavailable"}
+            "readiness": _readiness(availability=availability, proven_empty=proven_empty)}
 
 
 def iter_icon_catalog(spell_view, side_views, *, policy, asset_resolver, assets):
@@ -157,8 +170,16 @@ def iter_icon_catalog(spell_view, side_views, *, policy, asset_resolver, assets)
         jo = make_string_join({"index": idx_env, "side_id": side_id_env, "side_value": path_sob},
                               resolution="resolved")
         client_path = jo.decoded if jo.decoded_reason == "decoded" else None
-        if not client_path:                               # withheld promotion or an empty path
+        if client_path is None:                           # withheld promotion / unproven index cell
             yield _association(spell_id, fk, None, state=jo.state, reason=jo.decoded_reason)
+            continue
+        if not client_path:
+            # DECODED, and the proven value is the EMPTY string — the client's own SpellIcon row 1 is
+            # like this and spell 1 points at it (E0R.2 T8.1). Not `index_zero` (the FK is nonzero), not
+            # `side_row_missing` (the row is right here), not `proof_withheld` (the join decoded): the
+            # path is provably nothing. No asset row is recorded, because an empty path names no file.
+            yield _association(spell_id, fk, None, state=jo.state, reason=jo.decoded_reason,
+                               proven_empty=True)
             continue
         asset_ref = assets.id_for(client_path)
         if assets.get(asset_ref) is None:
@@ -178,13 +199,18 @@ def icon_coverage(rows, assets) -> dict:
     FOUR units in one report, which is exactly how a coverage number gets misread: `spells` and
     `resolved_paths` and `placeholders` count SPELL ROWS; `unique_paths` counts ASSETS. Present/missing
     count spell rows by the availability of the asset each references, so they sum to `resolved_paths`.
+
+    `verified_empty_paths` is a SUBSET of `placeholders`, not a sixth disjoint bucket: those rows have no
+    reference, but their emptiness is proven rather than unknown, and folding the two together would
+    repeat the collapse this child was normalized to remove (E0R.2 T8.1).
     """
-    spells = resolved = present = missing = placeholders = 0
+    spells = resolved = present = missing = placeholders = verified_empty = 0
     for r in rows:
         spells += 1
         ref = r.get("asset_ref")
         if ref is None:
             placeholders += 1
+            verified_empty += 1 if r.get("readiness") == "verified_empty" else 0
             continue
         resolved += 1
         asset = assets.get(ref)
@@ -194,4 +220,4 @@ def icon_coverage(rows, assets) -> dict:
             missing += 1
     return {"spells": spells, "resolved_paths": resolved, "assets_present": present,
             "assets_missing": missing, "placeholders": placeholders,
-            "unique_paths": len(assets)}
+            "verified_empty_paths": verified_empty, "unique_paths": len(assets)}

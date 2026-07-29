@@ -37,6 +37,40 @@ test("a reference whose decoded_reason is not `decoded` FAILS", () => {
   assert.throws(run({ icons }), /only a decoded join yields a path/);
 });
 
+// --- E0R.2 T8.1: the FIFTH null cause, found by the first real-client regenerate under e0r-v3 ---
+// The client's SpellIcon row 1 exists, is proven, and its path string is EMPTY. Not `index_zero` (the
+// FK is nonzero), not `side_row_missing` (the row is there), not `proof_withheld` (the join decoded):
+// the path is provably nothing, which is what `verified_empty` says. Derived here independently of
+// Python — the whole point of two boundaries.
+test("a decoded reference whose proven path is EMPTY passes as `verified_empty`", () => {
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "verified_empty_path")[0];         // spell 1
+  // The asset it no longer references must go too, or the orphan rule (correctly) fires instead.
+  const iconAssets = corpus.validIconAssets()
+    .filter((a) => a.asset_id !== corpus.validIconsV2()[0].asset_ref);
+  assert.doesNotThrow(run({ icons, iconAssets }));
+});
+
+test("a decoded null reference that does NOT claim emptiness still FAILS", () => {
+  // The exact contradiction the producer used to emit — the original invariant survives intact.
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "decoded_null_without_emptiness_claim")[0];
+  assert.throws(run({ icons }), /verified_empty/);
+});
+
+test("an UNRESOLVED row may not claim emptiness", () => {
+  // `verified_empty` means "I read it and it was empty"; side_row_missing never read it at all.
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "unresolved_claims_emptiness")[0];
+  assert.throws(run({ icons }), /verified_empty/);
+});
+
+test("a row may not both reference an asset and claim its path is empty", () => {
+  const icons = corpus.validIconsV2();
+  icons[0] = corpus.pick(corpus.iconsV2, "reference_claims_emptiness")[0];
+  assert.throws(run({ icons }), /verified_empty/);
+});
+
 test("an orphan asset row FAILS", () => {
   // The other direction from `no dangling`, and what makes the two children mutually determined.
   const iconAssets = [...corpus.validIconAssets(), corpus.pick(corpus.iconAssets, "orphan_asset")[0]]

@@ -119,6 +119,58 @@ def test_index_zero_and_side_row_missing_are_told_apart():
     assert absent["s"] == observation_state_code("unresolved")
 
 
+# --- the FIFTH cause, found by the real client (T8.1) ---
+
+def test_a_decoded_but_EMPTY_path_is_a_proven_emptiness_not_an_unknown():
+    """The real client's SpellIcon row 1 exists, is proven, and its path string is EMPTY — spell 1
+    references it. T6.3 enumerated four null causes and this is a fifth: the join DECODED, so it is not
+    `proof_withheld`; the FK is 1, so it is not `index_zero`; the side row is present, so it is not
+    `side_row_missing`. The producer emitted `d=decoded` with a null reference, which is a
+    contradiction the validator (rightly) refuses — a decoded join that resolved to something has a
+    path.
+
+    Emptiness is the PROVEN fact here, which is exactly what `verified_empty` means in this codebase's
+    readiness vocabulary (`READINESS_REASON_COMPATIBILITY` pairs it with `proven_empty`). It is not the
+    same statement as `unavailable`, which claims the value is unknown."""
+    assets = icon_asset_table()
+    rows = list(iter_icon_catalog(spell_dbc(), icon_side_views(empty_paths=(100,)),
+                                  policy=v2_icon_policy(), asset_resolver=_resolver, assets=assets))
+    empty = [r for r in rows if r["spell_icon_id"] == 100]
+    assert empty, "the fixture must actually exercise the empty-path icon"
+    for row in empty:
+        assert row["asset_ref"] is None, "an empty path names no asset, so there is nothing to reference"
+        assert row["d"] == decoded_reason_code("decoded"), "the join really did decode"
+        assert row["s"] == observation_state_code("resolved")
+        assert row["readiness"] == "verified_empty"
+    assert not any(a["client_path"] == "" for a in assets.rows()), \
+        "an empty path is not an asset; recording one would put a row naming no file in the asset table"
+
+
+def test_the_empty_path_stays_distinguishable_from_the_other_four_causes():
+    assets = icon_asset_table()
+    rows = {r["spell_id"]: r for r in
+            iter_icon_catalog(spell_dbc(), icon_side_views(empty_paths=(100,)), policy=v2_icon_policy(),
+                              asset_resolver=_resolver, assets=assets)}
+    # 805775 has FK 100 (the empty one); 116 has FK 200 (a real path).
+    assert rows[805775]["readiness"] == "verified_empty"
+    assert rows[116]["readiness"] == "available" and rows[116]["asset_ref"] is not None
+    assert rows[805775]["d"] != decoded_reason_code("index_zero")
+    assert rows[805775]["d"] != decoded_reason_code("side_row_missing")
+    assert rows[805775]["d"] != decoded_reason_code("proof_withheld")
+
+
+def test_coverage_counts_proven_emptiness_separately_from_unexplained_nulls():
+    """Collapsing "provably has no path" into the placeholder bucket repeats exactly the information
+    loss T6.3 existed to remove."""
+    assets = icon_asset_table()
+    rows = list(iter_icon_catalog(spell_dbc(), icon_side_views(empty_paths=(100,)),
+                                  policy=v2_icon_policy(), asset_resolver=_resolver, assets=assets))
+    coverage = icon_coverage(rows, assets)
+    assert coverage["verified_empty_paths"] == sum(1 for r in rows if r["readiness"] == "verified_empty")
+    assert coverage["verified_empty_paths"] > 0
+    assert coverage["placeholders"] == sum(1 for r in rows if r["asset_ref"] is None)
+
+
 # --- asset_id is content-derived, and collisions are refused ---
 
 def test_asset_id_is_the_canonical_path_digest():
@@ -183,3 +235,49 @@ def test_coverage_counts_spells_and_paths_in_their_own_units():
     rows, assets = _catalog()
     coverage = icon_coverage(rows, assets)
     assert coverage["resolved_paths"] >= coverage["unique_paths"] > 0
+
+
+# --- the validator agrees, in both directions (T8.1) ---
+
+def _assoc(**over):
+    row = {"schema_version": ASSOCIATION_SCHEMA, "spell_id": 1, "spell_icon_id": 1, "asset_ref": None,
+           "s": observation_state_code("resolved"), "d": decoded_reason_code("decoded"),
+           "readiness": "verified_empty"}
+    row.update(over)
+    return row
+
+
+def test_the_validator_accepts_a_proven_empty_association():
+    from coa_client_extract.publish import _verify_icon_association
+
+    _verify_icon_association(_assoc(), {})
+
+
+def test_a_decoded_null_reference_that_does_NOT_claim_emptiness_is_still_refused():
+    """The original invariant survives: a decoded join with no reference and no claim of emptiness is
+    a contradiction, and that is the bug the real client surfaced."""
+    from coa_client_extract.publish import ResolveError, _verify_icon_association
+
+    with pytest.raises(ResolveError, match="verified_empty"):
+        _verify_icon_association(_assoc(readiness="unavailable"), {})
+
+
+def test_a_reference_may_never_claim_emptiness():
+    """`verified_empty` says the path IS empty; a row that both references an asset and claims
+    emptiness states two incompatible facts."""
+    from coa_client_extract.publish import ResolveError, _verify_icon_association
+
+    assets = {"a" * 32: {"asset_id": "a" * 32, "client_path": "interface/icons/x",
+                         "availability": "source_only"}}
+    with pytest.raises(ResolveError, match="verified_empty"):
+        _verify_icon_association(_assoc(asset_ref="a" * 32, readiness="verified_empty"), assets)
+
+
+def test_an_unresolved_row_may_not_claim_emptiness_either():
+    """`side_row_missing` is "I could not read it", not "I read it and it was empty"."""
+    from coa_client_extract.publish import ResolveError, _verify_icon_association
+
+    with pytest.raises(ResolveError, match="verified_empty"):
+        _verify_icon_association(
+            _assoc(d=decoded_reason_code("side_row_missing"), s=observation_state_code("unresolved"),
+                   readiness="verified_empty"), {})

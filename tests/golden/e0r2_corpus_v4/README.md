@@ -21,3 +21,16 @@ Both languages assert the same two properties over these bytes:
 
 The second number is small because corpus strings are short. The real generation's attribution is what
 this is for: `policy_ref` 88.6 MB, `decoded_reason` 55.4 MB, `state` 36.3 MB, `join_name` 22.3 MB.
+
+## `icons.jsonl` / `icon_assets.jsonl` — the normalized icon pair (T6.3), corrected by T8.1
+
+The association/asset cases live here because T6.3 introduced the dialect. Four of them were added by
+**T8.1**, when the first real-client regenerate under `e0r-v3` failed on spell 1: the client's
+`SpellIcon` row 1 exists, is proven, and its path string is **empty**.
+
+That is a *fifth* null cause T6.3 did not enumerate. It is not `index_zero` (the FK is 1), not
+`side_row_missing` (the row is present), and not `proof_withheld` (the join decoded) — the path is
+provably nothing, which is what `verified_empty` means. The cases pin both halves: `verified_empty_path`
+is the accepted encoding, while `decoded_null_without_emptiness_claim` (the exact contradiction the
+producer used to emit), `unresolved_claims_emptiness` and `reference_claims_emptiness` must all be
+rejected, so the new value cannot be used to launder an unread field into a read one.

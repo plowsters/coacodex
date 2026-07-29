@@ -15,6 +15,11 @@ from __future__ import annotations
 
 from .contracts import DECODED_REASONS, OBSERVATION_STATES, load_observation_wire_schema
 
+# The readiness values an icon ASSOCIATION row may carry. `verified_empty` was added by E0R.2 T8.1 for
+# the real client's decoded-but-empty icon path; where it is admissible is enforced by the cross-child
+# check, not here.
+ICON_ASSOCIATION_READINESS = frozenset({"available", "unavailable", "verified_empty"})
+
 _PROOF_FACETS = ("integrity", "layout", "interpretation")
 _PROMOTIONS = ("normalized", "raw_only")
 _JOIN_PARTS = ("index", "side_id", "side_value")
@@ -385,8 +390,11 @@ def icon_association_row_v2(row):
     _int(row["spell_icon_id"], f"{where}.spell_icon_id", allow_null=True)
     _str(row["asset_ref"], f"{where}.asset_ref", allow_null=True)
     _coded_vocabulary(row, where)
-    if row["readiness"] not in ("available", "unavailable"):
-        _fail(f"{where}.readiness", f"{row['readiness']!r} not in ('available', 'unavailable')")
+    # E0R.2 T8.1: `verified_empty` joins the pair — a decoded join whose proven path is the EMPTY
+    # string is neither available nor unknown. `_verify_icon_association` is what confines it to that
+    # one case; the shape only says the value is in the vocabulary.
+    if row["readiness"] not in ICON_ASSOCIATION_READINESS:
+        _fail(f"{where}.readiness", f"{row['readiness']!r} not in {tuple(sorted(ICON_ASSOCIATION_READINESS))}")
     return row
 
 

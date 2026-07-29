@@ -557,9 +557,19 @@ function verifyIconRow(r) {
 // claim, and normalizing exists to stop repeating claims.
 function verifyIconAssociation(r, assets) {
   const reason = decodedReasonName(r.d);
+  // E0R.2 T8.1: `verified_empty` is admissible in EXACTLY one place — a decoded join with no reference,
+  // which is a path proven to be the empty string. Claiming it anywhere else would let a row that never
+  // read the value assert that it read an empty one.
+  if (r.readiness === "verified_empty" && !(r.asset_ref == null && reason === "decoded")) {
+    throw new GenerationResolveError(`icon ${r.spell_id}: readiness 'verified_empty' claims the path was READ and found empty, but this row is ${r.asset_ref == null ? reason : "a reference"}`);
+  }
   if (r.asset_ref == null) {
     if (reason === "decoded") {
-      throw new GenerationResolveError(`icon ${r.spell_id}: no asset_ref but decoded_reason is 'decoded'; a decoded icon join HAS a path`);
+      // The client's SpellIcon row exists and its path string is empty (real client: icon 1).
+      if (r.readiness !== "verified_empty") {
+        throw new GenerationResolveError(`icon ${r.spell_id}: no asset_ref but decoded_reason is 'decoded'; a decoded icon join either HAS a path or is 'verified_empty' — an unexplained null is neither`);
+      }
+      return;
     }
     if (r.readiness !== "unavailable") {
       throw new GenerationResolveError(`icon ${r.spell_id}: readiness ${r.readiness} with no asset_ref`);

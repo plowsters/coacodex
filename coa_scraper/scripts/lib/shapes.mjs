@@ -14,6 +14,9 @@ export class ShapeError extends Error {}
 const PROOF_FACETS = ["integrity", "interpretation", "layout"];
 const PROMOTIONS = new Set(["normalized", "raw_only"]);
 const JOIN_PARTS = new Set(["index", "side_id", "side_value"]);
+// The readiness values an icon ASSOCIATION row may carry. `verified_empty` was added by E0R.2 T8.1 for
+// the real client's decoded-but-empty icon path.
+const ICON_ASSOCIATION_READINESS = new Set(["available", "unavailable", "verified_empty"]);
 
 // The closed observation vocabularies, read from the SAME immutable wire schema Python reads rather
 // than restated here (T0.1).
@@ -329,8 +332,11 @@ export const SHAPES = {
     int(row.spell_icon_id, `${where}.spell_icon_id`, { nullable: true });
     str(row.asset_ref, `${where}.asset_ref`, { nullable: true });
     codedVocabulary(row, where);
-    if (row.readiness !== "available" && row.readiness !== "unavailable") {
-      fail(`${where}.readiness`, `${row.readiness} not in ("available", "unavailable")`);
+    // E0R.2 T8.1: `verified_empty` joins the pair — a decoded join whose proven path is the EMPTY
+    // string is neither available nor unknown. Where it is admissible is enforced by the cross-child
+    // check; the shape only says the value is in the vocabulary.
+    if (!ICON_ASSOCIATION_READINESS.has(row.readiness)) {
+      fail(`${where}.readiness`, `${row.readiness} not in ${[...ICON_ASSOCIATION_READINESS].sort()}`);
     }
     return row;
   },

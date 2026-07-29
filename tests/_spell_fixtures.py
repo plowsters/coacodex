@@ -46,11 +46,15 @@ def side_views():
     return {"SpellCastTimes": open_view(cast)}
 
 
-def icon_side_views():
-    # SpellIcon: id@0, path@1 (string offset). Icons 100 and 200.
+def icon_side_views(*, empty_paths=()):
+    """SpellIcon: id@0, path@1 (string offset). Icons 100 and 200.
+
+    `empty_paths` points the named icon ids at string offset 0 — the real client's SpellIcon row 1 does
+    exactly this, and it is the case that proved E0R.2 T6.3's model incomplete (T8.1)."""
     block, off = _strings("Interface/Icons/Ability_Fireball.blp", "Interface/Icons/Spell_Frost_Frostbolt.blp")
     rows = [(100, off["Interface/Icons/Ability_Fireball.blp"]),
             (200, off["Interface/Icons/Spell_Frost_Frostbolt.blp"])]
+    rows = [(icon_id, 0 if icon_id in empty_paths else path) for icon_id, path in rows]
     return {"SpellIcon": open_view(_wdbc(rows, 2, block))}
 
 

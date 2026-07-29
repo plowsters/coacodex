@@ -388,14 +388,24 @@ def _verify_icon_association(r: dict, assets: dict) -> None:
     implies, and a null reference must be explained by a `decoded_reason` that is not `decoded`. A stored
     verdict nobody re-derives is a claim, and the whole point of normalizing was to stop repeating
     claims."""
-    sid, ref = r.get("spell_id"), r.get("asset_ref")
+    sid, ref, readiness = r.get("spell_id"), r.get("asset_ref"), r.get("readiness")
     reason = decoded_reason_name(r.get("d"))
+    # E0R.2 T8.1: `verified_empty` is admissible in EXACTLY one place — a decoded join with no
+    # reference, which is a path proven to be the empty string. Claiming it anywhere else would let a
+    # row that never read the value assert that it read an empty one.
+    if readiness == "verified_empty" and not (ref is None and reason == "decoded"):
+        raise ResolveError(f"icon {sid}: readiness 'verified_empty' claims the path was READ and found "
+                           f"empty, but this row is {'a reference' if ref else reason!r}")
     if ref is None:
         if reason == "decoded":
-            raise ResolveError(f"icon {sid}: no asset_ref but decoded_reason is 'decoded'; a decoded "
-                               "icon join HAS a path")
-        if r.get("readiness") != "unavailable":
-            raise ResolveError(f"icon {sid}: readiness {r.get('readiness')!r} with no asset_ref")
+            # The client's SpellIcon row exists and its path string is empty (real client: icon 1).
+            if readiness != "verified_empty":
+                raise ResolveError(
+                    f"icon {sid}: no asset_ref but decoded_reason is 'decoded'; a decoded icon join "
+                    "either HAS a path or is 'verified_empty' — an unexplained null is neither")
+            return
+        if readiness != "unavailable":
+            raise ResolveError(f"icon {sid}: readiness {readiness!r} with no asset_ref")
         return
     if reason != "decoded":
         raise ResolveError(f"icon {sid}: carries an asset_ref but decoded_reason is {reason!r}; only a "
