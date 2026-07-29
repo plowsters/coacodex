@@ -14,15 +14,215 @@ const POINTER_NAME = "coa_client_extract.pointer.json";
 const MANIFEST_NAME = "manifest.json";
 const RESERVED = new Set([MANIFEST_NAME, POINTER_NAME]);
 
-// The E0R required-child registry (mirrors coa_client_extract.publish.REQUIRED_CHILDREN): a candidate is
-// only trustworthy if EVERY one of these is registered + valid, so an empty or partial generation is caught.
-export const REQUIRED_CHILDREN = [
-  "coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
-  "coa_client_spell_projection.manifest.json", "coa_client_spell_icons.jsonl",
-  "coa_client_content.jsonl", "coa_client_archive_plan.json",
-  "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
-  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl", "spell_layout_v2.json",
-];
+// === the GENERATION CONTRACT registry (E0R.2 T1.3) ===
+// The required-child list used to be a hand-mirrored constant here, restating a Python constant. A mirrored
+// constant is what drifts. Node now reads the SAME immutable registry files Python ships, validates the
+// selected revision with an INDEPENDENT implementation (so a bug in one language cannot be laundered
+// through the other), and performs the same three-way comparison: staged bytes, bound hash, and membership
+// in its own supported set.
+export const GENERATION_CONTRACT_SCHEMA = "coa-generation-contract-v1";
+export const CONTRACT_INDEX_SCHEMA = "coa-generation-contract-index-v1";
+export const GENERATION_CONTRACT_CHILD = "generation_contract.json";
+const DEFAULT_CONTRACTS_DIR = new URL("../../../coa_client_extract/data/generation_contracts/", import.meta.url);
+
+const CHILD_KEYS = ["cardinality", "child_schema_version", "kind", "optional", "row_schema_version", "shape"];
+// rule -> the EXACT key set its cardinality object must carry (`single_document` carrying a `min` or a
+// `source_table` is a contradiction, not a harmless extra).
+const CARDINALITY_KEYS_BY_RULE = {
+  reviewed_bound_record_count: ["rule", "source_table"],
+  derived_from_source_topology: ["rule", "source_table"],
+  declared_derivation: ["rule", "source_table"],
+  declared_content_derivation: ["rule"],
+  equals_full_spell_records: ["rule"],
+  equals_is_coa_full_records: ["rule"],
+  single_document: ["rule"],
+  min: ["min", "rule"],
+};
+const SAFE_CHILD_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const SAFE_REVISION_PATH = /^[a-z0-9][a-z0-9.-]*\.json$/;
+
+// Canonical JSON: recursively key-sorted, no whitespace — reproducing Python's
+// json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False). Contract keys are ASCII, where
+// JS's UTF-16 sort and Python's code-point sort agree; the cross-language hash test proves the equality
+// for the actual documents rather than assuming it.
+function sortDeep(value) {
+  if (Array.isArray(value)) return value.map(sortDeep);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value).sort()) out[key] = sortDeep(value[key]);
+    return out;
+  }
+  return value;
+}
+
+export function generationContractSha256(doc) {
+  return crypto.createHash("sha256").update(Buffer.from(JSON.stringify(sortDeep(doc)), "utf8")).digest("hex");
+}
+
+const sameSet = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// An INDEPENDENT implementation of the contract self-validation, not a port: a broken gate that loads is
+// worse than no gate, and two boundaries agreeing only because they share code is not agreement.
+export function validateGenerationContract(doc) {
+  const fail = (m) => { throw new GenerationResolveError(`generation contract invalid: ${m}`); };
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) fail("must be an object");
+  if (doc.schema_version !== GENERATION_CONTRACT_SCHEMA) fail(`schema_version ${doc.schema_version}`);
+  const extraTop = Object.keys(doc).filter((k) =>
+    !["schema_version", "revision", "note", "observation_wire_schema", "children"].includes(k));
+  if (extraTop.length) fail(`unexpected top-level key(s) ${extraTop.sort().join(", ")}`);
+  if (typeof doc.revision !== "string" || !doc.revision) fail("revision must be a non-empty string");
+  const wire = doc.observation_wire_schema;
+  if (!wire || typeof wire !== "object" || !wire.schema_version || String(wire.sha256 || "").length !== 64) {
+    fail("must pin the observation wire schema by schema_version + sha256");
+  }
+  const children = doc.children;
+  if (!children || typeof children !== "object" || Array.isArray(children) || !Object.keys(children).length) {
+    fail("declares no children");
+  }
+  const shapes = new Set();
+  for (const [name, spec] of Object.entries(children)) {
+    if (!SAFE_CHILD_NAME.test(name)) fail(`unsafe child name ${name}: plain filenames only`);
+    if (!spec || typeof spec !== "object" || Array.isArray(spec)) fail(`child ${name} spec must be an object`);
+    if (!sameSet(Object.keys(spec).sort(), CHILD_KEYS)) {
+      fail(`child ${name} keys ${Object.keys(spec).sort().join(", ")} != ${CHILD_KEYS.join(", ")}`);
+    }
+    if (spec.kind !== "jsonl" && spec.kind !== "json") fail(`child ${name} kind ${spec.kind}`);
+    if (typeof spec.child_schema_version !== "string" || !spec.child_schema_version) {
+      fail(`child ${name} child_schema_version must be a non-empty string`);
+    }
+    if (spec.kind === "jsonl") {
+      if (typeof spec.row_schema_version !== "string" || !spec.row_schema_version) {
+        fail(`child ${name} jsonl child needs a row_schema_version`);
+      }
+    } else if (spec.row_schema_version !== null) {
+      fail(`child ${name} json child must have row_schema_version null`);
+    }
+    if (typeof spec.optional !== "boolean") fail(`child ${name} optional must be a boolean`);
+    if (typeof spec.shape !== "string" || !spec.shape) fail(`child ${name} shape must name a validator`);
+    if (shapes.has(spec.shape)) fail(`shape ${spec.shape} is reused; each child needs its own shape`);
+    shapes.add(spec.shape);
+
+    const card = spec.cardinality;
+    if (!card || typeof card !== "object" || Array.isArray(card)) fail(`child ${name} cardinality must be an object`);
+    const expected = CARDINALITY_KEYS_BY_RULE[card.rule];
+    if (!expected) fail(`child ${name} cardinality rule ${card.rule} is not a known rule`);
+    if (!sameSet(Object.keys(card).sort(), expected)) {
+      fail(`child ${name} cardinality for rule ${card.rule} must have exactly ${expected.join(", ")}`);
+    }
+    if (card.rule === "min" && (!Number.isInteger(card.min) || card.min < 1)) {
+      fail(`child ${name} min cardinality needs a positive integer floor`);
+    }
+    if (expected.includes("source_table") && (typeof card.source_table !== "string" || !card.source_table)) {
+      fail(`child ${name} rule ${card.rule} needs a non-empty source_table`);
+    }
+  }
+  return doc;
+}
+
+export function validateContractRegistry(doc) {
+  const fail = (m) => { throw new GenerationResolveError(`generation contract registry invalid: ${m}`); };
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) fail("must be an object");
+  if (doc.schema_version !== CONTRACT_INDEX_SCHEMA) fail(`schema_version ${doc.schema_version}`);
+  const extra = Object.keys(doc).filter((k) => !["schema_version", "current", "supported", "note"].includes(k));
+  if (extra.length) fail(`unexpected key(s) ${extra.sort().join(", ")}`);
+  const supported = doc.supported;
+  if (!supported || typeof supported !== "object" || Array.isArray(supported) || !Object.keys(supported).length) {
+    fail("lists no supported revisions");
+  }
+  for (const [revision, entry] of Object.entries(supported)) {
+    if (!entry || typeof entry !== "object" || !sameSet(Object.keys(entry).sort(), ["path", "sha256"])) {
+      fail(`entry ${revision} must have exactly path, sha256`);
+    }
+    if (typeof entry.path !== "string" || !SAFE_REVISION_PATH.test(entry.path)) fail(`entry ${revision} path ${entry.path} is unsafe`);
+    if (typeof entry.sha256 !== "string" || entry.sha256.length !== 64) fail(`entry ${revision} sha256 must be a 64-char digest`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(supported, doc.current)) fail(`current ${doc.current} is not a supported revision`);
+  return doc;
+}
+
+export function loadContractRegistry(contractsDir = DEFAULT_CONTRACTS_DIR) {
+  const indexPath = new URL("index.json", contractsDir);
+  let doc;
+  try { doc = JSON.parse(fs.readFileSync(indexPath, "utf8")); }
+  catch (e) { throw new GenerationResolveError(`generation contract registry unreadable: ${e.message}`); }
+  return validateContractRegistry(doc);
+}
+
+// Set MEMBERSHIP, never equality with `current`: a generation published under an older supported revision
+// must stay resolvable, or rollback and the predecessor chain break the moment a new revision ships.
+export function loadSupportedContract(revision, sha256Expected, contractsDir = DEFAULT_CONTRACTS_DIR) {
+  const registry = loadContractRegistry(contractsDir);
+  const entry = registry.supported[revision];
+  if (!entry) {
+    throw new GenerationResolveError(
+      `generation_contract: not the supported contract — unsupported revision ${revision} ` +
+      `(supported: ${Object.keys(registry.supported).sort().join(", ")})`);
+  }
+  let doc;
+  try { doc = JSON.parse(fs.readFileSync(new URL(entry.path, contractsDir), "utf8")); }
+  catch (e) { throw new GenerationResolveError(`generation contract ${revision} unreadable: ${e.message}`); }
+  validateGenerationContract(doc);
+  if (doc.revision !== revision) throw new GenerationResolveError(`contract file ${entry.path} declares revision ${doc.revision}`);
+  const actual = generationContractSha256(doc);
+  if (actual !== entry.sha256) {
+    throw new GenerationResolveError(
+      `generation contract ${revision} sha256 ${actual.slice(0, 16)} != registry pin ${entry.sha256.slice(0, 16)}: ` +
+      "the revision was edited in place; add a new revision instead");
+  }
+  if (sha256Expected !== entry.sha256) {
+    throw new GenerationResolveError(
+      `generation_contract: not the supported contract — ${revision} sha256 ` +
+      `${String(sha256Expected).slice(0, 16)} != trusted ${entry.sha256.slice(0, 16)}`);
+  }
+  return doc;
+}
+
+export function loadCurrentContract(contractsDir = DEFAULT_CONTRACTS_DIR) {
+  const registry = loadContractRegistry(contractsDir);
+  return [registry.current, loadSupportedContract(registry.current, registry.supported[registry.current].sha256, contractsDir)];
+}
+
+// A RESOLVER's requirement comes from the generation's own verified staged contract, never from `current`.
+export function requiredChildrenFor(contract) {
+  return Object.entries(contract.children).filter(([, spec]) => !spec.optional).map(([name]) => name).sort();
+}
+
+// The PRODUCER-side view, derived rather than mirrored. Kept as an export because tests and callers refer
+// to "what a complete generation carries today".
+export const REQUIRED_CHILDREN = requiredChildrenFor(loadCurrentContract()[1]);
+
+// The three-way agreement: staged child, manifest binding, own registry. Mirrors Python
+// publish._staged_contract; returns the REGISTRY copy, identical by hash but never the staged bytes.
+function stagedContract(genDir, manifest, contractsDir) {
+  const childPath = path.join(genDir, GENERATION_CONTRACT_CHILD);
+  if (!fs.existsSync(childPath)) {
+    throw new GenerationResolveError(
+      `required child ${GENERATION_CONTRACT_CHILD} missing: the generation does not declare the contract it was produced under`);
+  }
+  let staged;
+  try { staged = JSON.parse(fs.readFileSync(childPath, "utf8")); }
+  catch (e) { throw new GenerationResolveError(`staged generation contract is not valid JSON: ${e.message}`); }
+  validateGenerationContract(staged);
+
+  const stagedSha = generationContractSha256(staged);
+  const bound = (manifest.binding || {}).generation_contract;
+  if (!bound || typeof bound !== "object" || Array.isArray(bound)) {
+    throw new GenerationResolveError(
+      "manifest binding.generation_contract missing: the generation stages a contract but does not bind it");
+  }
+  if (bound.schema_version !== GENERATION_CONTRACT_SCHEMA) {
+    throw new GenerationResolveError(`binding.generation_contract schema_version ${bound.schema_version}`);
+  }
+  if (bound.sha256 !== stagedSha) {
+    throw new GenerationResolveError(
+      `binding.generation_contract: the staged child hashes ${stagedSha.slice(0, 16)} but the binding names ${String(bound.sha256).slice(0, 16)}`);
+  }
+  if (bound.revision !== staged.revision) {
+    throw new GenerationResolveError(
+      `binding.generation_contract: staged revision ${staged.revision} != bound revision ${bound.revision}`);
+  }
+  return loadSupportedContract(bound.revision, stagedSha, contractsDir);
+}
 
 const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
 
@@ -228,7 +428,7 @@ function validateChildrenByPath(genDir, manifest) {
 // Validate a staged CANDIDATE generation by path (no pointer), so the Node trust boundary runs BEFORE the
 // pointer flips (design A5). Mirrors the Python validate_candidate_generation's structural checks; the
 // cross-child merge-join stays authoritative in Python.
-export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH } = {}) {
+export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, contractsDir } = {}) {
   const dir = path.resolve(genDir);
   const manifestPath = path.join(dir, MANIFEST_NAME);
   if (!fs.existsSync(manifestPath)) throw new GenerationResolveError("candidate manifest missing");
@@ -243,8 +443,10 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH }
   if (manifest.candidate_trust_sha256 !== recomputedTrust) {
     throw new GenerationResolveError(`candidate_trust_sha256 does not cover the manifest (recomputed ${recomputedTrust})`);
   }
+  // The contract is established BEFORE any per-child work: it is what says which children are required.
+  const contract = stagedContract(dir, manifest, contractsDir);
   const children = validateChildrenByPath(dir, manifest);
-  for (const name of REQUIRED_CHILDREN) {
+  for (const name of requiredChildrenFor(contract)) {
     if (!(name in children)) throw new GenerationResolveError(`required child ${name} missing from the candidate generation`);
   }
   // The staged policy child must match the committed lock (recomputed, never self-trusted).
@@ -284,7 +486,7 @@ function assertSafeChildName(name) {
 // Equivalent validation to the Python resolve_active_generation: fails closed on pointer schema,
 // gen-dir containment, manifest hash, and each child's path/sha256/byte_length/record-count/schema/
 // uniqueness. `rootOrPointer` may be the directory holding the pointer OR the pointer file itself.
-export function resolveGeneration(rootOrPointer) {
+export function resolveGeneration(rootOrPointer, { contractsDir } = {}) {
   let pointerPath = rootOrPointer;
   if (fs.existsSync(rootOrPointer) && fs.statSync(rootOrPointer).isDirectory()) {
     pointerPath = path.join(rootOrPointer, POINTER_NAME);
@@ -311,8 +513,11 @@ export function resolveGeneration(rootOrPointer) {
   if (manifest.generation_id !== genId) throw new GenerationResolveError("manifest generation_id disagrees with the pointer");
   assertPublishedManifest(manifest, manifestText);
 
+  // Identical rules to the candidate path, so a PUBLISHED generation under an older supported revision
+  // resolves by exactly the three-way agreement it was validated under.
+  const contract = stagedContract(genDir, manifest, contractsDir);
   const resolved = validateChildrenByPath(genDir, manifest);
-  for (const name of REQUIRED_CHILDREN) {
+  for (const name of requiredChildrenFor(contract)) {
     if (!(name in resolved)) throw new GenerationResolveError(`required child ${name} missing from the published generation`);
   }
   return { generationId: genId, genDir, manifest, children: resolved };

@@ -32,7 +32,8 @@ import { normalizeSchoolMask, normalizePowerType } from "../scripts/lib/mechanic
 import { reconcileField, REASON } from "../scripts/lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "../scripts/lib/mechanics-candidates.mjs";
 import { loadAndValidateProjection, MechanicsBuildError } from "../scripts/lib/mechanics-projection.mjs";
-import { resolveGeneration, GenerationResolveError, REQUIRED_CHILDREN } from "../scripts/lib/generation.mjs";
+import { resolveGeneration, GenerationResolveError, REQUIRED_CHILDREN, GENERATION_CONTRACT_CHILD,
+         GENERATION_CONTRACT_SCHEMA, generationContractSha256, loadCurrentContract } from "../scripts/lib/generation.mjs";
 import { candidateTrustSha256FromText } from "../scripts/lib/canonical.mjs";
 
 function tempProject() {
@@ -957,6 +958,7 @@ function writeGenerationFixture(root, projRecords) {
     "coa_client_tab_types.jsonl": jsonl([]),
     "coa_client_essence.jsonl": jsonl([]),
     "spell_layout_v2.json": Buffer.from(JSON.stringify({ schema_version: "coa-spell-layout-v2" })),
+    [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(loadCurrentContract()[1])),
   };
   const children = {};
   for (const [name, body] of Object.entries(contents)) {
@@ -967,7 +969,10 @@ function writeGenerationFixture(root, projRecords) {
   const manifest = {
     schema_version: "coa-client-extract-manifest-v3", generation_id: genId, published_at: 1,
     predecessor_generation_id: null, children, outputs: {}, unknown_symbol_inventory: { power_type: [], school_bits: [] },
-    binding: {}, publication_state: "published", validation: { python: true, node: true }, budget: { within_budget: true },
+    binding: { generation_contract: { schema_version: GENERATION_CONTRACT_SCHEMA,
+                                      revision: loadCurrentContract()[0],
+                                      sha256: generationContractSha256(loadCurrentContract()[1]) } },
+    publication_state: "published", validation: { python: true, node: true }, budget: { within_budget: true },
   };
   manifest.candidate_trust_sha256 = candidateTrustSha256FromText(JSON.stringify(manifest));
   const mBody = Buffer.from(JSON.stringify(manifest, null, 2) + "\n");

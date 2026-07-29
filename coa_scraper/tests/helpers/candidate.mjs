@@ -8,7 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
-import { REQUIRED_CHILDREN } from "../../scripts/lib/generation.mjs";
+import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, REQUIRED_CHILDREN,
+         generationContractSha256, loadCurrentContract } from "../../scripts/lib/generation.mjs";
 
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CORPUS = new URL("../../../tests/golden/e0r1_corpus/", import.meta.url);
@@ -47,10 +48,37 @@ const SCHEMA_FOR = {
   "coa_client_tab_types.jsonl": "coa-client-tab-types-v1",
   "coa_client_essence.jsonl": "coa-client-essence-v1",
   "spell_layout_v2.json": "coa-spell-layout-v2",
+  [GENERATION_CONTRACT_CHILD]: GENERATION_CONTRACT_SCHEMA,
 };
+
+// Write a two-revision registry to disk so a test can prove that membership — not equality with
+// `current` — is what the validator checks. Nothing is faked: both files are real, validated documents.
+export function writeTwoRevisionRegistry(dir) {
+  const [, v1] = loadCurrentContract();
+  const v2 = { ...structuredClone(v1), revision: "e0r-v2",
+               note: "IMMUTABLE. Successor revision used to prove an older revision stays resolvable." };
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [doc, name] of [[v1, "e0r-v1.json"], [v2, "e0r-v2.json"]]) {
+    fs.writeFileSync(path.join(dir, name), JSON.stringify(doc, null, 2) + "\n");
+  }
+  fs.writeFileSync(path.join(dir, "index.json"), JSON.stringify({
+    schema_version: "coa-generation-contract-index-v1",
+    current: "e0r-v2",
+    supported: {
+      "e0r-v1": { path: "e0r-v1.json", sha256: generationContractSha256(v1) },
+      "e0r-v2": { path: "e0r-v2.json", sha256: generationContractSha256(v2) },
+    },
+  }, null, 2) + "\n");
+  // A directory URL (trailing slash) so `new URL(entry.path, dir)` resolves inside it.
+  return { contractsDir: new URL(`file://${path.resolve(dir)}/`), v1, v2 };
+}
 
 // Options: {full, proj, icons, policy, lock} override corpus defaults; {drop:[names]} removes children;
 // {trustOverride} replaces the computed digest; {mutateManifest} edits trust-covered fields before hashing.
+// Contract knobs, each isolating ONE leg of the three-way check (T1.3):
+//   {contract: [revision, doc]} stages and binds an explicit revision instead of `current`;
+//   {contractMutate} tampers the STAGED copy (the binding follows it, so the registry leg fires);
+//   {bindOverride} desynchronizes the binding from the staged copy (so the binding leg fires).
 export function buildCandidate(opts = {}) {
   const corpus = loadCorpus();
   const full = opts.full || corpus.validFull();
@@ -58,6 +86,9 @@ export function buildCandidate(opts = {}) {
   const icons = opts.icons || corpus.validIcons();
   const policy = opts.policy || corpus.policy;
   const drop = new Set(opts.drop || []);
+  const [contractRevision, contractBase] = opts.contract || loadCurrentContract();
+  const contract = structuredClone(contractBase);
+  if (opts.contractMutate) opts.contractMutate(contract);
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "e0r1cand-"));
   const genDir = path.join(root, "gen-c1");
@@ -76,6 +107,7 @@ export function buildCandidate(opts = {}) {
     "coa_client_tab_types.jsonl": jsonl([]),
     "coa_client_essence.jsonl": jsonl([]),
     "spell_layout_v2.json": Buffer.from(JSON.stringify(policy)),
+    [GENERATION_CONTRACT_CHILD]: Buffer.from(JSON.stringify(contract)),
   };
   const children = {};
   for (const [name, body] of Object.entries(contents)) {
@@ -85,10 +117,18 @@ export function buildCandidate(opts = {}) {
     children[name] = { sha256: sha(body), byte_length: body.length, records, schema_version: SCHEMA_FOR[name] };
   }
 
+  // A staged generation BINDS what it stages by default; desynchronizing the two is something a test
+  // opts into (`bindOverride`), which is what keeps the binding leg and the registry leg separable.
+  const boundContract = opts.bindOverride !== undefined ? opts.bindOverride : {
+    schema_version: GENERATION_CONTRACT_SCHEMA,
+    revision: contract.revision !== undefined ? contract.revision : contractRevision,
+    sha256: generationContractSha256(contract),
+  };
   let manifest = {
     schema_version: "coa-client-extract-manifest-v3", generation_id: "c1",
     publication_state: "candidate", published_at: 1753100000123456789,
     predecessor_generation_id: null, children,
+    binding: opts.dropBinding ? {} : { generation_contract: boundContract },
   };
   if (opts.mutateManifest) manifest = opts.mutateManifest(manifest) || manifest;
   manifest.candidate_trust_sha256 = opts.trustOverride || candidateTrustSha256FromText(JSON.stringify(manifest));

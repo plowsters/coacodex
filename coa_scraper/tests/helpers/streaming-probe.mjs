@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { loadCorpus } from "./candidate.mjs";
 import { expandCompact } from "../../scripts/lib/mechanics-projection.mjs";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
-import { validateCandidateByPath } from "../../scripts/lib/generation.mjs";
+import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, generationContractSha256,
+         loadCurrentContract, validateCandidateByPath } from "../../scripts/lib/generation.mjs";
 
 const SCHEMA_FOR = {
   "coa_client_spell.jsonl": "coa-client-spell-v3",
@@ -24,6 +25,7 @@ const SCHEMA_FOR = {
   "coa_client_tab_types.jsonl": "coa-client-tab-types-v1",
   "coa_client_essence.jsonl": "coa-client-essence-v1",
   "spell_layout_v2.json": "coa-spell-layout-v2",
+  [GENERATION_CONTRACT_CHILD]: GENERATION_CONTRACT_SCHEMA,
 };
 
 function writeChild(genDir, name, lineIter) {
@@ -95,10 +97,15 @@ function build(n, root) {
   }
   children["coa_client_archive_plan.json"] = writeDoc(genDir, "coa_client_archive_plan.json", { schema_version: SCHEMA_FOR["coa_client_archive_plan.json"] });
   children["spell_layout_v2.json"] = writeDoc(genDir, "spell_layout_v2.json", corpus.policy);
+  const [contractRevision, contract] = loadCurrentContract();
+  children[GENERATION_CONTRACT_CHILD] = writeDoc(genDir, GENERATION_CONTRACT_CHILD, contract);
 
   const manifest = { schema_version: "coa-client-extract-manifest-v3", generation_id: "c1",
                      publication_state: "candidate", published_at: 1753100000123456789,
-                     predecessor_generation_id: null, children };
+                     predecessor_generation_id: null, children,
+                     binding: { generation_contract: {
+                       schema_version: GENERATION_CONTRACT_SCHEMA, revision: contractRevision,
+                       sha256: generationContractSha256(contract) } } };
   manifest.candidate_trust_sha256 = candidateTrustSha256FromText(JSON.stringify(manifest));
   fs.writeFileSync(path.join(genDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   fs.writeFileSync(path.join(root, "spell_layout.lock.json"),
