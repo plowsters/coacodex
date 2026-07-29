@@ -34,8 +34,10 @@ const KIND_BEHAVIOR_ORDER = { pet_action: 0, cooldown: 1, ability: 2, debuff: 3,
 // Canonical mechanics from the CLIENT projection + the verified Builder only. E0R.1 T5.3 removed the
 // vestigial `spellRows` input: the DB-era scraped rows were retired as a reconciliation source, and an
 // accepted-but-ignored parameter is a standing invitation to smuggle unproven data back in.
-export function buildCanonicalMechanics({ entries, projection = [] }) {
-  const clientById = new Map(projection.map((r) => [Number(r.spell_id), r]));
+// `clientById` is the projection LOOKUP the canonical path now streams into (E0R.2 T5.1); `projection`
+// remains for the legacy v2/array callers, which build the same Map from what they already hold.
+export function buildCanonicalMechanics({ entries, projection = [], clientById = null }) {
+  clientById = clientById || new Map(projection.map((r) => [Number(r.spell_id), r]));
 
   const bySpell = new Map();
   for (const entry of entries) {
@@ -437,7 +439,7 @@ export function buildMechanicsArtifact({ entries, projectionPath, manifestPath, 
     return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
   }
 
-  const rows = buildCanonicalMechanics({ entries, projection: loaded.projection });
+  const rows = buildCanonicalMechanics({ entries, clientById: loaded.clientById });
   return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
 }
 

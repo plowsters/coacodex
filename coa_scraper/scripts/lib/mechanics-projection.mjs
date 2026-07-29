@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { JsonlParseError, readJsonlLinesHashed } from "./jsonl-stream.mjs";
 import { normalizeSchoolMask, normalizePowerType, isPresent } from "./mechanics-normalize.mjs";
 
 export class MechanicsBuildError extends Error {}
@@ -67,7 +68,7 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
   // E0R v3: rows carry a compact `raw` block re-verified against the pinned policy child, not per-row
   // `field_observations`. The generation manifest already validated child integrity (sha/bytes/records).
   if (manifest.schema_version === "coa-client-spell-projection-manifest-v3") {
-    return loadAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath });
+    return streamAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath });
   }
   if (manifest.schema_version === "coa-client-spell-projection-v1") {
     throw new MechanicsBuildError("projection manifest is v1; regenerate with M1.14E (coa-client-spell-projection-v2)");
@@ -119,7 +120,10 @@ export function loadAndValidateProjection({ projectionPath, manifestPath, builde
     projection_only: [...seen].filter((s) => !builderSpellIds.has(s)).length,
   };
   return {
-    absent: false, projection, coverage, projection_sha256: sha,
+    // The legacy v2 path still materializes its rows; `clientById` is derived here so the consumer sees
+    // ONE shape from both paths and the canonical v3 path never has to hand back an array to match it.
+    absent: false, projection, clientById: new Map(projection.map((r) => [Number(r.spell_id), r])),
+    coverage, projection_sha256: sha,
     manifest_sha256: crypto.createHash("sha256").update(manifestBytes).digest("hex"),
     client_build: manifest.client_build ?? null,
   };
@@ -350,34 +354,44 @@ export function verifyFullRowAgainstPolicy(row, policyDoc) {
 // child. Per-row: v3 schema, is_coa, positive unique spell_id, and an independent numeric/string
 // re-derivation via verifyRowAgainstPolicy. Child-byte integrity was already enforced by the generation
 // manifest; here we re-hash for the input provenance record and count-check against the manifest.
-export function loadAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath }) {
+//
+// E0R.2 T5.1: STREAMED. The previous read was readFileSync -> toString -> split, accumulating every row
+// into an array the caller then turned into a Map — the whole 400 MB projection held three ways. What
+// the build actually needs is a LOOKUP for the ~3,600 Builder spells, so only those rows are retained;
+// every row is still parsed and validated on its way past, because a corrupt row outside the Builder
+// domain is still a corrupt generation. The sha256 accumulates over the exact bytes read, so the
+// provenance hash is unchanged from the whole-file one it replaces.
+export function streamAndValidateProjectionV3({ projectionPath, manifestBytes, manifest, builderSpellIds, policyPath }) {
   if (!policyPath || !fs.existsSync(policyPath)) {
     throw new MechanicsBuildError("v3 projection requires the reviewed spell_layout_v2 policy child");
   }
   const policyDoc = parseJson(fs.readFileSync(policyPath, "utf8"), "spell policy");
-  const bytes = fs.readFileSync(projectionPath);
-  const sha = crypto.createHash("sha256").update(bytes).digest("hex");
   const counts = manifest.counts || {};
 
-  const projection = [];
-  const seen = new Set();
-  let lineNo = 0;
-  for (const line of bytes.toString("utf8").split("\n")) {
-    lineNo += 1;
-    if (!line.trim()) continue;
-    const rec = parseJson(line, `projection line ${lineNo}`);
-    if (rec.schema_version !== "coa-client-spell-projection-v3") {
-      throw new MechanicsBuildError(`projection row bad schema_version: ${rec.schema_version}`);
+  const clientById = new Map();
+  const seen = new Set();          // counter-scale: ~10k integers, not rows
+  let projected = 0, projectionOnly = 0;
+  const stream = readJsonlLinesHashed(projectionPath);
+  try {
+    for (const { row: rec, lineNo } of stream.rows) {
+      projected += 1;
+      if (rec.schema_version !== "coa-client-spell-projection-v3") {
+        throw new MechanicsBuildError(`projection row bad schema_version: ${rec.schema_version}`);
+      }
+      if (rec.coa_attribution?.is_coa !== true) throw new MechanicsBuildError(`projection row not is_coa: ${rec.spell_id}`);
+      if (!Number.isInteger(rec.spell_id) || rec.spell_id <= 0) throw new MechanicsBuildError(`projection non-positive-integer spell_id: ${rec.spell_id}`);
+      if (seen.has(rec.spell_id)) throw new MechanicsBuildError(`projection duplicate spell_id: ${rec.spell_id} (line ${lineNo})`);
+      verifyRowAgainstPolicy(rec, policyDoc);            // independent numeric/string re-derivation
+      seen.add(rec.spell_id);
+      if (builderSpellIds.has(rec.spell_id)) clientById.set(rec.spell_id, rec);
+      else projectionOnly += 1;
     }
-    if (rec.coa_attribution?.is_coa !== true) throw new MechanicsBuildError(`projection row not is_coa: ${rec.spell_id}`);
-    if (!Number.isInteger(rec.spell_id) || rec.spell_id <= 0) throw new MechanicsBuildError(`projection non-positive-integer spell_id: ${rec.spell_id}`);
-    if (seen.has(rec.spell_id)) throw new MechanicsBuildError(`projection duplicate spell_id: ${rec.spell_id}`);
-    verifyRowAgainstPolicy(rec, policyDoc);            // independent numeric/string re-derivation
-    seen.add(rec.spell_id);
-    projection.push(rec);
+  } catch (err) {
+    if (err instanceof JsonlParseError) throw new MechanicsBuildError(`projection line ${err.lineNo}: invalid JSON: ${err.cause.message}`);
+    throw err;
   }
-  if (Number.isInteger(counts.projected_records) && counts.projected_records !== projection.length) {
-    throw new MechanicsBuildError(`projection count mismatch: manifest ${counts.projected_records} != actual ${projection.length}`);
+  if (Number.isInteger(counts.projected_records) && counts.projected_records !== projected) {
+    throw new MechanicsBuildError(`projection count mismatch: manifest ${counts.projected_records} != actual ${projected}`);
   }
   if (Number.isInteger(counts.unique_spell_ids) && counts.unique_spell_ids !== seen.size) {
     throw new MechanicsBuildError(`projection unique_spell_ids mismatch: manifest ${counts.unique_spell_ids} != actual ${seen.size}`);
@@ -388,12 +402,12 @@ export function loadAndValidateProjectionV3({ projectionPath, manifestBytes, man
     throw new MechanicsBuildError(`builder_missing_from_projection: ${missing.length} spell(s), e.g. ${missing.slice(0, 5)}`);
   }
   const coverage = {
-    builder_joined_to_projection: [...builderSpellIds].filter((s) => seen.has(s)).length,
+    builder_joined_to_projection: clientById.size,
     builder_missing_from_projection: 0,
-    projection_only: [...seen].filter((s) => !builderSpellIds.has(s)).length,
+    projection_only: projectionOnly,
   };
   return {
-    absent: false, projection, coverage, projection_sha256: sha,
+    absent: false, clientById, coverage, projection_sha256: stream.sha256(),
     manifest_sha256: crypto.createHash("sha256").update(manifestBytes).digest("hex"),
     client_build: manifest.client_build ?? null,
   };

@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { candidateTrustSha256FromText } from "./canonical.mjs";
+import { CHUNK, readJsonlLines } from "./jsonl-stream.mjs";
 import { assertPolicyLock, verifyRowAgainstPolicy, verifyFullRowAgainstPolicy, expandCompact } from "./mechanics-projection.mjs";
 import { SHAPES, ShapeError, installContractValidator } from "./shapes.mjs";
 
@@ -408,33 +409,9 @@ function checkShape(shape, doc, name) {
 
 const DEFAULT_LOCK_PATH = new URL("../../config/spell_layout.lock.json", import.meta.url);
 
-const CHUNK = 1 << 20;
-
-// Sync generator over a JSONL child: fixed-size reads with a byte-level carry (utf8-safe across chunk
-// boundaries), yielding one parsed row at a time — never a whole-child string or row array (E0R.1 T4.2).
-function* readJsonlLines(childPath) {
-  const fd = fs.openSync(childPath, "r");
-  try {
-    const buf = Buffer.allocUnsafe(CHUNK);
-    let rem = Buffer.alloc(0);
-    while (true) {
-      const n = fs.readSync(fd, buf, 0, CHUNK, null);
-      if (n === 0) break;
-      const data = rem.length ? Buffer.concat([rem, buf.subarray(0, n)]) : buf.subarray(0, n);
-      let start = 0, idx;
-      while ((idx = data.indexOf(0x0a, start)) !== -1) {
-        const line = data.toString("utf8", start, idx);
-        if (line.trim()) yield JSON.parse(line);
-        start = idx + 1;
-      }
-      rem = Buffer.from(data.subarray(start));   // copy: `buf` is reused by the next read
-    }
-    const tail = rem.toString("utf8");
-    if (tail.trim()) yield JSON.parse(tail);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
+// `readJsonlLines` moved to the leaf module jsonl-stream.mjs (E0R.2 T5.1) so the canonical mechanics
+// build can stream over the same primitive: this module imports FROM mechanics-projection.mjs, so a
+// primitive defined here was unreachable from there without a cycle.
 
 // Chunked integrity scan: sha256 + byte length + record count (non-empty lines) without holding the child
 // in memory — the streaming twin of Python publish._scan_child (E0R.1 T4.2).
