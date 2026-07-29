@@ -73,7 +73,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T0.1 Observation vocabularies: shared wire schema, constructor-enforced | **done** | `c97d7d5` — 30 probes; `_STATES` dead code removed; 655 Py + 121 Node |
 | — Mechanical re-bind (unplanned, user-approved) | **done** | `d935845` — Spell `c8cd440d`→`fc9d91ca` (+329 rows), SpellIcon string block −5 B; layout identical, semantic view byte-identical, 0 blocking |
 | T0.2 Bind every source domain the contract cites (DBC + Content JSON) | **done** | `a7f7653` — 10 tables bound, `topology_matches_bound` EMPTY; content 52,744 = child exactly; policy `5fbd5b5d`→`056166c2` |
-| T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | pending | |
+| T1.1 Contract registry introduced, staged, bound, adopted — **atomic** | **done** | `14632f0` — `e0r-v1` (12 children, no placeholders, wire schema pinned `5d9b743d`) digest `708a00e2`; validators derive from the generation's OWN staged contract via registry dispatch; 58 probes; 726 Py + 121 Node |
 | T1.2 Reject a tampered, mismatched, or unsupported contract | pending | |
 | T1.3 Node dispatches on the supported-contract hash set | pending | |
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | pending | |
@@ -99,6 +99,27 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T8.1 Real-client re-run: recon, regenerate, build, acceptance | pending | |
 | T8.2 Headroom gate committed with the record | pending | |
 | T8.3 Push, PR update, CI green | pending | |
+
+### Execution notes (deviations from the plan as written, with reasons)
+
+- **T0.2 corrected two plan assumptions.** Recon did *not* already open the `CharacterAdvancement*`
+  tables — `topology.py:40` iterates `required_tables`, which held only the five Spell-side tables. And
+  the Content child has no WDBC source at all, so `derived_from_source_topology` was inexpressible for
+  it; it needed its own `content_sources` policy binding (`read_bound_content`). `topology.py` itself
+  needed no change: it generalizes once the policy declares the tables.
+- **`verify_source_topology` reads `client_build` off the BACKEND**, which `StormLibBackend` does not
+  set, so a raw report always carries `build_mismatch` unless the caller supplies it. This cost a false
+  drift signal during the re-bind; T4.3's recon-binding digest must not treat that finding as real.
+- **T1.1 absorbed registry dispatch from T1.2.** T1.1 must derive the required-child set from the
+  generation's own staged contract (otherwise `required_children_for` is dead code for a commit). Doing
+  that against an *unverified* staged file would be a one-commit trust REGRESSION versus the hardcoded
+  list it replaces, so `_staged_contract` dispatches through the trusted registry by canonical digest in
+  T1.1. **T1.2 is therefore reduced to** the third leg — comparing the staged child against
+  `manifest.binding.generation_contract` — plus the systematic rejection matrix.
+- **Contract digests are canonical, not byte digests.** `add_json` re-serializes the staged child
+  (indented, key-sorted), so a byte digest of the registry file would never match the staged copy.
+  `generation_contract_sha256` canonicalizes (`sort_keys`, `separators=(",", ":")`), which is also what
+  lets Node re-derive it independently in T1.3.
 
 ---
 
