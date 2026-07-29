@@ -14,6 +14,7 @@ from .contracts import (CANDIDATE_MUTABLE_KEYS, ContractError, GENERATION_CONTRA
                         load_current_contract, load_supported_contract, validate_generation_contract)
 from .manifest import build_manifest_v3
 from .spell_layout import compute_policy_sha256, load_spell_policy
+from .shapes import SHAPES, ShapeError
 from .spell_record import _expand_compact as _expand_cell
 from .topology import topology_matches_bound
 
@@ -295,7 +296,7 @@ def _verify_icon_row(r: dict) -> None:
         raise ResolveError(f"icon id/path: {status} spell {r.get('spell_id')} missing client_path")
 
 
-def _cross_child(gen_dir: Path, children: dict, policy=None) -> dict:
+def _cross_child(gen_dir: Path, children: dict, policy=None, shapes: dict | None = None) -> dict:
     """Streaming merge-join over ascending spell_id across the three spell children (design A5) — cursors
     only, no set/list materialization. Enforces projection⊆is_coa, projection-within-domain, the disjoint
     v3 dialects (full=compact `raw`, projection=rich `field_observations`), identity/mechanics/attribution
@@ -305,9 +306,20 @@ def _cross_child(gen_dir: Path, children: dict, policy=None) -> dict:
     if policy is None:
         policy = load_spell_policy(
             json.loads((gen_dir / "spell_layout_v2.json").read_text(encoding="utf-8")))
-    full = _Cursor(_read_jsonl(gen_dir / "coa_client_spell.jsonl"), "full")
-    proj = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_coa.jsonl"), "projection")
-    icons = _Cursor(_read_jsonl(gen_dir / "coa_client_spell_icons.jsonl"), "icons")
+    # Shape-checked AS the rows stream through the cursors — one pass, no second read and no retained
+    # row list (E0R.2 T2.2).
+    shapes = shapes or {}
+
+    def _shaped(name):
+        rows = _read_jsonl(gen_dir / name)
+        shape = shapes.get(name)
+        if shape is None:
+            return rows
+        return (_check_shape(shape, row, name) or row for row in rows)
+
+    full = _Cursor(_shaped("coa_client_spell.jsonl"), "full")
+    proj = _Cursor(_shaped("coa_client_spell_coa.jsonl"), "projection")
+    icons = _Cursor(_shaped("coa_client_spell_icons.jsonl"), "icons")
     any_converted = False
     full_count = is_coa_count = 0
     while full.row is not None:
@@ -466,6 +478,22 @@ def _declared(manifest: dict, child: str, keys: set[str]) -> dict:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ResolveError(f"child {child!r} derivation {key} must be a non-negative integer")
     return declared
+
+
+def _shape_for(name: str, spec: dict):
+    shape = SHAPES.get(spec["shape"])
+    if shape is None:
+        raise ResolveError(
+            f"child {name!r} names shape {spec['shape']!r}, which this validator does not implement; "
+            "an unimplemented shape is a gate that silently does nothing")
+    return shape
+
+
+def _check_shape(shape, doc, name: str) -> None:
+    try:
+        shape(doc)
+    except ShapeError as exc:
+        raise ResolveError(f"shape: child {name!r} {exc}") from exc
 
 
 def _assert_single_document(gen_dir: Path, name: str) -> None:
@@ -661,7 +689,23 @@ def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = Non
         if spec["cardinality"]["rule"] not in _CROSS_CHILD_RULES and name in children_meta:
             _resolve_cardinality(name, spec, children_meta[name]["records"], policy, manifest, {},
                                  gen_dir)
-    counts = _cross_child(gen_dir, children_meta, policy)
+    # SHAPES: every child is type-checked against the validator its contract names. The three spell
+    # children are checked inside the merge-join below so they are read exactly once; every other child
+    # is streamed here (E0R.2 T2.2).
+    spell_children = {"coa_client_spell.jsonl", "coa_client_spell_coa.jsonl",
+                      "coa_client_spell_icons.jsonl"}
+    for name, spec in contract["children"].items():
+        if name not in children_meta or name in spell_children:
+            continue
+        shape = _shape_for(name, spec)
+        if spec["kind"] == "json":
+            _check_shape(shape, json.loads((gen_dir / name).read_text(encoding="utf-8")), name)
+        else:
+            for row in _read_jsonl(gen_dir / name):
+                _check_shape(shape, row, name)
+    counts = _cross_child(gen_dir, children_meta, policy,
+                          shapes={name: _shape_for(name, contract["children"][name])
+                                  for name in spell_children if name in contract["children"]})
     for name, spec in contract["children"].items():
         if spec["cardinality"]["rule"] in _CROSS_CHILD_RULES and name in children_meta:
             _resolve_cardinality(name, spec, children_meta[name]["records"], policy, manifest, counts)

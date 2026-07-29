@@ -40,13 +40,13 @@ def _stage_full_generation(root: Path):
     gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
     gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
-    gw.add_json("coa_client_spell_projection.manifest.json",
-                {"schema_version": "coa-client-spell-projection-manifest-v3"},
+    from tests.golden import golden_rows
+    gw.add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"),
                 schema_version="coa-client-spell-projection-manifest-v3")
     for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
         gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
-    gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
+    gw.add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"),
                 schema_version="coa-client-archive-plan-v1")
     policy_doc = bind_policy_doc(v2_policy().doc, spell_records=len(full),
                                  ancillary_records={t: 0 for t in ANCILLARY_TABLES}, content_entries=0)

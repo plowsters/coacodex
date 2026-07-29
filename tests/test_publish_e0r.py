@@ -8,17 +8,33 @@ from tests._spell_fixtures import v2_policy
 from tests._e0r2_fixtures import stage_candidate, validate_staged
 
 
+# E0R.2 T2.2: a row must now satisfy its contracted SHAPE, so the minimal row carries one real
+# observation cell instead of an empty substrate — a row with no observations is not lossless. The
+# projection's expansion is computed with the same `_expand_compact` the validator uses, so these
+# cross-child tests stay about cross-child semantics rather than about the fixture.
+def _cell(sid):
+    return {"state": "present", "decoded_reason": "decoded",
+            "policy_ref": "/tables/Spell/fields/id", "raw_u32": sid}
+
+
 def _full(sid, **extra):
     # the COMPACT full-child dialect: carries `raw`, never `field_observations`
     return {"schema_version": "coa-client-spell-v3", "spell_id": sid, "coa_attribution": {"is_coa": True},
-            "name": None, "mechanics": {}, "raw": {}, **extra}
+            "name": None, "mechanics": {}, "raw": {"id": _cell(sid)}, **extra}
 
 
 def _proj(sid, **extra):
     # the RICH projection dialect: carries `field_observations`, never `raw`
+    from coa_client_extract.spell_record import _expand_compact
     return {"schema_version": "coa-client-spell-projection-v3", "spell_id": sid,
             "coa_attribution": {"is_coa": True}, "name": None, "mechanics": {},
-            "field_observations": {}, **extra}
+            "field_observations": {"id": _expand_compact(_cell(sid), v2_policy())}, **extra}
+
+
+def _icon(sid, **extra):
+    return {"schema_version": "coa-client-spell-icons-v1", "spell_id": sid, "spell_icon_id": sid,
+            "asset_status": "source_only", "readiness": "available",
+            "client_path": f"Interface/Icons/S{sid}.blp", **extra}
 
 
 def _stage(root: Path, *, full=None, proj=None, icons=None):
@@ -31,9 +47,7 @@ def _stage(root: Path, *, full=None, proj=None, icons=None):
     full = full if full is not None else [_full(1)]
     proj = proj if proj is not None else [_proj(1)]
     if icons is None:
-        icons = [{"schema_version": "coa-client-spell-icons-v1", "spell_id": r["spell_id"],
-                  "asset_status": "source_only",
-                  "client_path": f"Interface/Icons/S{r['spell_id']}.blp"} for r in full]
+        icons = [_icon(r["spell_id"]) for r in full]
     return stage_candidate(root, full=full, proj=proj, icons=icons, policy_doc=v2_policy().doc)
 
 
@@ -65,7 +79,9 @@ def test_cross_child_rejects_compact_raw_without_raw(tmp_path):
     bad = _full(1, name="Fireball",
                 raw={"power_type": {"state": "present", "policy_ref": "/tables/Spell/fields/power_type"}})  # no raw_u32/decoded_reason
     gen = _stage(tmp_path, full=[bad], proj=[_proj(1, name="Fireball")])
-    with pytest.raises(ResolveError, match="compact_raw_expands_to_envelope"):
+    # T2.2 rejects the malformed envelope at the SHAPE gate, which runs first; the cross-child
+    # expansion check remains behind it. Either is a correct rejection.
+    with pytest.raises(ResolveError, match="compact_raw_expands_to_envelope|shape"):
         validate_staged(gen)
 
 
@@ -74,7 +90,9 @@ def test_cross_child_rejects_projection_carrying_raw(tmp_path):
     bad_proj = _proj(1)
     bad_proj["raw"] = {}
     gen = _stage(tmp_path, full=[_full(1)], proj=[bad_proj])
-    with pytest.raises(ResolveError, match="projection_is_rich"):
+    # The disjoint v3 dialects are now a SHAPE fact (a projection row has no `raw` key at all), caught
+    # before the cross-child dialect check.
+    with pytest.raises(ResolveError, match="projection_is_rich|unknown key"):
         validate_staged(gen)
 
 
@@ -102,9 +120,8 @@ def test_valid_candidate_passes_cross_child(tmp_path):
 
 
 def test_icon_bundle_required_when_any_converted(tmp_path):
-    gen = _stage(tmp_path, icons=[{"schema_version": "coa-client-spell-icons-v1", "spell_id": 1,
-                                  "asset_status": "converted", "converted_ref": "icons.tar#a.png",
-                                  "client_path": "Interface/Icons/S1.blp"}])
+    gen = _stage(tmp_path, icons=[_icon(1, asset_status="converted",
+                                        converted_ref="icons.tar#a.png")])
     with pytest.raises(ResolveError, match="icon bundle required"):
         validate_staged(gen)
 

@@ -33,6 +33,11 @@ ANCILLARY_CHILD_FOR = {
     "CharacterAdvancementTabTypes": "coa_client_tab_types.jsonl",
     "CharacterAdvancementEssence": "coa_client_essence.jsonl",
 }
+ANCILLARY_SHAPE_FOR = {
+    "coa_client_class_types.jsonl": "class_type_row_v1",
+    "coa_client_tab_types.jsonl": "tab_type_row_v1",
+    "coa_client_essence.jsonl": "essence_row_v1",
+}
 CLIENT_BUILD = "3.3.5a+fixture"
 
 
@@ -147,10 +152,12 @@ def corpus_policy_doc() -> dict:
     return json.loads((CORPUS / "policy.json").read_text())
 
 
-def _ancillary_rows(schema_version: str, count: int) -> list[dict]:
-    """Placeholder ancillary rows. Their CONTENT is not validated until T2.2's shapes; what matters here
-    is that a fixture can stage a count the policy's bound actually states."""
-    return [{"schema_version": schema_version, "row": i} for i in range(count)]
+def _ancillary_rows(shape: str, count: int) -> list[dict]:
+    """`count` copies of the row the REAL producer emits for this child (tests/golden.py). T2.2 shape-
+    checks every row, so a placeholder would only prove the fixture can dodge its own gate."""
+    from tests.golden import golden_rows
+
+    return [copy.deepcopy(golden_rows(shape)) for _ in range(count)]
 
 
 def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
@@ -202,13 +209,11 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
         proj = proj[:-drop_projection_rows]
 
     ancillary_rows = {
-        "coa_client_content.jsonl": _ancillary_rows("coa-client-content-v1", content_entries),
-        "coa_client_advancement.jsonl": _ancillary_rows("coa-client-advancement-v1", advancement_kept),
+        "coa_client_content.jsonl": _ancillary_rows("content_row_v1", content_entries),
+        "coa_client_advancement.jsonl": _ancillary_rows("advancement_row_v1", advancement_kept),
     }
     for table, child in ANCILLARY_CHILD_FOR.items():
-        ancillary_rows[child] = _ancillary_rows(
-            f"coa-client-{child[len('coa_client_'):-len('.jsonl')].replace('_', '-')}-v1",
-            ancillary_counts[table])
+        ancillary_rows[child] = _ancillary_rows(ANCILLARY_SHAPE_FOR[child], ancillary_counts[table])
     if truncate_child is not None:
         name, keep = truncate_child
         ancillary_rows[name] = ancillary_rows[name][:keep]
@@ -218,12 +223,12 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
     gw.add_jsonl("coa_client_spell.jsonl", full, schema_version="coa-client-spell-v3")
     gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
     gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version="coa-client-spell-icons-v1")
-    gw.add_json("coa_client_spell_projection.manifest.json",
-                {"schema_version": "coa-client-spell-projection-manifest-v3"},
+    from tests.golden import golden_rows
+    gw.add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"),
                 schema_version="coa-client-spell-projection-manifest-v3")
     for name, rows in ancillary_rows.items():
         gw.add_jsonl(name, rows, schema_version=f"fixture-{name}")
-    gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
+    gw.add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"),
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", staged_policy, schema_version="coa-spell-layout-v2")
 
