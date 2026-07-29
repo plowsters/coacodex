@@ -1,10 +1,13 @@
 # Mechanics Schema
 
-Mechanics records use schema version `coa-mechanics-v1`.
+Mechanics records use schema version `coa-mechanics-v2`. The loader **hard-rejects** `coa-mechanics-v1`
+— see [M1.14E0R — `coa-mechanics-v2`](#m114e0r--coa-mechanics-v2) below for what changed. The v1 field
+list is retained here because v2 is a superset: every field below still applies unless a v2 note says
+otherwise.
 
 ## Purpose
 
-Mechanics records describe how spells, passives, buffs, debuffs, pets, and item effects behave when the simulator or report explainers need more than builder legality data. The schema is intentionally tolerant of partial records because many fields are inferred from AscensionDB tooltips or later log calibration.
+Mechanics records describe how spells, passives, buffs, debuffs, pets, and item effects behave when the simulator or report explainers need more than builder legality data. The schema is tolerant of partial records because a field's value is only as good as the tier that supplied it: `client_dbc` ▸ `verified_builder` ▸ `inferred`, with per-field readiness recording *why* an absent field is absent. (Before M1.14E0R.1 the tolerance existed for a different reason — many fields were inferred from AscensionDB tooltips. That tier is deleted; an unavailable field is now a recorded observation, not a gap waiting on a scrape.)
 
 ## Required Fields
 
@@ -19,7 +22,9 @@ Mechanics records describe how spells, passives, buffs, debuffs, pets, and item 
 ## Common Optional Fields
 
 - `source_node_ids`: builder node IDs associated with the spell
-- `source_urls`: AscensionDB or other source URLs
+- `source_urls`: external source URLs. **Always `[]` in a canonical build since M1.14E0R.1** — the
+  AscensionDB tier that populated it is deleted and a canonical build is network-free. The field
+  survives for hand-authored and legacy records.
 - `school`, `power_type`, `range_yards`
 - `schools`: additive multi-school list — see [Schools](#schools) below
 - `cast_time_ms`, `gcd_ms`, `cooldown_ms`, `charges`
@@ -34,9 +39,10 @@ Mechanics records describe how spells, passives, buffs, debuffs, pets, and item 
 - `raw`: audit-only payload, never a normalized-field replacement. As emitted by
   `build-mechanics-artifacts.mjs`, `raw.tags` carries the merged, set-like union of every
   contributing builder node's tags — **builder tags are not a top-level field**; they live under
-  `raw.tags` only. `raw` also carries `category`, `spell_icon_id`, `school_mask` (client-sourced,
-  when present) and the AscensionDB audit trio `db_status`, `db_excluded`, `db_exclusion_reason`,
-  plus `linked_item_ids`. None of `raw.*` is part of the normalized contract.
+  `raw.tags` only. `raw` also carries `category`, `spell_icon_id` and `school_mask` (client-sourced,
+  when present). None of `raw.*` is part of the normalized contract. **Corrected by M1.14E0R.1:** this
+  list previously named an AscensionDB audit trio (`db_status`, `db_excluded`, `db_exclusion_reason`)
+  and `linked_item_ids`; none of those keys is emitted, because nothing produces them.
 
 ## Effect Fields
 
@@ -172,7 +178,8 @@ per-field `selected_source` values:
 2. `"medium"` — the `"high"` condition isn't met, but at least one field anywhere in the record was
    selected from `client_dbc`.
 3. `"low"` — no field was selected from `client_dbc` (the record relies entirely on
-   builder/AscensionDB/inferred data).
+   `verified_builder`/`inferred` data — the two tiers that remain below `client_dbc` after
+   M1.14E0R.1 deleted `ascension_db`).
 
 ## Mechanics Manifest (`coa-mechanics-manifest-v1`)
 
