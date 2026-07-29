@@ -3,7 +3,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from coa_client_extract.archive_backend import FakeArchiveBackend
-from coa_client_extract.spell_mechanics import recon_spell_mechanics, DEFAULT_BUDGET
+from coa_client_extract.spell_mechanics import recon_spell_mechanics
+
+RECON_CEILINGS = {          # E0R.2 T3.3: policy-shaped ceilings; a recon gates only the python_* pair
+    "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
 
 # Column anchors: (id, power_type, school_mask, name, casting_time_index)
 ANCHOR_ROWS = [(133, 0, 4, "Fireball", 5), (116, 0, 16, "Frostbolt", 71),
@@ -48,7 +54,7 @@ def _policy(*, reviewed, bound=None):
 
 
 def _kwargs(policy):
-    return dict(spell_policy=policy, anchors=ANCHORS, budget=DEFAULT_BUDGET,
+    return dict(spell_policy=policy, anchors=ANCHORS, budget=RECON_CEILINGS,
                 extractor_commit="abc123", client_build="3.3.5a+T")
 
 

@@ -62,7 +62,10 @@ def test_real_recon_topology_is_from_shared_verifier(recon_report):
 
 def test_real_recon_budget_within_ceiling(recon_report):
     b = recon_report["budget"]
-    assert {"serialized_mb", "peak_rss_mb", "elapsed_s"} <= set(b)
+    # E0R.2 T3.3: recon gates its own RSS + elapsed against the reviewed policy ceilings and makes no
+    # artifact-size claim (the retired estimate read ~187 MB against a real ~523 MB generation).
+    assert {"peak_rss_mb", "elapsed_s", "ceilings"} <= set(b)
+    assert "serialized_mb" not in b
     assert b["within_budget"] is True, b.get("breach")
 
 

@@ -887,7 +887,7 @@ def mechanics_recon_command(client_root: Path, out_dir: Path, *, backend: Archiv
     report['status'] to an exit code (blocked=3, review_required=4, verified=0)."""
     from .archive_plan import discover_plan
     from .spell_layout import load_default_policy
-    from .spell_mechanics import recon_spell_mechanics, DEFAULT_BUDGET
+    from .spell_mechanics import recon_spell_mechanics
     from .artifacts import write_json
 
     if backend is None:
@@ -903,7 +903,7 @@ def mechanics_recon_command(client_root: Path, out_dir: Path, *, backend: Archiv
     join_value_anchors = policy.anchor_set.get("joins")
     power_type_anchors = policy.anchor_set.get("power_type_static")
     report = recon_spell_mechanics(
-        backend, root, attach, spell_policy=policy, anchors=policy.anchors, budget=DEFAULT_BUDGET,
+        backend, root, attach, spell_policy=policy, anchors=policy.anchors,
         extractor_commit=_extractor_commit(), client_build=_client_build(plan),
         join_value_anchors=join_value_anchors, power_type_anchors=power_type_anchors)
     write_json(report, Path(out_dir) / "coa_spell_mechanics_recon.json")

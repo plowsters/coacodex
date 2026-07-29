@@ -13,7 +13,6 @@ from .recordview import open_view
 from .topology import verify_source_topology, topology_matches_bound
 
 SCHEMA = "coa-spell-mechanics-recon-v1"
-DEFAULT_BUDGET = {"artifact_size_mb": 512, "peak_rss_mb": 4096, "elapsed_s": 600}
 _MIN_SUPPORT = 2          # a real index column references at least this many nonzero rows
 _MIN_DISTINCT = 2         # ...spanning at least this many distinct side rows (not one repeated id)
 _ANCHOR_FIELDS = (("power_type", False), ("school_mask", False), ("name", True))
@@ -357,19 +356,29 @@ def _recon_status(*, blocking, bound_mismatch, layout_proof, reviewed, required_
     return "verified"
 
 
-def three_part_budget(*, serialized_bytes, peak_rss_mb, elapsed_s, ceilings) -> dict:
-    """within_budget requires ALL THREE of serialized bytes, subprocess peak RSS, and elapsed to be
-    under ceiling (the shipped code estimated raw DBC bytes and ignored RSS)."""
-    size_mb = round(serialized_bytes / (1024 * 1024), 2)
+def recon_budget(*, peak_rss_mb, elapsed_s, ceilings) -> dict:
+    """Gate a RECON against the reviewed policy ceilings — and claim nothing else (E0R.2 T3.3).
+
+    What this replaces made a size claim it could not support: `record_count * record_size` is the raw
+    DBC byte count of the SOURCE table, not the size of the artifact a later `regenerate` serializes. On
+    the real client it read ~187 MB against a real generation of ~523 MB — off by 2.8x, in the optimistic
+    direction, and gated as if it meant something.
+
+    A forecast from a serialized sample is an explicit NON-GOAL: a wrong forecast is worse than none, and
+    publication measures the real thing exactly, per child and whole-generation (T2.4). So recon gates
+    the two quantities it actually measured, and there is no size key to misread.
+
+    Ceilings come from the reviewed policy's `budget` block. The python_* ceilings are the ones a recon
+    can be held to; the node_* ones belong to a boundary a recon never runs. A ceilings dict missing
+    either python key raises KeyError rather than defaulting — an absent ceiling is not an infinite one.
+    """
     breach = []
-    if size_mb > ceilings["artifact_size_mb"]:
-        breach.append("artifact_size_mb")
-    if peak_rss_mb > ceilings["peak_rss_mb"]:
-        breach.append("peak_rss_mb")
-    if elapsed_s > ceilings["elapsed_s"]:
-        breach.append("elapsed_s")
-    return {"serialized_mb": size_mb, "peak_rss_mb": peak_rss_mb, "elapsed_s": elapsed_s,
-            "ceilings": dict(ceilings), "within_budget": not breach, "breach": breach}
+    if peak_rss_mb > ceilings["python_peak_rss_mb"]:
+        breach.append(f"python_peak_rss_mb {peak_rss_mb} > {ceilings['python_peak_rss_mb']}")
+    if elapsed_s > ceilings["python_elapsed_s"]:
+        breach.append(f"python_elapsed_s {elapsed_s} > {ceilings['python_elapsed_s']}")
+    return {"peak_rss_mb": peak_rss_mb, "elapsed_s": elapsed_s, "ceilings": dict(ceilings),
+            "within_budget": not breach, "breach": breach}
 
 
 def policy_budget_report(*, children: dict, measured: dict, budget: dict) -> dict:
@@ -409,9 +418,18 @@ def benchmark_env() -> dict:
 
 
 def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_policy, anchors,
-                          budget=DEFAULT_BUDGET, extractor_commit: str, client_build: str,
+                          budget=None, extractor_commit: str, client_build: str,
                           join_value_anchors=None, power_type_anchors=None) -> dict:
+    """E0R.2 T3.3: ceilings come from the REVIEWED policy's `budget` block. `budget=` remains as an
+    explicit same-shape override for probes; a policy that declares neither is refused rather than
+    silently held to hard-coded limits nobody reviewed."""
+    from .publish import PublishError
+
     started = time.monotonic()
+    ceilings = budget if budget is not None else (getattr(spell_policy, "doc", {}) or {}).get("budget")
+    if ceilings is None:
+        raise PublishError(
+            "the reviewed policy declares no budget block; refusing to recon against unreviewed ceilings")
     blocking: list[dict] = []
     dbc_sha: dict[str, str] = {}
 
@@ -516,12 +534,13 @@ def recon_spell_mechanics(backend: ArchiveBackend, root: Path, attach, *, spell_
     if power_type_signed is not None:
         delta["power_type_signed"] = power_type_signed
 
-    # real budgets, ALL THREE gated: forward serialized-size estimate, process peak RSS, elapsed.
-    est_bytes = view.record_count * view.record_size
+    # E0R.2 T3.3: a recon gates what a recon MEASURES — its own peak RSS and elapsed — against the
+    # reviewed ceilings. The retired `est_bytes = record_count * record_size` was the raw DBC byte count
+    # of the source table masquerading as a forecast of the serialized artifact (~187 MB claimed against
+    # a real ~523 MB generation). Publication measures the real thing exactly; recon claims no size.
     elapsed = round(time.monotonic() - started, 4)
     rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux ru_maxrss is KiB
-    budget_report = three_part_budget(serialized_bytes=est_bytes, peak_rss_mb=rss_mb,
-                                      elapsed_s=elapsed, ceilings=budget)
+    budget_report = recon_budget(peak_rss_mb=rss_mb, elapsed_s=elapsed, ceilings=ceilings)
     if not budget_report["within_budget"]:
         blocking.append({"field": "budget", "reason": "over_budget", "breach": budget_report["breach"]})
 

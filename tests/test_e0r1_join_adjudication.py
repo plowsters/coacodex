@@ -17,8 +17,14 @@ from types import SimpleNamespace
 
 from coa_client_extract.archive_backend import FakeArchiveBackend
 from coa_client_extract.recordview import open_view
-from coa_client_extract.spell_mechanics import probe_joins, recon_spell_mechanics, DEFAULT_BUDGET
+from coa_client_extract.spell_mechanics import probe_joins, recon_spell_mechanics
 from coa_client_extract.spell_layout import load_default_policy, load_spell_policy
+
+RECON_CEILINGS = {          # E0R.2 T3.3: policy-shaped ceilings; a recon gates only the python_* pair
+    "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
 
 _POLICY_PATH = Path("coa_client_extract/data/spell_layout_v2.json")
 _BUILDER_PATH = Path("coa_scraper/dist/coa_entries.jsonl")
@@ -122,7 +128,7 @@ _CAST_ANCHORS = {"casting_time_index": {
 
 def _run(**over):
     return recon_spell_mechanics(_recon_backend(), Path("c.MPQ"), (Path("patch-T.MPQ"),),
-                                 spell_policy=_recon_policy(), anchors=_ANCHORS, budget=DEFAULT_BUDGET,
+                                 spell_policy=_recon_policy(), anchors=_ANCHORS, budget=RECON_CEILINGS,
                                  extractor_commit="abc", client_build="3.3.5a+T", **over)
 
 

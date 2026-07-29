@@ -109,3 +109,54 @@ def baseline(joins: dict, *, thresholds=None, algorithm=None):
         "thresholds": dict(SCAN_THRESHOLDS if thresholds is None else thresholds),
         "joins": {f: {"candidates": c, "digest": candidates_digest(c)} for f, c in joins.items()},
     }
+
+
+# --- E0R.2 T3.3: a complete synthetic recon, so the budget can be exercised end to end -------------
+
+RECON_BUDGET = {
+    "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
+_SENTINEL = object()
+
+
+class _ReconClient:
+    """A synthetic client + policy stub `recon_spell_mechanics` runs against end to end.
+
+    The point is the BUDGET path, so everything else is held plausible rather than perfect: the recon may
+    report blocking findings for other reasons, and each test asserts only on what it is about."""
+
+    def __init__(self, budget):
+        self.policy_budget = budget
+        rows = [(5, 5, 71), (71, 71, 5), (3, 3, 3)]
+        self._spell = _wdbc(rows, 3)
+        self._side = _side(SIDE_IDS)
+
+    def _backend(self):
+        return Backend({"DBFilesClient\\Spell.dbc": [(Path("patch-T.MPQ"), self._spell)],
+                        "DBFilesClient\\SpellCastTimes.dbc": [(Path("patch-T.MPQ"), self._side)]})
+
+    def _policy(self):
+        doc = {} if self.policy_budget is None else {"budget": self.policy_budget}
+        return SimpleNamespace(
+            sha256="p", reviewed=True, bound=None,
+            columns={"power_type": 1, "school_mask": 2, "name": None},
+            enum_policy={"power_types": {0, 3, 5, 71}, "school_bits": {1, 2, 4, 8, 16, 32, 64}},
+            required_tables=["Spell", "SpellCastTimes"], expected_absent=[],
+            tables={"Spell": {"key_cell": 0, "unique": True, "expected_field_count": 3},
+                    "SpellCastTimes": {"key_cell": 0, "unique": True, "expected_field_count": 2}},
+            index_fields={"casting_time_index": "SpellCastTimes"}, doc=doc)
+
+    def run(self):
+        from coa_client_extract.spell_mechanics import recon_spell_mechanics
+
+        return recon_spell_mechanics(
+            self._backend(), _ROOT, _ATTACH, spell_policy=self._policy(),
+            anchors=[{"id": 5, "power_type": 5, "school_mask": 71, "name": None}],
+            extractor_commit="e0r2", client_build="fixture",
+            join_value_anchors=AMBIGUOUS_ANCHORS)
+
+
+def recon_client(*, budget=_SENTINEL):
+    return _ReconClient(RECON_BUDGET if budget is _SENTINEL else budget)

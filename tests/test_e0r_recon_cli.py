@@ -6,8 +6,14 @@ from coa_client_extract.archive_backend import FakeArchiveBackend
 from coa_client_extract.spell_layout import (
     compute_policy_sha256, derive_artifact_contract, load_spell_policy,
 )
-from coa_client_extract.spell_mechanics import recon_spell_mechanics, DEFAULT_BUDGET
+from coa_client_extract.spell_mechanics import recon_spell_mechanics
 from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
+
+RECON_CEILINGS = {          # E0R.2 T3.3: policy-shaped ceilings; a recon gates only the python_* pair
+    "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
 
 # Spell layout for the fixture: id@0, power_type@1, school_mask@2, name@3, casting_time_index@4.
 _FC = 5
@@ -78,16 +84,17 @@ _ANCHORS = [{"id": 133, "power_type": 3, "school_mask": 4, "name": "Fireball"},
             {"id": 116, "power_type": 3, "school_mask": 16, "name": "Frostbolt"}]
 
 
-def test_recon_uses_shared_topology_and_three_part_budget():
+def test_recon_uses_shared_topology_and_the_recon_budget():
     r = recon_spell_mechanics(_backend(), Path("c.MPQ"), (Path("patch-CZZ.MPQ"),), spell_policy=_policy(),
-                              anchors=_ANCHORS, budget=DEFAULT_BUDGET, extractor_commit="e0r", client_build="3.3.5a+CZZ")
+                              anchors=_ANCHORS, budget=RECON_CEILINGS, extractor_commit="e0r", client_build="3.3.5a+CZZ")
     assert r["status"] == "review_required"                        # bound is null -> not verified
     # shared verify_source_topology captures a full header + density for every required table
     assert r["topology"]["tables"]["Spell"]["dense"] is True
     assert r["topology"]["tables"]["SpellCastTimes"]["header"]["field_count"] == 2
-    # three-part budget: all three gates present
+    # E0R.2 T3.3: the recon budget gates the two things a recon measures and claims no artifact size.
     assert set(r["budget"]["breach"]) == set()
-    assert {"serialized_mb", "peak_rss_mb", "elapsed_s"} <= set(r["budget"])
+    assert {"peak_rss_mb", "elapsed_s", "ceilings"} <= set(r["budget"])
+    assert "serialized_mb" not in r["budget"]
 
 
 def test_recon_value_anchors_discover_join_pair_and_power_type_signedness():
@@ -97,7 +104,7 @@ def test_recon_value_anchors_discover_join_pair_and_power_type_signedness():
                         {"spell_id": 116, "expected_state": "resolved", "expected_value": 3000},
                         {"spell_id": 5, "expected_state": "not_applicable", "expected_value": None}]}}
     r = recon_spell_mechanics(_backend(), Path("c.MPQ"), (Path("patch-CZZ.MPQ"),), spell_policy=_policy(),
-                              anchors=_ANCHORS, budget=DEFAULT_BUDGET, extractor_commit="e0r",
+                              anchors=_ANCHORS, budget=RECON_CEILINGS, extractor_commit="e0r",
                               client_build="3.3.5a+CZZ", join_value_anchors=join_anchors,
                               power_type_anchors=[{"spell_id": 5, "expected_signed": -2}])
     # the joined pair (index cell 4, value cell 1) is uniquely discovered and named in the delta
@@ -111,5 +118,5 @@ def test_recon_never_writes_a_policy(tmp_path):
     # recon proposes a delta but touches no policy file on disk.
     before = set(p.name for p in tmp_path.iterdir())
     recon_spell_mechanics(_backend(), Path("c.MPQ"), (Path("patch-CZZ.MPQ"),), spell_policy=_policy(),
-                          anchors=_ANCHORS, budget=DEFAULT_BUDGET, extractor_commit="e0r", client_build="x")
+                          anchors=_ANCHORS, budget=RECON_CEILINGS, extractor_commit="e0r", client_build="x")
     assert set(p.name for p in tmp_path.iterdir()) == before

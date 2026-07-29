@@ -3,7 +3,7 @@ import struct
 import pytest
 from coa_client_extract.recordview import open_view
 from coa_client_extract.spell_mechanics import (
-    discover_join_pair, discover_power_type_signedness, three_part_budget,
+    discover_join_pair, discover_power_type_signedness, recon_budget,
 )
 
 
@@ -68,9 +68,14 @@ def test_power_type_signedness_requires_static_negative_anchor():
     assert discover_power_type_signedness(spell, id_to_rec, cell=1, anchors=[]) is False
 
 
-def test_three_part_budget_requires_all_three():
-    ceilings = {"artifact_size_mb": 512, "peak_rss_mb": 4096, "elapsed_s": 600}
-    ok = three_part_budget(serialized_bytes=10 * 1024 * 1024, peak_rss_mb=100, elapsed_s=5, ceilings=ceilings)
+def test_recon_budget_gates_what_a_recon_measures():
+    # E0R.2 T3.3 retired the three-part budget: its `serialized_bytes` leg was record_count*record_size,
+    # the raw DBC size of the SOURCE table, gated as though it forecast the serialized artifact.
+    ceilings = {"python_peak_rss_mb": 4096, "python_elapsed_s": 600,
+                "node_peak_rss_mb": 4096, "node_elapsed_s": 600,
+                "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31}
+    ok = recon_budget(peak_rss_mb=100, elapsed_s=5, ceilings=ceilings)
     assert ok["within_budget"] is True
-    over_rss = three_part_budget(serialized_bytes=10 * 1024 * 1024, peak_rss_mb=9000, elapsed_s=5, ceilings=ceilings)
-    assert over_rss["within_budget"] is False and over_rss["breach"] == ["peak_rss_mb"]
+    over_rss = recon_budget(peak_rss_mb=9000, elapsed_s=5, ceilings=ceilings)
+    assert over_rss["within_budget"] is False and len(over_rss["breach"]) == 1
+    assert "python_peak_rss_mb" in over_rss["breach"][0]

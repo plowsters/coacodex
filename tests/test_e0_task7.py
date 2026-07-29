@@ -61,6 +61,11 @@ def _recon_policy(*, reviewed):
          "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
                                     "side_value_field": "base_ms", "promotion": "raw_only"}}}
     p["artifact_contract"] = derive_artifact_contract(p)     # E0R.2 T2.3: reviewed observation domain
+    # E0R.2 T3.3: recon gates its own RSS + elapsed against the REVIEWED ceilings and no longer falls
+    # back to a hard-coded DEFAULT_BUDGET, so a policy recon runs against must declare them.
+    p["budget"] = {"max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+                   "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+                   "node_peak_rss_mb": 16384, "node_elapsed_s": 3600}
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

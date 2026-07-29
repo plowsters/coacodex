@@ -16,7 +16,8 @@ from coa_client_extract.recordview import open_view
 from coa_client_extract.spell_mechanics import (SCAN_ALGORITHM, SCAN_THRESHOLDS, _recon_status,
                                                 ambiguity_agrees, candidates_digest, probe_joins,
                                                 scan_index_candidates)
-from tests._e0r2_recon_fixtures import SIDE_IDS, _side, ambiguous_backend, scanned_probe, unique_backend
+from tests._e0r2_recon_fixtures import (RECON_BUDGET, SIDE_IDS, _side, ambiguous_backend,
+                                        scanned_probe, unique_backend)
 from tests._e0r2_recon_fixtures import baseline as make_baseline
 from tests._e0r2_recon_fixtures import candidates as make_candidates
 
@@ -307,7 +308,7 @@ def test_recon_compares_the_policy_baseline_against_a_live_client_scan():
         return recon_spell_mechanics(
             backend, Path("c.MPQ"), (Path("patch-T.MPQ"),), spell_policy=policy,
             anchors=[{"id": 5, "power_type": 5, "school_mask": 71, "name": None}],
-            budget={"artifact_size_mb": 4096, "peak_rss_mb": 16384, "elapsed_s": 3600},
+            budget=RECON_BUDGET,
             extractor_commit="e0r2", client_build="fixture",
             join_value_anchors={_FIELD: {"side_table": "SpellCastTimes", "side_id_cell": 0,
                                          "adjudication": "reviewed_ambiguous", "evidence": "fixture"}})

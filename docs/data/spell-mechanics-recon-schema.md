@@ -45,8 +45,17 @@ StormLib absent is a separate fail-closed (exit **2**).
 - `topology`: per required / expected-absent table — `{present, required|expected_absent}`
 - `proposed_policy_delta`: `{field: discovered_cell}` for every uniquely-discovered anchor + index
   cell. This is the recon's ONLY output about layout — a human applies it to the policy.
-- `duplicates`, `budget`: duplicate spell ids (sample) and the real budget report (serialized bytes,
-  elapsed, peak RSS ceilings).
+- `duplicates`: duplicate spell ids (sample).
+- `budget`: `{peak_rss_mb, elapsed_s, ceilings, within_budget, breach}` — the two quantities a recon
+  actually measures, gated against the REVIEWED policy's `budget` block (`python_peak_rss_mb`,
+  `python_elapsed_s`; the `node_*` ceilings belong to a boundary a recon never runs). A policy declaring
+  no budget block is refused rather than held to hard-coded limits nobody reviewed.
+  **E0R.2 T3.3: recon makes no artifact-size claim.** It used to report `serialized_mb` from
+  `record_count * record_size` — the raw DBC byte count of the *source* table, gated as though it
+  forecast the serialized artifact; on the real client that read ~187 MB against a real ~523 MB
+  generation, off by 2.8× in the optimistic direction. A forecast from a serialized sample is an
+  explicit non-goal: a wrong forecast is worse than none, and publication measures the real thing
+  exactly, per child and whole-generation.
 
 ## Discovery is genuine, not a policy echo
 
