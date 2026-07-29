@@ -1,0 +1,1205 @@
+{
+  "benchmark_env": {
+    "cpu_count": 16,
+    "machine": "x86_64",
+    "platform": "Linux-7.1.5-arch1-1-x86_64-with-glibc2.44",
+    "python_version": "3.14.6"
+  },
+  "benchmark_env_id": "local",
+  "budget": {
+    "breach": [],
+    "ceilings": {
+      "max_serialized_bytes_per_child": 471859200,
+      "max_whole_generation_bytes": 536870912,
+      "node_elapsed_s": 1200,
+      "node_peak_rss_mb": 4096,
+      "python_elapsed_s": 1200,
+      "python_peak_rss_mb": 4096
+    },
+    "measured": {
+      "node_elapsed_s": 8.714,
+      "node_peak_rss_mb": 888.5,
+      "python_elapsed_s": 940.5405,
+      "python_peak_rss_mb": 949.9
+    },
+    "whole_generation_bytes": 312827065,
+    "within_budget": true
+  },
+  "build_mechanics": {
+    "command": [
+      "node",
+      "--import",
+      "./scripts/network-trap.mjs",
+      "scripts/build-mechanics-artifacts.mjs",
+      "--builder-entries",
+      "dist/coa_entries.jsonl",
+      "--client-extract-pointer",
+      "reports/client_extract/coa_client_extract.pointer.json",
+      "--out",
+      "dist"
+    ],
+    "cwd": "coa_scraper",
+    "elapsed_s": 2.054,
+    "executed": true,
+    "exit_code": 0,
+    "network_attempts": 0,
+    "peak_rss_mb": 182.5,
+    "pointer_only": true,
+    "stderr_tail": ""
+  },
+  "candidate_trust_sha256": "a00281a60c5b85f35939aeb8320135c31e2c85d024a46bb0e53dcf640eea956b",
+  "children": {
+    "coa_client_advancement.jsonl": {
+      "byte_length": 9387982,
+      "records": 3614,
+      "schema_version": "coa-client-advancement-v1",
+      "sha256": "f1a680fd4ab6064875efdb93b6249c7ec48cb1b78ca0746d812d0e87e30b6e4e"
+    },
+    "coa_client_archive_plan.json": {
+      "byte_length": 1657,
+      "records": 1,
+      "schema_version": "coa-client-archive-plan-v1",
+      "sha256": "748ac9234f1504fe51dc225635a04f63d863def774ddc0b1a4392051bf7cd71a"
+    },
+    "coa_client_class_types.jsonl": {
+      "byte_length": 8894,
+      "records": 46,
+      "schema_version": "coa-client-class-types-v1",
+      "sha256": "64c1d07b913f45d89e33474d8e60a891a8368eb49009e71ae0740ec34d4efd9f"
+    },
+    "coa_client_content.jsonl": {
+      "byte_length": 31922197,
+      "records": 52744,
+      "schema_version": "coa-client-content-v1",
+      "sha256": "0b1a88469b8abff7838dcdd8d8a9d654d654b7f5a18116b50f62caf508ab14f6"
+    },
+    "coa_client_essence.jsonl": {
+      "byte_length": 1836312,
+      "records": 5600,
+      "schema_version": "coa-client-essence-v1",
+      "sha256": "d7c49fee2b5784ee7045f713ad481f9b51102396f69b1e50e5d4f807704dc92a"
+    },
+    "coa_client_icon_assets.jsonl": {
+      "byte_length": 3942120,
+      "records": 12717,
+      "schema_version": "coa-client-icon-assets-v1",
+      "sha256": "5341ec353018366bd35253f4002b11941faf4da9a9c6445bcd27eef67344c951"
+    },
+    "coa_client_spell.jsonl": {
+      "byte_length": 196748997,
+      "records": 208776,
+      "schema_version": "coa-client-spell-v4",
+      "sha256": "ce15c7acde046457aad774843ff0d49c3c81cacb7c7fb783b32ee50ef08bb0da"
+    },
+    "coa_client_spell_coa.jsonl": {
+      "byte_length": 31790162,
+      "records": 10411,
+      "schema_version": "coa-client-spell-projection-v3",
+      "sha256": "dc1f448a41ebae54523815fd8b3f98fce3cdf7ea9d25b024a30f1885023e4bdd"
+    },
+    "coa_client_spell_fields.json": {
+      "byte_length": 3271,
+      "records": 1,
+      "schema_version": "coa-client-spell-fields-v1",
+      "sha256": "462ab535a41951c2d1aa018fedc491f4ee33315f275b090336feecacf35027cd"
+    },
+    "coa_client_spell_icons.jsonl": {
+      "byte_length": 37130439,
+      "records": 208776,
+      "schema_version": "coa-client-spell-icons-v2",
+      "sha256": "9ee25aa784b3fe0ed021ce125b88cc9eb4d579d4da692d853e83cd5b47fbf79b"
+    },
+    "coa_client_spell_projection.manifest.json": {
+      "byte_length": 507,
+      "records": 1,
+      "schema_version": "coa-client-spell-projection-manifest-v3",
+      "sha256": "d70ddde2e81d16f755c0c5f8ae1991cd6c8235ea0cb0f8555d6c58e782d17e30"
+    },
+    "coa_client_tab_types.jsonl": {
+      "byte_length": 7966,
+      "records": 94,
+      "schema_version": "coa-client-tab-types-v1",
+      "sha256": "91d159afb3a734179e5b2eb5ee523439757cb94d7e5b87fb5fcbd3bb965402a9"
+    },
+    "generation_contract.json": {
+      "byte_length": 5508,
+      "records": 1,
+      "schema_version": "coa-generation-contract-v1",
+      "sha256": "d5503e789d1ae92dd1342f39c7b0229e0bd8e98f1c79fb3494197e590e142f8e"
+    },
+    "observation_wire_schema.json": {
+      "byte_length": 876,
+      "records": 1,
+      "schema_version": "coa-observation-wire-v1",
+      "sha256": "935ec7992d46321c082fc5f7f794f898b9bcc39bcc201092a0c70729fd12257b"
+    },
+    "spell_layout_v2.json": {
+      "byte_length": 40177,
+      "records": 1,
+      "schema_version": "coa-spell-layout-v2",
+      "sha256": "6b65570c71c86fddde26f7e1034095460fff12dd4d6076a5a89886b84fd23cc7"
+    }
+  },
+  "client_build": "3.3.5a+patch-CZZ",
+  "coverage": {
+    "icon": {
+      "assets_missing": 25,
+      "assets_present": 180041,
+      "placeholders": 28710,
+      "resolved_paths": 180066,
+      "spells": 208776,
+      "unique_paths": 12717,
+      "verified_empty_paths": 23657
+    },
+    "observation": {
+      "cells": 1878984,
+      "decoded_reasons": {
+        "decoded": 835104,
+        "not_present": 835104,
+        "proof_withheld": 208776
+      },
+      "fields": {
+        "cast_time_ms": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "not_present": 208776
+          },
+          "states": {
+            "unresolved": 208776
+          }
+        },
+        "description": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "decoded": 208776
+          },
+          "states": {
+            "present": 208776
+          }
+        },
+        "duration_ms": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "not_present": 208776
+          },
+          "states": {
+            "unresolved": 208776
+          }
+        },
+        "id": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "decoded": 208776
+          },
+          "states": {
+            "present": 208776
+          }
+        },
+        "name": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "decoded": 208776
+          },
+          "states": {
+            "present": 208776
+          }
+        },
+        "power_type": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "proof_withheld": 208776
+          },
+          "states": {
+            "present": 208776
+          }
+        },
+        "range_max_yd": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "not_present": 208776
+          },
+          "states": {
+            "unresolved": 208776
+          }
+        },
+        "range_min_yd": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "not_present": 208776
+          },
+          "states": {
+            "unresolved": 208776
+          }
+        },
+        "school_mask": {
+          "cells": 208776,
+          "decoded_reasons": {
+            "decoded": 208776
+          },
+          "states": {
+            "present": 208776
+          }
+        }
+      },
+      "rows": 208776,
+      "schema_version": "coa-client-observation-coverage-v1",
+      "states": {
+        "present": 1043880,
+        "unresolved": 835104
+      }
+    },
+    "readiness": {
+      "fields": {
+        "cooldown_ms": {
+          "considered": 3611,
+          "reason_codes": {
+            "pending_e1_operand": 3611
+          },
+          "statuses": {
+            "unavailable": 3611
+          }
+        },
+        "costs": {
+          "considered": 3611,
+          "reason_codes": {
+            "pending_e1_operand": 3611
+          },
+          "statuses": {
+            "unavailable": 3611
+          }
+        },
+        "gcd_ms": {
+          "considered": 3611,
+          "reason_codes": {
+            "pending_e1_operand": 3611
+          },
+          "statuses": {
+            "unavailable": 3611
+          }
+        },
+        "power_type": {
+          "considered": 3611,
+          "reason_codes": {
+            "no_static_anchor": 3611
+          },
+          "statuses": {
+            "unavailable": 3611
+          }
+        }
+      },
+      "fields_considered": 14444,
+      "reason_codes": {
+        "no_static_anchor": 3611,
+        "pending_e1_operand": 10833
+      },
+      "rows": 3611,
+      "schema_version": "coa-mechanics-readiness-coverage-v1",
+      "statuses": {
+        "unavailable": 14444
+      }
+    },
+    "source": {
+      "effects": {
+        "inferred": 3606
+      },
+      "kind": {
+        "builder": 3611
+      },
+      "name": {
+        "client_dbc": 3611
+      },
+      "schools": {
+        "builder": 9,
+        "client_dbc": 3588
+      }
+    }
+  },
+  "extractor_commit": "08680d5f5ad0816e51ca4b7119d012a7a3125e8a",
+  "generated_at": "2026-07-29",
+  "generation_contract": {
+    "revision": "e0r-v3",
+    "schema_version": "coa-generation-contract-v1",
+    "sha256": "d2180203b3b9cd443a16d1c3cd0a2223ce49872bd02f6b38e562d860a4811c9c"
+  },
+  "generation_id": "069a9b18af264941a5386c84a0b9d89a",
+  "manifest_schema_version": "coa-client-extract-manifest-v3",
+  "manifest_sha256": "38d0cf801a767a1b41828a6204a06ae5845e301db4a95e07ec83ecf4481e4153",
+  "mechanics": {
+    "binding": {
+      "builder_entries_sha256": "b2d65aa2e6e24aa391fd27d8b6f864a6ee6e148a08890641676d5d5cf58f3e3c",
+      "input_generation_id": "069a9b18af264941a5386c84a0b9d89a",
+      "pointer_manifest_sha256": "38d0cf801a767a1b41828a6204a06ae5845e301db4a95e07ec83ecf4481e4153",
+      "policy_sha256": "1c6376c656910b9e224de674b16de8167205509a9d895abcfd6bcb87387cf3f4",
+      "projection_child_sha256": "dc1f448a41ebae54523815fd8b3f98fce3cdf7ea9d25b024a30f1885023e4bdd"
+    },
+    "builder_unique_spell_ids": 3611,
+    "canonical": true,
+    "client_build": "3.3.5a+patch-CZZ",
+    "coverage": {
+      "builder_joined_to_projection": 3611,
+      "builder_missing_from_projection": 0,
+      "projection_only": 6800
+    },
+    "jsonl": "coa_mechanics.jsonl",
+    "jsonl_sha256": "d66d2895d698ffe39e1b3822a9aafebac8427ffed41200e2adce9f6d2c6a23e9",
+    "manifest_path": "coa_scraper/dist/coa_mechanics.manifest.json",
+    "manifest_sha256": "39f42cdff60986996d34ddf0f4b244dbc7d31a41eab9bc115d6d28bf87a79112",
+    "record_count": 3611
+  },
+  "policy_sha256": "1c6376c656910b9e224de674b16de8167205509a9d895abcfd6bcb87387cf3f4",
+  "predecessor_generation_id": "a9663d1b410841dd8284cb7538c61185",
+  "publication_state": "published",
+  "recon_binding_sha256": "7152eb6c9706bd527ac53186c85ff8524485e51f557242b7106dbabcf1319481",
+  "recon_report": {
+    "ambiguity_agreement": {
+      "casting_time_index": null,
+      "duration_index": null,
+      "range_index": null
+    },
+    "blocking_findings": [],
+    "budget": {
+      "breach": [],
+      "ceilings": {
+        "max_serialized_bytes_per_child": 471859200,
+        "max_whole_generation_bytes": 536870912,
+        "node_elapsed_s": 1200,
+        "node_peak_rss_mb": 4096,
+        "python_elapsed_s": 1200,
+        "python_peak_rss_mb": 4096
+      },
+      "elapsed_s": 198.6655,
+      "peak_rss_mb": 885.3,
+      "within_budget": true
+    },
+    "duplicates": [],
+    "enum_domains": {
+      "power_type_observed": [
+        -2,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "unknown_power_types": [
+        7
+      ],
+      "unknown_school_bits": []
+    },
+    "index_fk": {},
+    "join_pairs": {
+      "casting_time_index": {
+        "adjudication": "reviewed_ambiguous",
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 6,
+            "nonzero_count": 390,
+            "valid_count": 388
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 28,
+            "distinct_ids": 67,
+            "nonzero_count": 208776,
+            "valid_count": 208761
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 14,
+            "nonzero_count": 2734,
+            "valid_count": 2721
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6331
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 26,
+            "nonzero_count": 4071,
+            "valid_count": 4051
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 17,
+            "nonzero_count": 2883,
+            "valid_count": 2880
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 16,
+            "nonzero_count": 1836,
+            "valid_count": 1823
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 10,
+            "nonzero_count": 720,
+            "valid_count": 716
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 40,
+            "nonzero_count": 77902,
+            "valid_count": 77424
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 27,
+            "nonzero_count": 3382,
+            "valid_count": 3378
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 135,
+            "distinct_ids": 13,
+            "nonzero_count": 32640,
+            "valid_count": 32568
+          },
+          {
+            "cell": 208,
+            "distinct_ids": 35,
+            "nonzero_count": 86639,
+            "valid_count": 86560
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6515
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          }
+        ],
+        "candidates_digest": "5d159aa8a6b4a177b6f6e99167f03156efa5197b9b0904ac69d814d6f86b61a1",
+        "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "pair": null,
+        "scan_algorithm": "fk_validity_v1",
+        "scan_thresholds": {
+          "min_distinct": 2,
+          "min_support": 2,
+          "valid_den": 100,
+          "valid_num": 99
+        },
+        "scanned": true,
+        "side_table_missing": false,
+        "table": "SpellCastTimes",
+        "winners": []
+      },
+      "duration_index": {
+        "adjudication": "reviewed_ambiguous",
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 3,
+            "distinct_ids": 31,
+            "nonzero_count": 12411,
+            "valid_count": 12411
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 20,
+            "distinct_ids": 13,
+            "nonzero_count": 341,
+            "valid_count": 338
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 7,
+            "nonzero_count": 390,
+            "valid_count": 390
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 13,
+            "nonzero_count": 2734,
+            "valid_count": 2720
+          },
+          {
+            "cell": 40,
+            "distinct_ids": 165,
+            "nonzero_count": 113855,
+            "valid_count": 113855
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6338
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 28,
+            "nonzero_count": 4071,
+            "valid_count": 4068
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 18,
+            "nonzero_count": 2883,
+            "valid_count": 2881
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 17,
+            "nonzero_count": 1836,
+            "valid_count": 1829
+          },
+          {
+            "cell": 64,
+            "distinct_ids": 12,
+            "nonzero_count": 1197,
+            "valid_count": 1191
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 11,
+            "nonzero_count": 720,
+            "valid_count": 720
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 64,
+            "nonzero_count": 77902,
+            "valid_count": 77460
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 28,
+            "nonzero_count": 3382,
+            "valid_count": 3382
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 104,
+            "distinct_ids": 17,
+            "nonzero_count": 4607,
+            "valid_count": 4581
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 8,
+            "nonzero_count": 1429,
+            "valid_count": 1429
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6504
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 219,
+            "distinct_ids": 3,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          },
+          {
+            "cell": 225,
+            "distinct_ids": 28,
+            "nonzero_count": 204892,
+            "valid_count": 202885
+          }
+        ],
+        "candidates_digest": "363ad3bef343a3a29c992ca0c64a4e7be1d88e94f96418f11bd41c376363d8ae",
+        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 34 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "pair": null,
+        "scan_algorithm": "fk_validity_v1",
+        "scan_thresholds": {
+          "min_distinct": 2,
+          "min_support": 2,
+          "valid_den": 100,
+          "valid_num": 99
+        },
+        "scanned": true,
+        "side_table_missing": false,
+        "table": "SpellDuration",
+        "winners": []
+      },
+      "range_index": {
+        "adjudication": "reviewed_ambiguous",
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 2,
+            "nonzero_count": 20940,
+            "valid_count": 20939
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 46,
+            "distinct_ids": 265,
+            "nonzero_count": 207507,
+            "valid_count": 207505
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 9,
+            "nonzero_count": 720,
+            "valid_count": 715
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 52,
+            "nonzero_count": 77902,
+            "valid_count": 77376
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 9,
+            "nonzero_count": 2286,
+            "valid_count": 2264
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          }
+        ],
+        "candidates_digest": "fe7c131c5741845ac3ee8ed0feffedcd37dde0e3657830e32cf6775505cefe0a",
+        "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "pair": null,
+        "scan_algorithm": "fk_validity_v1",
+        "scan_thresholds": {
+          "min_distinct": 2,
+          "min_support": 2,
+          "valid_den": 100,
+          "valid_num": 99
+        },
+        "scanned": true,
+        "side_table_missing": false,
+        "table": "SpellRange",
+        "winners": []
+      },
+      "spell_icon_id": {
+        "pair": [
+          133,
+          0
+        ],
+        "scanned": true,
+        "side_table_missing": false,
+        "table": "SpellIcon",
+        "winners": [
+          [
+            133,
+            0
+          ]
+        ]
+      }
+    },
+    "layout_proof": {
+      "name": {
+        "coverage": "8/8",
+        "discovered_cell": 136,
+        "matches_policy": true,
+        "unique": true
+      },
+      "power_type": {
+        "coverage": "8/8",
+        "discovered_cell": 41,
+        "matches_policy": true,
+        "unique": true
+      },
+      "school_mask": {
+        "coverage": "8/8",
+        "discovered_cell": 225,
+        "matches_policy": true,
+        "unique": true
+      }
+    },
+    "no_static_anchor": true,
+    "power_type_signed": null,
+    "proposed_policy_delta": {
+      "name": 136,
+      "power_type": 41,
+      "school_mask": 225,
+      "spell_icon_id": [
+        133,
+        0
+      ]
+    },
+    "required_joins": [
+      "casting_time_index",
+      "duration_index",
+      "range_index",
+      "spell_icon_id"
+    ],
+    "schema_version": "coa-spell-mechanics-recon-v1",
+    "source_pins": {
+      "client_build": "3.3.5a+patch-CZZ",
+      "dbc": {
+        "CharacterAdvancement": {
+          "sha256": "0983830dcba39b2bcb9a6bb8b4eab5734f4b44317af1b071564d93f71a645e26"
+        },
+        "CharacterAdvancementClassTypes": {
+          "sha256": "02da78174798c0db90b5509fac6d829d6b3b91db39410b4d61772c184b61bedb"
+        },
+        "CharacterAdvancementEssence": {
+          "sha256": "ac6715bca5de98692ecc59f3ee08836d27c450bdf4851c17762e490027e175f7"
+        },
+        "CharacterAdvancementTabTypes": {
+          "sha256": "f1c295b4acfcf71d03d3a9ce9749885dbca10c243b9be912b8803e3c1268fde4"
+        },
+        "SkillLineAbility": {
+          "sha256": "f60ac7eb808870c9c1959387707eb88f0e649842b41cba2dcd8fcf29ef4d8893"
+        },
+        "Spell": {
+          "sha256": "fc9d91cacf354e1578bcfc979dc140bd3bc3efe233de5b02196ef54cf6c59e4f"
+        },
+        "SpellCastTimes": {
+          "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981"
+        },
+        "SpellDuration": {
+          "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0"
+        },
+        "SpellIcon": {
+          "sha256": "b8f1c1ffffef9f8ffaf3ff1b292bc903131edad3d44a70709ef20a02d51ddf3a"
+        },
+        "SpellRange": {
+          "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd"
+        }
+      },
+      "effective_archive": "patch-T.MPQ",
+      "extractor_commit": "ab91bf0224b6e395c4937950ba8bf4afb8957b52",
+      "patch_chain": [
+        "patch-T.MPQ"
+      ],
+      "policy_sha256": "1c6376c656910b9e224de674b16de8167205509a9d895abcfd6bcb87387cf3f4"
+    },
+    "status": "verified",
+    "topology": {
+      "blocking": [],
+      "client_build": "3.3.5a+patch-CZZ",
+      "expected_absent_ok": true,
+      "expected_absent_set": [
+        "SpellEffect",
+        "SpellCooldowns"
+      ],
+      "tables": {
+        "CharacterAdvancement": {
+          "dense": true,
+          "effective_archive": "patch-M.MPQ",
+          "header": {
+            "field_count": 179,
+            "magic": "WDBC",
+            "record_count": 10182,
+            "record_size": 692,
+            "string_block_size": 227896
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\CharacterAdvancement.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ],
+          "sha256": "0983830dcba39b2bcb9a6bb8b4eab5734f4b44317af1b071564d93f71a645e26"
+        },
+        "CharacterAdvancementClassTypes": {
+          "dense": true,
+          "effective_archive": "patch-M.MPQ",
+          "header": {
+            "field_count": 23,
+            "magic": "WDBC",
+            "record_count": 46,
+            "record_size": 92,
+            "string_block_size": 627
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\CharacterAdvancementClassTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ],
+          "sha256": "02da78174798c0db90b5509fac6d829d6b3b91db39410b4d61772c184b61bedb"
+        },
+        "CharacterAdvancementEssence": {
+          "dense": true,
+          "effective_archive": "patch-M.MPQ",
+          "header": {
+            "field_count": 9,
+            "magic": "WDBC",
+            "record_count": 5600,
+            "record_size": 36,
+            "string_block_size": 0
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\CharacterAdvancementEssence.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ],
+          "sha256": "ac6715bca5de98692ecc59f3ee08836d27c450bdf4851c17762e490027e175f7"
+        },
+        "CharacterAdvancementTabTypes": {
+          "dense": true,
+          "effective_archive": "patch-M.MPQ",
+          "header": {
+            "field_count": 19,
+            "magic": "WDBC",
+            "record_count": 94,
+            "record_size": 76,
+            "string_block_size": 910
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\CharacterAdvancementTabTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ],
+          "sha256": "f1c295b4acfcf71d03d3a9ce9749885dbca10c243b9be912b8803e3c1268fde4"
+        },
+        "SkillLineAbility": {
+          "dense": true,
+          "effective_archive": "patch-M.MPQ",
+          "header": {
+            "field_count": 14,
+            "magic": "WDBC",
+            "record_count": 40904,
+            "record_size": 56,
+            "string_block_size": 0
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\SkillLineAbility.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ],
+          "sha256": "f60ac7eb808870c9c1959387707eb88f0e649842b41cba2dcd8fcf29ef4d8893"
+        },
+        "Spell": {
+          "dense": true,
+          "effective_archive": "patch-T.MPQ",
+          "header": {
+            "field_count": 234,
+            "magic": "WDBC",
+            "record_count": 208776,
+            "record_size": 936,
+            "string_block_size": 13284455
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\Spell.dbc",
+          "patch_chain": [
+            "patch-T.MPQ"
+          ],
+          "sha256": "fc9d91cacf354e1578bcfc979dc140bd3bc3efe233de5b02196ef54cf6c59e4f"
+        },
+        "SpellCastTimes": {
+          "dense": true,
+          "effective_archive": "patch-S.MPQ",
+          "header": {
+            "field_count": 4,
+            "magic": "WDBC",
+            "record_count": 71,
+            "record_size": 16,
+            "string_block_size": 0
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\SpellCastTimes.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ],
+          "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981"
+        },
+        "SpellDuration": {
+          "dense": true,
+          "effective_archive": "patch-S.MPQ",
+          "header": {
+            "field_count": 4,
+            "magic": "WDBC",
+            "record_count": 866,
+            "record_size": 16,
+            "string_block_size": 0
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\SpellDuration.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ],
+          "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0"
+        },
+        "SpellIcon": {
+          "dense": true,
+          "effective_archive": "patch-S.MPQ",
+          "header": {
+            "field_count": 2,
+            "magic": "WDBC",
+            "record_count": 16354,
+            "record_size": 8,
+            "string_block_size": 654236
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\SpellIcon.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ],
+          "sha256": "b8f1c1ffffef9f8ffaf3ff1b292bc903131edad3d44a70709ef20a02d51ddf3a"
+        },
+        "SpellRange": {
+          "dense": true,
+          "effective_archive": "patch-S.MPQ",
+          "header": {
+            "field_count": 40,
+            "magic": "WDBC",
+            "record_count": 323,
+            "record_size": 160,
+            "string_block_size": 3707
+          },
+          "key_unique": true,
+          "member": "DBFilesClient\\SpellRange.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ],
+          "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd"
+        }
+      }
+    }
+  },
+  "recon_report_path": "reports/client_extract/coa_spell_mechanics_recon.json",
+  "recon_report_sha256": "d470b9300df7e2d8c6f54cb789d2220c8bf9fbb7385e54bd1adf932994c2bded",
+  "recon_status": "verified",
+  "schema_version": "coa-e0r-acceptance-summary-v3",
+  "validation": {
+    "node": true,
+    "python": true
+  }
+}
