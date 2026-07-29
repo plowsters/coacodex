@@ -77,7 +77,7 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
 | T1.2 Reject a tampered, mismatched, or unsupported contract | **done** | `8107920` — binding leg (digest **and** revision) + registry membership proven behaviourally with a real two-revision registry; 745 Py + 121 Node |
 | T1.3 Node dispatches on the supported-contract hash set | **done** | `78dbbae` — mirrored array deleted; independent Node validator (28-case matrix); hash, revision set and child list asserted against Python by subprocess; 745 Py + 168 Node |
 | T2.1 **Policy-rooted** cardinalities + unregistered children rejected | **done** | `a9e244b` groundwork (bound content read, closing derivations, 10-table synthetic policy) → `f478b6d` Python enforcement (3-step trust chain, 7 rules, whitelist) → `242ff7e` Node mirror; 765 Py + 180 Node |
-| T2.2 Per-child shape validation (both languages) | pending | |
+| T2.2 Per-child shape validation (both languages) | **done** | `cf19ad6` Python + `2e280c6` Node; 12 shapes each, golden documents from the real producer; 825 Py + 240 Node |
 | T2.3 Full observation domain in the policy, validated at load | pending | |
 | T2.4 Publication requires both validations and a clean budget | pending | |
 | T2.5 `converted` prohibited until a bundle validator exists | pending | |
@@ -139,6 +139,19 @@ Established by probe against the tree at `02e0b7c` — do not re-derive, do not 
   `bindPolicyDoc`), and violations break that correspondence on purpose. Sizing the other way round —
   fixed counts in the corpus policy — would have made every existing cross-child test fail the
   cardinality gate before reaching the merge-join it was written to exercise.
+- **T2.2's independent implementations earned their keep immediately.** Writing Node's validators
+  surfaced a variance neither language had captured: a JOIN's `decoded` is the bare resolved scalar,
+  while a scalar's and a component's is a `{kind, value}` envelope. Python's structure hid it (joins
+  never reached the envelope check); Node's shared tail rejected the producer's own row. A transcribed
+  implementation would have inherited the silence.
+- **Golden documents come from the PRODUCER, not from hand-copied rows.** `tests/golden.py` runs the
+  synthetic regenerate and reads the children back; `coa_scraper/tests/helpers/golden.mjs` reads the same
+  documents through Python. A builder that changes shape moves the golden document and fails the shape
+  test rather than shipping.
+- **Four envelope facts the probes established** (all wrong in my first draft): an unresolved join
+  carries no components; `decoded: null` is legitimate under `value_out_of_domain`; an unresolved rich
+  join carries plain `proof` while a resolved one carries `composed_proof`; `archive_plan.excluded` is
+  keyed by exclusion family, not a list.
 - **Registry location is injectable in both languages** — Python monkeypatches `contracts.CONTRACTS_DIR`,
   Node takes a `contractsDir` option on `validateCandidateByPath`/`resolveGeneration`. Both are needed to
   test membership-vs-current before WS6 actually ships `e0r-v2`.
