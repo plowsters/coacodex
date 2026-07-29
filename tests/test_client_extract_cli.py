@@ -10,12 +10,15 @@ from coa_client_extract.cli import decode_advancement, main, regenerate
 
 
 def _client(tmp_path: Path) -> Path:
+    from tests._spell_fixtures import SYNTHETIC_CONTENT_BODY
+
     data = tmp_path / "Data"
     data.mkdir()
     for name in ("common.MPQ", "patch.MPQ", "patch-C.MPQ"):
         (data / name).write_bytes(b"MPQ\x1a")
     (data / "Content").mkdir()
-    (data / "Content" / "SpellRankData.json").write_text('[{"Spell":805775,"Rank":1}]')
+    # These exact bytes are what SYNTHETIC_CONTENT_SOURCES binds by sha256 (E0R.2 T2.1).
+    (data / "Content" / "SpellRankData.json").write_text(SYNTHETIC_CONTENT_BODY)
     return data
 
 
@@ -81,6 +84,15 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
             "max_yd": f(2, "int32", "raw_only")}},
         "SpellIcon": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
             "id": f(0, "uint32", "normalized"), "path": f(1, "string", "normalized")}},
+        # E0R.2 T2.1: the ancillary CoA tables are bound TOPOLOGY-ONLY (no `fields`), exactly as T0.2
+        # bound them in the real policy. The contract's cardinality rules name these tables, so a policy
+        # that does not bind them cannot state the source domain of the children derived from them.
+        # Field counts/record sizes are the ones _ca_tables() actually serves.
+        "CharacterAdvancement": {"expected_field_count": 10, "key_cell": 0, "unique": True},
+        "CharacterAdvancementClassTypes": {"expected_field_count": 23, "key_cell": 0, "unique": True},
+        "CharacterAdvancementTabTypes": {"expected_field_count": 19, "key_cell": 0, "unique": True},
+        "CharacterAdvancementEssence": {"expected_field_count": 9, "key_cell": 0, "unique": True},
+        "SkillLineAbility": {"expected_field_count": 14, "key_cell": 0, "unique": True},
     }
     joins = {
         "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
@@ -100,7 +112,7 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
     anchors["sha256"] = compute_policy_sha256(anchors)
     from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
-         "required_tables": ["Spell", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellIcon"],
+         "required_tables": sorted(tables),
          "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables,
          "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)

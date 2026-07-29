@@ -13,7 +13,7 @@ from .archive_backend import ArchiveBackend
 from .archive_plan import ArchivePlan, discover_plan, validate_load_order
 from .artifacts import write_json, write_jsonl
 from .class_types import resolve_class_types, resolve_tab_types
-from .content_json import read_content_records
+from .content_json import read_bound_content, read_content_records
 from .decode_advancement import decode_layout, write_report
 from .dbc_layouts import (
     CHARACTER_ADVANCEMENT,
@@ -117,7 +117,11 @@ def regenerate(
         return {"bytes": m.data, "archive": m.effective_archive.name,
                 "member": m.logical_path, "patch_chain": [p.name for p in m.patch_chain]}
 
-    content_records = read_content_records(client_root / "Content")
+    # BOUND read (E0R.2 T0.2): every reviewed file must be present and hash to the reviewed digest. The
+    # closing derivation it returns is what the contract's `declared_content_derivation` rule verifies —
+    # the Content child has no WDBC source, so `bound.tables` cannot express its domain.
+    content = read_bound_content(client_root / "Content", policy=policy)
+    content_records = content.records
 
     # === TWO-PASS attribution (design B / M1.14B): pass 1 builds the authoritative CoA attribution from
     # CharacterAdvancement + the proven skill-line index; pass 2 (below) streams the Spell table using it.
@@ -306,8 +310,20 @@ def regenerate(
     gw.add_json(GENERATION_CONTRACT_CHILD, generation_contract,
                 schema_version=GENERATION_CONTRACT_SCHEMA)
 
+    # Accounting identities for the two children that are FILTERED projections of their source rather
+    # than 1:1 extractions (E0R.2 T2.1). `kept` and `rejected` are counted at the point of filtering, from
+    # the source rows actually read — NOT back-derived from the staged child, which would make the
+    # identity self-fulfilling. The validator checks kept + rejected against the REVIEWED source count and
+    # kept against the emitted child, so a silent drop fails on one leg or the other.
+    derivations = {
+        "coa_client_advancement.jsonl": {
+            "source": "CharacterAdvancement", "kept": len(adv_records),
+            "rejected": len(nodes) - len(adv_records)},
+        "coa_client_content.jsonl": content.derivation,
+    }
     binding = {"topology": topology, "provenance": provenance, "policy_sha256": policy.sha256,
                "anchor_set_sha256": policy.anchor_sha256, "enum_policy_sha256": policy.enum_sha256,
+               "derivations": derivations,
                "generation_contract": {"schema_version": GENERATION_CONTRACT_SCHEMA,
                                        "revision": contract_revision,
                                        "sha256": generation_contract_sha256(generation_contract)}}

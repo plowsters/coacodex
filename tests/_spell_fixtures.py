@@ -60,12 +60,23 @@ def _f(cell, kind, promo="normalized", layout="verified", interp="verified"):
 
 
 # E0R.2 T0.2: the Content JSON binding is part of a reviewed policy, so every policy — synthetic
-# included — must declare one. A synthetic policy has no Content directory to read; this is the minimal
-# well-formed block that satisfies the loader without pretending to bind real files.
+# included — must declare one.
+#
+# E0R.2 T2.1: this now binds the REAL bytes the synthetic client fixture writes
+# (tests/test_client_extract_cli.py::_client), because `declared_content_derivation` roots the Content
+# child's expected count in `content_sources[*].source_entries`. A placeholder digest would make the
+# synthetic regenerate path unable to satisfy its own accounting identity — and the point of the rule
+# is that the count comes from the reviewed policy rather than from the candidate.
+SYNTHETIC_CONTENT_ENTRIES = 1
+SYNTHETIC_CONTENT_BODY = '[{"Spell":805775,"Rank":1}]'
 SYNTHETIC_CONTENT_SOURCES = {
     "directory": "Content",
     "required_files": {
-        "SpellRankData.json": {"kind": "spell_rank", "sha256": "0" * 64, "source_entries": 0},
+        "SpellRankData.json": {
+            "kind": "spell_rank",
+            "sha256": "3f5e5f31f0d6af8b78e5bb3151a26c6eac5a79fb9821ae79938b518ca6c72190",
+            "source_entries": SYNTHETIC_CONTENT_ENTRIES,
+        },
     },
 }
 
