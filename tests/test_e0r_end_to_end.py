@@ -14,7 +14,7 @@ from coa_client_extract.spell_record import iter_spell_records, project_v3_row
 from coa_client_extract.spell_icons import icon_asset_table, iter_icon_catalog
 from tests._spell_fixtures import v2_policy, v2_icon_policy, spell_dbc, side_views, icon_side_views
 from tests._e0r2_fixtures import (ANCILLARY_TABLES, GENEROUS_CEILINGS, bind_policy_doc, clean_budget,
-                                  generation_contract_binding,
+                                  declared_schema, generation_contract_binding,
                                   policy_binding, stage_generation_contract, validate_staged,
                                   write_lock, stage_v4_documents)
 
@@ -52,7 +52,7 @@ def _stage_full_generation(root: Path):
                 schema_version="coa-client-spell-projection-manifest-v3")
     for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
-        gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+        gw.add_jsonl(name, [], schema_version=declared_schema(name))
     gw.add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"),
                 schema_version="coa-client-archive-plan-v1")
     policy_doc = bind_policy_doc(v2_policy().doc, spell_records=len(full),

@@ -278,6 +278,25 @@ function topologyMismatches(report, bound) {
 // The staged descriptor/wire children must equal what this validator derives itself. Skipped for a
 // revision that does not register them, so an `e0r-v1` generation still resolves — the revision decides
 // which children exist, not the code.
+// E0R.2 T6.4: every child must be REGISTERED under the `child_schema_version` its own revision declares.
+//
+// Every revision document states one per child, and until this ran nothing read it: a generation could
+// register v4 rows as `coa-client-spell-v3` with every hash, byte length and record count perfectly
+// valid, and the SHAPE gate would not notice — the shape is chosen from the contract, never from the
+// label. The label is what a consumer dispatches on, so an unchecked one is a lie with a valid digest.
+// Unregistered children are left to the whitelist check, which has the better error for them.
+function requireDeclaredSchemaVersions(contract, manifest) {
+  for (const [name, meta] of Object.entries(manifest.children || {})) {
+    const spec = contract.children[name];
+    if (spec === undefined) continue;
+    if (meta.schema_version !== spec.child_schema_version) {
+      throw new GenerationResolveError(
+        `child ${name} is registered as schema_version ${meta.schema_version} but contract revision ` +
+        `${contract.revision} declares ${spec.child_schema_version}`);
+    }
+  }
+}
+
 function requireStagedDecoders(genDir, contract, policyDoc) {
   const checks = [
     [FIELD_DESCRIPTORS_CHILD, (doc) => requireFieldDescriptors(doc, policyDoc)],
@@ -703,6 +722,7 @@ export function validateCandidateByPath(genDir, { lockPath = DEFAULT_LOCK_PATH, 
   // The contract is established BEFORE any per-child work: it is what says which children are required.
   const contract = stagedContract(dir, manifest, contractsDir);
   const children = validateChildrenByPath(dir, manifest);
+  requireDeclaredSchemaVersions(contract, manifest);
   for (const name of requiredChildrenFor(contract)) {
     if (!(name in children)) throw new GenerationResolveError(`required child ${name} missing from the candidate generation`);
   }
@@ -830,6 +850,7 @@ export function resolveGeneration(rootOrPointer, { contractsDir } = {}) {
   // resolves by exactly the three-way agreement it was validated under.
   const contract = stagedContract(genDir, manifest, contractsDir);
   const resolved = validateChildrenByPath(genDir, manifest);
+  requireDeclaredSchemaVersions(contract, manifest);
   for (const name of requiredChildrenFor(contract)) {
     if (!(name in resolved)) throw new GenerationResolveError(`required child ${name} missing from the published generation`);
   }

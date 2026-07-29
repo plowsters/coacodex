@@ -829,6 +829,27 @@ def _staged_contract(gen_dir: Path, manifest: dict) -> dict:
         raise ResolveError(f"generation_contract: {exc}") from exc
 
 
+def _require_declared_schema_versions(contract: dict, manifest: dict) -> None:
+    """Every child must be REGISTERED under the `child_schema_version` its own revision declares
+    (E0R.2 T6.4).
+
+    Every revision document states one per child, and until this ran nothing read it: a generation could
+    register v4 rows as `coa-client-spell-v3` with every hash, byte length and record count perfectly
+    valid, and the SHAPE gate would not notice — the shape is chosen from the contract, never from the
+    label. The label is what a consumer dispatches on, so an unchecked one is a lie with a valid digest.
+
+    Unregistered children are left to the whitelist check, which has the better error for them."""
+    for name, meta in (manifest.get("children") or {}).items():
+        spec = contract["children"].get(name)
+        if spec is None:
+            continue
+        if meta.get("schema_version") != spec["child_schema_version"]:
+            raise ResolveError(
+                f"child {name!r} is registered as schema_version {meta.get('schema_version')!r} but "
+                f"contract revision {contract['revision']!r} declares "
+                f"{spec['child_schema_version']!r}")
+
+
 def _require_staged_decoders(gen_dir: Path, contract: dict, policy) -> None:
     """The staged descriptor and wire-schema children must equal what this validator derives itself.
     Skipped for a contract revision that does not register them, so an `e0r-v1` generation still
@@ -867,6 +888,7 @@ def validate_candidate_generation(gen_dir: Path, *, lock_path: Path | None = Non
     # and an unbound/unsupported generation should fail as that rather than as an unrelated child error.
     contract = _staged_contract(gen_dir, manifest)
     resolved = _validate_children_by_path(gen_dir, manifest)
+    _require_declared_schema_versions(contract, manifest)
     registered = set(contract["children"])
     for name in required_children_for(contract):
         if name not in resolved:
@@ -980,6 +1002,7 @@ def resolve_active_generation(root: Path) -> dict:
         if not meta.get("schema_version"):
             raise ResolveError(f"child {name!r} missing schema_version")
         resolved[name] = child_path
+    _require_declared_schema_versions(contract, manifest)
     for name in required_children_for(contract):
         if name not in resolved:
             raise ResolveError(f"required child {name!r} missing from the published generation")

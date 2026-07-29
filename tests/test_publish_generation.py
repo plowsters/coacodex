@@ -12,8 +12,9 @@ from coa_client_extract.publish import (
     candidate_trust_sha256, prune_generations, resolve_active_generation,
 )
 
-from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract, stage_v4_documents)
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, declared_schema,
+                                  generation_contract_binding, stage_generation_contract,
+                                  stage_v4_documents)
 
 
 def _base():
@@ -41,12 +42,13 @@ def _publish(root, *, spell_id=1, inv=None):
     w.add_json("coa_client_spell_projection.manifest.json",
                {"schema_version": "coa-client-spell-projection-manifest-v3"},
                schema_version="coa-client-spell-projection-manifest-v3")
-    w.add_jsonl("coa_client_spell_icons.jsonl", [], schema_version="coa-client-spell-icons-v1")
+    w.add_jsonl("coa_client_spell_icons.jsonl", [],
+                schema_version=declared_schema("coa_client_spell_icons.jsonl"))
     w.add_jsonl("coa_client_icon_assets.jsonl", [],
                   schema_version="coa-client-icon-assets-v1")
     for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
-        w.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+        w.add_jsonl(name, [], schema_version=declared_schema(name))
     w.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                schema_version="coa-client-archive-plan-v1")
     w.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},

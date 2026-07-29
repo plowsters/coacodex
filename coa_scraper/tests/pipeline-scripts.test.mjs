@@ -972,7 +972,10 @@ function writeGenerationFixture(root, projRecords) {
   for (const [name, body] of Object.entries(contents)) {
     fs.writeFileSync(path.join(genDir, name), body);
     const records = name.endsWith(".jsonl") ? body.toString("utf8").split("\n").filter((l) => l.trim()).length : 1;
-    children[name] = { sha256: sha(body), byte_length: body.length, records, schema_version: "x" };
+    // E0R.2 T6.4: the revision DECLARES a schema_version per child and the resolver now requires the
+    // manifest to register it, so a placeholder label no longer resolves.
+    children[name] = { sha256: sha(body), byte_length: body.length, records,
+                       schema_version: loadCurrentContract()[1].children[name].child_schema_version };
   }
   const manifest = {
     schema_version: "coa-client-extract-manifest-v3", generation_id: genId, published_at: 1,

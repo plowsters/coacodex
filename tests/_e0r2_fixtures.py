@@ -18,16 +18,14 @@ import json
 from pathlib import Path
 
 from coa_client_extract.contracts import (GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA,
-                                          generation_contract_sha256, load_current_contract)
+                                          generation_contract_sha256, load_contract_registry,
+                                          load_current_contract, load_supported_contract)
 from coa_client_extract.contracts import load_observation_wire_schema
 from coa_client_extract.publish import GenerationWriter
-from coa_client_extract.spell_icons import (ASSET_CHILD as ICON_ASSET_CHILD,
-                                            ASSET_SCHEMA as ICON_ASSET_SCHEMA,
-                                            ASSOCIATION_SCHEMA as ICON_ASSOCIATION_SCHEMA)
+from coa_client_extract.spell_icons import ASSET_CHILD as ICON_ASSET_CHILD
 from coa_client_extract.spell_layout import compute_policy_sha256, derive_artifact_contract
 from coa_client_extract.spell_record import (FIELD_DESCRIPTORS_CHILD, FIELD_DESCRIPTORS_SCHEMA,
-                                             SPELL_SCHEMA_V4, WIRE_SCHEMA_CHILD,
-                                             build_field_descriptors)
+                                             WIRE_SCHEMA_CHILD, build_field_descriptors)
 
 CORPUS = Path(__file__).resolve().parent / "golden" / "e0r1_corpus"
 CORPUS_V4 = Path(__file__).resolve().parent / "golden" / "e0r2_corpus_v4"
@@ -175,6 +173,47 @@ def corpus_policy_doc() -> dict:
     return json.loads((CORPUS / "policy.json").read_text())
 
 
+# --- staging under a chosen revision (T6.4) ---
+
+def declared_schema(child: str, contract_doc: dict | None = None) -> str:
+    """The `child_schema_version` a revision declares for `child` — what the producer registers, and
+    since T6.4 what the validator requires the manifest to say. A fixture that hard-codes a label
+    instead is one revision away from registering a lie that nothing in the tree would notice."""
+    doc = contract_doc if contract_doc is not None else load_current_contract()[1]
+    return doc["children"][child]["child_schema_version"]
+
+
+def supported_contract(revision: str) -> tuple[str, dict]:
+    """The (revision, doc) pair for any SUPPORTED revision, loaded through the registry's own pinned
+    digest — so a fixture stages the same bytes the validator will dispatch on."""
+    entry = load_contract_registry()["supported"][revision]
+    return revision, load_supported_contract(revision, entry["sha256"])
+
+
+# Which committed baseline carries rows of a given row schema. Keyed by SCHEMA rather than by revision:
+# a revision that introduces a new encoding must add its baseline here, instead of silently being staged
+# with the previous one and "passing".
+CORPUS_FOR_ROW_SCHEMA = {
+    "coa-client-spell-v3": CORPUS,
+    "coa-client-spell-v4": CORPUS_V4,
+    "coa-client-spell-icons-v1": CORPUS,
+    "coa-client-spell-icons-v2": CORPUS_V4,
+}
+
+
+def revision_baseline(contract_doc: dict, child: str, filename: str, case: str) -> list[dict]:
+    """The valid rows a generation under THIS revision stages for `child`, chosen by the row schema the
+    revision declares. Derived from the contract document, never from a table of revision names, so the
+    fixture cannot drift away from the registry."""
+    schema = contract_doc["children"][child]["row_schema_version"]
+    corpus = CORPUS_FOR_ROW_SCHEMA.get(schema)
+    if corpus is None:
+        raise AssertionError(
+            f"no committed corpus baseline for {child!r} rows at {schema!r}; a new encoding needs one "
+            "before a generation under its revision can be staged at all")
+    return corpus_rows(filename, case, corpus=corpus)
+
+
 def _ancillary_rows(shape: str, count: int) -> list[dict]:
     """`count` copies of the row the REAL producer emits for this child (tests/golden.py). T2.2 shape-
     checks every row, so a placeholder would only prove the fixture can dodge its own gate."""
@@ -199,16 +238,27 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
                     forge_descriptors=None, forge_wire=None,
                     # --- normalized-icon knobs (T6.3) ---
                     icon_assets=None,
+                    # --- cross-revision knobs (T6.4) ---
+                    drop_children=(), forge_child_schema=None,
                     return_writer=False):
     """A COMPLETE staged candidate whose policy is sized to what it stages, so the honest case validates
     and each knob breaks exactly one rule. Returns the generation directory.
 
     The three spell children come from the shared golden corpus (the same rows Node validates), so the
     cross-child merge-join has real work to do rather than being trivially satisfied by empty files.
+
+    E0R.2 T6.4: WHICH children are staged, which encoding their rows use, and which `schema_version`
+    each is registered under all come from the contract revision being staged (`contract=`, defaulting
+    to `current`). A fixture that always staged today's children could only ever prove today's revision
+    works, which is the whole gap the matrix exists to close.
     """
-    full = corpus_rows("full_rows.jsonl", "valid_full", corpus=CORPUS_V4) if full is None else full
+    contract_revision, contract_doc = contract if contract is not None else load_current_contract()
+    registered = set(contract_doc["children"])
+    full = revision_baseline(contract_doc, "coa_client_spell.jsonl", "full_rows.jsonl",
+                             "valid_full") if full is None else full
     proj = corpus_rows("projection_rows.jsonl", "valid") if proj is None else proj
-    icons = corpus_rows("icons.jsonl", "valid_icon", corpus=CORPUS_V4) if icons is None else icons
+    icons = revision_baseline(contract_doc, "coa_client_spell_icons.jsonl", "icons.jsonl",
+                              "valid_icon") if icons is None else icons
     icon_assets = (corpus_rows("icon_assets.jsonl", "valid_asset", corpus=CORPUS_V4)
                    if icon_assets is None else icon_assets)
     ancillary_counts = {**{t: 2 for t in ANCILLARY_TABLES}, **(ancillary_counts or {})}
@@ -250,29 +300,44 @@ def stage_candidate(root, *, full=None, proj=None, icons=None, policy_doc=None,
 
     gw = GenerationWriter(root)
     write_lock(gw.root, policy)      # the HONEST policy: a forged staged copy is caught against this
-    gw.add_jsonl("coa_client_spell.jsonl", full, schema_version=SPELL_SCHEMA_V4)
-    gw.add_jsonl("coa_client_spell_coa.jsonl", proj, schema_version="coa-client-spell-projection-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", icons, schema_version=ICON_ASSOCIATION_SCHEMA)
-    gw.add_jsonl(ICON_ASSET_CHILD, icon_assets, schema_version=ICON_ASSET_SCHEMA)
+    skipped = set(drop_children)
+
+    def _schema_for(name: str) -> str:
+        """The revision's own declared version, which is exactly what the producer registers. A fixture
+        that invented one could not exercise the check that the two agree."""
+        forged, version = forge_child_schema or (None, None)
+        return version if name == forged else contract_doc["children"][name]["child_schema_version"]
+
+    def _add_jsonl(name, rows):
+        if name in registered and name not in skipped:
+            gw.add_jsonl(name, rows, schema_version=_schema_for(name))
+
+    def _add_json(name, doc):
+        if name in registered and name not in skipped:
+            gw.add_json(name, doc, schema_version=_schema_for(name))
+
     from tests.golden import golden_rows
-    gw.add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"),
-                schema_version="coa-client-spell-projection-manifest-v3")
+    _add_jsonl("coa_client_spell.jsonl", full)
+    _add_jsonl("coa_client_spell_coa.jsonl", proj)
+    _add_jsonl("coa_client_spell_icons.jsonl", icons)
+    _add_jsonl(ICON_ASSET_CHILD, icon_assets)
+    _add_json("coa_client_spell_projection.manifest.json", golden_rows("projection_manifest_v3"))
     for name, rows in ancillary_rows.items():
-        gw.add_jsonl(name, rows, schema_version=f"fixture-{name}")
-    gw.add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"),
-                schema_version="coa-client-archive-plan-v1")
-    gw.add_json("spell_layout_v2.json", staged_policy, schema_version="coa-spell-layout-v2")
+        _add_jsonl(name, rows)
+    _add_json("coa_client_archive_plan.json", golden_rows("archive_plan_v1"))
+    _add_json("spell_layout_v2.json", staged_policy)
     # E0R.2 T6.2: a v4 row is only decodable WITH these two, so every complete generation ships them.
     # Derived from the HONEST policy — a fixture that derived them from a forged staged copy would be
-    # self-consistent and prove nothing.
+    # self-consistent and prove nothing. Registered by `e0r-v2` onward: under `e0r-v1` they are not
+    # children at all, and staging them anyway is the unregistered-child case (T6.4).
     descriptors = build_field_descriptors(policy)
     if forge_descriptors is not None:
         forge_descriptors(descriptors)
     wire = copy.deepcopy(load_observation_wire_schema())
     if forge_wire is not None:
         forge_wire(wire)
-    gw.add_json(FIELD_DESCRIPTORS_CHILD, descriptors, schema_version=FIELD_DESCRIPTORS_SCHEMA)
-    gw.add_json(WIRE_SCHEMA_CHILD, wire, schema_version="coa-observation-wire-v1")
+    _add_json(FIELD_DESCRIPTORS_CHILD, descriptors)
+    _add_json(WIRE_SCHEMA_CHILD, wire)
 
     binding: dict = dict(policy_binding(policy))
     if forge_staged_policy_bound_record_count is not None or unbind_staged_policy:

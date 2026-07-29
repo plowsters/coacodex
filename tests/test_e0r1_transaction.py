@@ -16,8 +16,9 @@ from coa_client_extract.publish import (
 from tests.test_client_extract_cli import (
     _bound_spell_policy, _client, _fake_backend, _synthetic_layouts,
 )
-from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, generation_contract_binding,
-                                  stage_generation_contract, stage_v4_documents)
+from tests._e0r2_fixtures import (GENEROUS_CEILINGS, clean_budget, declared_schema,
+                                  generation_contract_binding, stage_generation_contract,
+                                  stage_v4_documents)
 
 
 def _regenerate(client_root, out, tmp_path, **kwargs):
@@ -67,12 +68,13 @@ def _stage_minimal(root):
     gw.add_json("coa_client_spell_projection.manifest.json",
                 {"schema_version": "coa-client-spell-projection-manifest-v3"},
                 schema_version="coa-client-spell-projection-manifest-v3")
-    gw.add_jsonl("coa_client_spell_icons.jsonl", [], schema_version="coa-client-spell-icons-v1")
+    gw.add_jsonl("coa_client_spell_icons.jsonl", [],
+                 schema_version=declared_schema("coa_client_spell_icons.jsonl"))
     gw.add_jsonl("coa_client_icon_assets.jsonl", [],
                   schema_version="coa-client-icon-assets-v1")
     for name in ("coa_client_content.jsonl", "coa_client_advancement.jsonl", "coa_client_class_types.jsonl",
                  "coa_client_tab_types.jsonl", "coa_client_essence.jsonl"):
-        gw.add_jsonl(name, [], schema_version="coa-client-misc-v1")
+        gw.add_jsonl(name, [], schema_version=declared_schema(name))
     gw.add_json("coa_client_archive_plan.json", {"schema_version": "coa-client-archive-plan-v1"},
                 schema_version="coa-client-archive-plan-v1")
     gw.add_json("spell_layout_v2.json", {"schema_version": "coa-spell-layout-v2"},

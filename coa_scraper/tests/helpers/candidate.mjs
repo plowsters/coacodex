@@ -9,7 +9,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { candidateTrustSha256FromText } from "../../scripts/lib/canonical.mjs";
 import { GENERATION_CONTRACT_CHILD, GENERATION_CONTRACT_SCHEMA, REQUIRED_CHILDREN,
-         generationContractSha256, loadCurrentContract } from "../../scripts/lib/generation.mjs";
+         generationContractSha256, loadContractRegistry, loadCurrentContract,
+         loadSupportedContract } from "../../scripts/lib/generation.mjs";
 import { FIELD_DESCRIPTORS_CHILD, WIRE_SCHEMA_CHILD, buildFieldDescriptors }
   from "../../scripts/lib/mechanics-projection.mjs";
 import { goldenRows } from "./golden.mjs";
@@ -129,23 +130,37 @@ function countRecords(buf) {
   return buf.toString("utf8").split("\n").filter((l) => l.trim()).length;
 }
 
-const SCHEMA_FOR = {
-  "coa_client_spell.jsonl": "coa-client-spell-v4",
-  "coa_client_spell_coa.jsonl": "coa-client-spell-projection-v3",
-  "coa_client_spell_projection.manifest.json": "coa-client-spell-projection-manifest-v3",
-  "coa_client_spell_icons.jsonl": "coa-client-spell-icons-v2",
-  "coa_client_icon_assets.jsonl": "coa-client-icon-assets-v1",
-  "coa_client_content.jsonl": "coa-client-content-v1",
-  "coa_client_archive_plan.json": "coa-client-archive-plan-v1",
-  "coa_client_advancement.jsonl": "coa-client-advancement-v1",
-  "coa_client_class_types.jsonl": "coa-client-class-types-v1",
-  "coa_client_tab_types.jsonl": "coa-client-tab-types-v1",
-  "coa_client_essence.jsonl": "coa-client-essence-v1",
-  "spell_layout_v2.json": "coa-spell-layout-v2",
-  [FIELD_DESCRIPTORS_CHILD]: "coa-client-spell-fields-v1",
-  [WIRE_SCHEMA_CHILD]: "coa-observation-wire-v1",
-  [GENERATION_CONTRACT_CHILD]: GENERATION_CONTRACT_SCHEMA,
+// E0R.2 T6.4: the version a child is REGISTERED under comes from the revision being staged — the same
+// value the producer writes and, since T6.4, the one the validator requires. A hard-coded table here
+// would be one revision away from registering a label nothing in the tree could notice was wrong.
+export function supportedContract(revision) {
+  const entry = loadContractRegistry().supported[revision];
+  return [revision, loadSupportedContract(revision, entry.sha256)];
+}
+
+export function declaredSchema(child, contractDoc) {
+  return (contractDoc || loadCurrentContract()[1]).children[child].child_schema_version;
+}
+
+// Which committed baseline carries rows of a given row schema. Keyed by SCHEMA, not by revision: a
+// revision that introduces a new encoding must add its baseline rather than be silently staged with the
+// previous one and "pass". Mirrors CORPUS_FOR_ROW_SCHEMA in tests/_e0r2_fixtures.py.
+const BASELINE_FOR_ROW_SCHEMA = {
+  "coa-client-spell-v3": (c) => c.validFullV3(),
+  "coa-client-spell-v4": (c) => c.validFull(),
+  "coa-client-spell-icons-v1": (c) => c.validIcons(),
+  "coa-client-spell-icons-v2": (c) => c.validIconsV2(),
 };
+
+export function revisionBaseline(contractDoc, child, corpus) {
+  const schema = contractDoc.children[child].row_schema_version;
+  const baseline = BASELINE_FOR_ROW_SCHEMA[schema];
+  if (!baseline) {
+    throw new Error(`no committed corpus baseline for ${child} rows at ${schema}; a new encoding needs ` +
+                    "one before a generation under its revision can be staged at all");
+  }
+  return baseline(corpus);
+}
 
 // Write a two-revision registry to disk so a test can prove that membership — not equality with
 // `current` — is what the validator checks. Nothing is faked: both files are real, validated documents.
@@ -191,9 +206,14 @@ function stagedWire(opts) {
 
 export function buildCandidate(opts = {}) {
   const corpus = loadCorpus();
-  const full = opts.full || corpus.validFull();
+  // E0R.2 T6.4: which children exist, which encoding their rows use and which schema_version each is
+  // registered under all come from the revision being staged. A fixture that always staged today's
+  // children could only ever prove today's revision works.
+  const [contractRevision, contractBase] = opts.contract || loadCurrentContract();
+  const registered = new Set(Object.keys(contractBase.children));
+  const full = opts.full || revisionBaseline(contractBase, "coa_client_spell.jsonl", corpus);
   const proj = opts.proj || corpus.validProj();
-  const icons = opts.icons || corpus.validIconsV2();
+  const icons = opts.icons || revisionBaseline(contractBase, "coa_client_spell_icons.jsonl", corpus);
   const iconAssets = opts.iconAssets || corpus.validIconAssets();
   const drop = new Set(opts.drop || []);
   const ancillaryCounts = { ...Object.fromEntries(ANCILLARY_TABLES.map((t) => [t, 2])),
@@ -206,7 +226,6 @@ export function buildCandidate(opts = {}) {
   // exactly one correspondence rather than the fixture never having established it.
   const policy = opts.policy || bindPolicyDoc(corpus.policy, {
     spellRecords: full.length, ancillaryRecords: ancillaryCounts, contentEntries });
-  const [contractRevision, contractBase] = opts.contract || loadCurrentContract();
   const contract = structuredClone(contractBase);
   if (opts.contractMutate) opts.contractMutate(contract);
 
@@ -252,12 +271,15 @@ export function buildCandidate(opts = {}) {
     contents[name] = Buffer.concat([contents[name], contents[name]]);
   }
 
+  const [forgedChild, forgedVersion] = opts.forgeChildSchema || [null, null];
   const children = {};
   for (const [name, body] of Object.entries(contents)) {
-    if (drop.has(name)) continue;
+    if (drop.has(name) || !registered.has(name)) continue;
     fs.writeFileSync(path.join(genDir, name), body);
     const records = name.endsWith(".jsonl") ? countRecords(body) : 1;
-    children[name] = { sha256: sha(body), byte_length: body.length, records, schema_version: SCHEMA_FOR[name] };
+    children[name] = { sha256: sha(body), byte_length: body.length, records,
+                       schema_version: name === forgedChild ? forgedVersion
+                                                            : declaredSchema(name, contractBase) };
   }
   if (opts.extraChild) {
     const [name, body] = opts.extraChild;      // on disk but NOT registered: the whitelist case
