@@ -5,6 +5,7 @@ import pytest
 from coa_client_extract.spell_layout import (
     SCHEMA, SpellPolicyError, compute_policy_sha256, load_spell_policy, load_default_policy,
 )
+from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 
 def _hdr(field_count, record_size):
@@ -35,6 +36,7 @@ def _valid_payload() -> dict:
         "expected_absent": ["SpellEffect"],
         "enum_policy": enum,
         "anchor_set": anchor_set,
+        "content_sources": SYNTHETIC_CONTENT_SOURCES,
         "tables": {
             "Spell": {"expected_field_count": 234, "key_cell": 0, "unique": True, "fields": {
                 "id": {"cell": 0, "kind": "uint32", "layout": "verified",

@@ -3,6 +3,7 @@ import struct
 from coa_client_extract.recordview import open_view
 from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
 from coa_client_extract.spell_record import build_spell_v2_records
+from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 # Synthetic Spell record: 9 uint32 cells.
 #  0 id | 1 power_type | 2 school_mask | 3 name_off | 4 desc_off
@@ -84,7 +85,8 @@ def _policy(*, reviewed=True, bound=None):
     anchor_set["sha256"] = compute_policy_sha256(anchor_set)
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": reviewed, "bound": bound,
          "required_tables": ["Spell"], "expected_absent": [], "enum_policy": enum,
-         "anchor_set": anchor_set, "tables": tables, "joins": joins}
+         "anchor_set": anchor_set, "tables": tables, "joins": joins,
+         "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

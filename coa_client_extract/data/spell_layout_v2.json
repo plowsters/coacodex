@@ -245,6 +245,91 @@
       "SpellCooldowns"
     ],
     "tables": {
+      "CharacterAdvancement": {
+        "header": {
+          "field_count": 179,
+          "magic": "WDBC",
+          "record_count": 10182,
+          "record_size": 692,
+          "string_block_size": 227896
+        },
+        "sha256": "0983830dcba39b2bcb9a6bb8b4eab5734f4b44317af1b071564d93f71a645e26",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancement.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementClassTypes": {
+        "header": {
+          "field_count": 23,
+          "magic": "WDBC",
+          "record_count": 46,
+          "record_size": 92,
+          "string_block_size": 627
+        },
+        "sha256": "02da78174798c0db90b5509fac6d829d6b3b91db39410b4d61772c184b61bedb",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementClassTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementEssence": {
+        "header": {
+          "field_count": 9,
+          "magic": "WDBC",
+          "record_count": 5600,
+          "record_size": 36,
+          "string_block_size": 0
+        },
+        "sha256": "ac6715bca5de98692ecc59f3ee08836d27c450bdf4851c17762e490027e175f7",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementEssence.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementTabTypes": {
+        "header": {
+          "field_count": 19,
+          "magic": "WDBC",
+          "record_count": 94,
+          "record_size": 76,
+          "string_block_size": 910
+        },
+        "sha256": "f1c295b4acfcf71d03d3a9ce9749885dbca10c243b9be912b8803e3c1268fde4",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementTabTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "SkillLineAbility": {
+        "header": {
+          "field_count": 14,
+          "magic": "WDBC",
+          "record_count": 40904,
+          "record_size": 56,
+          "string_block_size": 0
+        },
+        "sha256": "f60ac7eb808870c9c1959387707eb88f0e649842b41cba2dcd8fcf29ef4d8893",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\SkillLineAbility.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
       "Spell": {
         "header": {
           "field_count": 234,
@@ -340,6 +425,36 @@
     "python_elapsed_s": 1200,
     "python_peak_rss_mb": 4096
   },
+  "content_sources": {
+    "directory": "Content",
+    "required_files": {
+      "CharacterAdvancementData.json": {
+        "kind": "character_advancement",
+        "sha256": "bc121f89f0d31fa6f76457dba5d43c3bad3cdf7a98b64a7c24aa816358b9ef77",
+        "source_entries": 23709
+      },
+      "ItemVariationData.json": {
+        "kind": "item_variation",
+        "sha256": "770e8d41dc546b6ddee027000d3cb2287614f7b9c28835a29d5cfc0f341b8f7a",
+        "source_entries": 10830
+      },
+      "SpellRankData.json": {
+        "kind": "spell_rank",
+        "sha256": "fb342952d8fe61896dca2030fe91f51c78fde96b22186f18421da425efb02fd4",
+        "source_entries": 13311
+      },
+      "SpellToRoleSuggestionData.json": {
+        "kind": "spell_role_suggestion",
+        "sha256": "ede962dff5f83360443ae26025a4f1126b375e2f819366b9646c6fa289881bd3",
+        "source_entries": 2447
+      },
+      "SpellToStatSuggestionData.json": {
+        "kind": "spell_stat_suggestion",
+        "sha256": "1b239b79a03c66781ede7c670393f37dd180a3801e66400d5d217c9add82fce9",
+        "source_entries": 2447
+      }
+    }
+  },
   "enum_policy": {
     "power_types": [
       -2,
@@ -400,16 +515,46 @@
   },
   "provenance_note": "E0R structured bound authored from real-client recon (build 3.3.5a+patch-CZZ). Every required table byte-bound by sha256 + full WDBC header + logical member/effective-archive/patch-chain. M1.14E0R.1 T1.2 adjudicates all four side-table joins: spell_icon_id ADOPTED at cell 133 (joined-pair value-anchor discovery from Builder-payload icon paths, non-circular blind plurality 293:1); casting_time_index/duration_index/range_index reviewed_ambiguous (null cell, raw_only). T1.3 DEMOTES power_type to raw_only@41 with a withheld decode (no static signed anchor; value 7 unknown); power_type=7 stays withheld per-value. No field is normalized-authorized beyond id/name/school_mask.",
   "required_tables": [
+    "CharacterAdvancement",
+    "CharacterAdvancementClassTypes",
+    "CharacterAdvancementEssence",
+    "CharacterAdvancementTabTypes",
+    "SkillLineAbility",
     "Spell",
     "SpellCastTimes",
     "SpellDuration",
-    "SpellRange",
-    "SpellIcon"
+    "SpellIcon",
+    "SpellRange"
   ],
   "reviewed": true,
   "schema_version": "coa-spell-layout-v2",
-  "sha256": "5fbd5b5d2f303bd4212685cc3e3052a0013e637db10c5a7237738e7e95607b11",
+  "sha256": "056166c2fd483dffa61500329c2e3d52116a1e1a1c645ab5eda41a93893f6759",
   "tables": {
+    "CharacterAdvancement": {
+      "expected_field_count": 179,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementClassTypes": {
+      "expected_field_count": 23,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementEssence": {
+      "expected_field_count": 9,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementTabTypes": {
+      "expected_field_count": 19,
+      "key_cell": 0,
+      "unique": true
+    },
+    "SkillLineAbility": {
+      "expected_field_count": 14,
+      "key_cell": 0,
+      "unique": true
+    },
     "Spell": {
       "expected_field_count": 234,
       "fields": {

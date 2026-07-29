@@ -60,6 +60,7 @@ class SpellPolicy:
     joins: dict[str, JoinPolicy]   # emitted_value -> JoinPolicy
     required_tables: tuple[str, ...]
     expected_absent: tuple[str, ...]
+    content_sources: dict          # the Content JSON binding (E0R.2 T0.2 — no WDBC source exists)
     anchor_set: dict
     _enum: dict
     doc: dict         # the exact source payload, staged verbatim as the reviewed-policy generation child
@@ -259,6 +260,9 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         if set(bound.get("expected_absent", [])) != set(expected_absent):
             raise SpellPolicyError("bound.expected_absent must equal the policy expected_absent set")
 
+    content_sources = payload.get("content_sources")
+    _validate_content_sources(content_sources)
+
     budget = payload.get("budget")
     if budget is not None:
         _validate_budget(budget)
@@ -273,9 +277,38 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         tables=tables, joins=joins,
         required_tables=required_tables,
         expected_absent=expected_absent,
+        content_sources=content_sources,
         anchor_set=anchor_set, _enum={"power_types": power_types, "school_bits": school_bits},
         doc=payload,
     )
+
+
+def _validate_content_sources(sources) -> None:
+    """The Content JSON binding (E0R.2 T0.2). `coa_client_content.jsonl` is the one child with no WDBC
+    source, so `bound.tables` cannot express its domain and it needs its own reviewed binding: the exact
+    required file set, each file's sha256, and each file's parsed entry count. Without this the reader
+    silently skipped a missing file and the generation quietly shrank."""
+    if not isinstance(sources, dict):
+        raise SpellPolicyError("content_sources must be an object (the Content JSON binding)")
+    if not sources.get("directory"):
+        raise SpellPolicyError("content_sources.directory must be a non-empty string")
+    required = sources.get("required_files")
+    if not isinstance(required, dict) or not required:
+        raise SpellPolicyError("content_sources.required_files must be a non-empty object")
+    for filename, spec in required.items():
+        if not isinstance(filename, str) or "/" in filename or "\\" in filename or ".." in filename:
+            raise SpellPolicyError(f"content_sources: unsafe file name {filename!r}")
+        if not isinstance(spec, dict) or set(spec) != {"kind", "sha256", "source_entries"}:
+            raise SpellPolicyError(
+                f"content_sources[{filename!r}] must have exactly kind, sha256, source_entries")
+        if not isinstance(spec["kind"], str) or not spec["kind"]:
+            raise SpellPolicyError(f"content_sources[{filename!r}].kind must be a non-empty string")
+        if not isinstance(spec["sha256"], str) or len(spec["sha256"]) != 64:
+            raise SpellPolicyError(f"content_sources[{filename!r}].sha256 must be a sha256 hex digest")
+        entries = spec["source_entries"]
+        if isinstance(entries, bool) or not isinstance(entries, int) or entries < 0:
+            raise SpellPolicyError(
+                f"content_sources[{filename!r}].source_entries must be a non-negative int")
 
 
 def compute_policy_sha256(payload: dict) -> str:

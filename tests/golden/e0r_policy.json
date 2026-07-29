@@ -1,14 +1,62 @@
 {
-  "schema_version": "coa-spell-layout-v2",
-  "tables": {
-    "Spell": {"fields": {
-      "power_type": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
-      "school_mask": {"kind": "uint32", "layout": "verified", "interpretation": "reference", "promotion": "raw_only"},
-      "casting_time_index": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}},
-    "SpellCastTimes": {"fields": {
-      "id": {"kind": "uint32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"},
-      "base_ms": {"kind": "int32", "layout": "verified", "interpretation": "verified", "promotion": "normalized"}}}
+  "content_sources": {
+    "directory": "Content",
+    "required_files": {
+      "SpellRankData.json": {
+        "kind": "spell_rank",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_entries": 0
+      }
+    }
   },
-  "joins": {"cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
-                             "side_value_field": "base_ms", "promotion": "normalized"}}
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "promotion": "normalized",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    }
+  },
+  "schema_version": "coa-spell-layout-v2",
+  "sha256": "25a84ed41a09e3ef4f52de3abe2b585b246d90d9708392fdb13b951d7bb58637",
+  "tables": {
+    "Spell": {
+      "fields": {
+        "casting_time_index": {
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "power_type": {
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "school_mask": {
+          "interpretation": "reference",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      }
+    },
+    "SpellCastTimes": {
+      "fields": {
+        "base_ms": {
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "id": {
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      }
+    }
+  }
 }

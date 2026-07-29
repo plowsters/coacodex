@@ -98,9 +98,11 @@ def _full_policy_doc(client_build="3.3.5a+patch-C"):
     enum["sha256"] = compute_policy_sha256(enum)
     anchors = {"spells": [{"id": 805775, "name": "Adrenal Venom", "power_type": 0, "school_mask": 8}]}
     anchors["sha256"] = compute_policy_sha256(anchors)
+    from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
          "required_tables": ["Spell", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellIcon"],
-         "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables, "joins": joins}
+         "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables,
+         "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)
     return p, client_build
 

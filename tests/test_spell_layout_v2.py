@@ -1,6 +1,7 @@
 # tests/test_spell_layout_v2.py
 import pytest
 from coa_client_extract.spell_layout import load_spell_policy, SpellPolicyError, compute_policy_sha256
+from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 
 def _f(cell, kind, promo="normalized", layout="verified", interp="verified"):
@@ -34,7 +35,8 @@ def _v2():
                                       "effective_archive": "patch-T.MPQ", "patch_chain": []}}}}
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": bound,
          "required_tables": ["Spell", "SpellCastTimes"], "expected_absent": ["SpellEffect"],
-         "enum_policy": enum, "anchor_set": anchor, "tables": tables, "joins": joins}
+         "enum_policy": enum, "anchor_set": anchor, "tables": tables, "joins": joins,
+         "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)
     return p
 

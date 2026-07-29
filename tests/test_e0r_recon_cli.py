@@ -5,6 +5,7 @@ from pathlib import Path
 from coa_client_extract.archive_backend import FakeArchiveBackend
 from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
 from coa_client_extract.spell_mechanics import recon_spell_mechanics, DEFAULT_BUDGET
+from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 # Spell layout for the fixture: id@0, power_type@1, school_mask@2, name@3, casting_time_index@4.
 _FC = 5
@@ -64,7 +65,8 @@ def _policy():
                              "side_value_field": "base_ms", "promotion": "raw_only"}}
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
          "required_tables": ["Spell", "SpellCastTimes"], "expected_absent": ["SpellEffect"],
-         "enum_policy": enum, "anchor_set": anchor, "tables": tables, "joins": joins}
+         "enum_policy": enum, "anchor_set": anchor, "tables": tables, "joins": joins,
+         "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

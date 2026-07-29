@@ -59,6 +59,17 @@ def _f(cell, kind, promo="normalized", layout="verified", interp="verified"):
             "promotion": promo, "evidence": "fixture"}
 
 
+# E0R.2 T0.2: the Content JSON binding is part of a reviewed policy, so every policy — synthetic
+# included — must declare one. A synthetic policy has no Content directory to read; this is the minimal
+# well-formed block that satisfies the loader without pretending to bind real files.
+SYNTHETIC_CONTENT_SOURCES = {
+    "directory": "Content",
+    "required_files": {
+        "SpellRankData.json": {"kind": "spell_rank", "sha256": "0" * 64, "source_entries": 0},
+    },
+}
+
+
 def _base(tables, joins):
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
@@ -66,7 +77,8 @@ def _base(tables, joins):
     anchor["sha256"] = compute_policy_sha256(anchor)
     p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
          "required_tables": list(tables), "expected_absent": [], "enum_policy": enum,
-         "anchor_set": anchor, "tables": tables, "joins": joins}
+         "anchor_set": anchor, "tables": tables, "joins": joins,
+         "content_sources": SYNTHETIC_CONTENT_SOURCES}
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 
