@@ -52,3 +52,36 @@ jobs:
         # `npm test` is `unit-test && validate`. CI ran `run unit-test`, so validate-normalized.mjs —
         # the check over the committed normalized data — had never been a merge gate at all.
         run: npm --prefix coa_scraper test
+
+  wheel:
+    # A SEPARATE job on purpose. The `test` job installs with `pip install -e .`, which puts the whole
+    # source tree on sys.path — so a data file the wheel omits still imports there, and no test in that
+    # job can ever fail because of it. That is exactly how the generation-contract registry shipped
+    # missing from every wheel while both suites stayed green (E0R.3 P1).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          python -m build --wheel --outdir dist
+
+      - name: Install the wheel into a clean environment
+        # No `-e`, no source tree, no pytest: only what a consumer of the distribution would get.
+        run: |
+          python -m venv "${{ runner.temp }}/wheelenv"
+          "${{ runner.temp }}/wheelenv/bin/pip" install dist/*.whl
+
+      - name: Import the installed package from outside the checkout
+        # `runner.temp` is not under `github.workspace`, so the checkout cannot satisfy an import or a
+        # data-file read here. Referencing the script by absolute path keeps sys.path[0] at
+        # `<repo>/scripts`, which contains no packages.
+        working-directory: ${{ runner.temp }}
+        run: '"${{ runner.temp }}/wheelenv/bin/python" "${{ github.workspace }}/scripts/wheel_smoke.py"'
