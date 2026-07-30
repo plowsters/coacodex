@@ -152,7 +152,11 @@ Status: accepted.
 
 ## Decision 15: AscensionDB Enriches But Does Not Replace Builder Legality
 
-Status: accepted.
+Status: **superseded by M1.14E0R (AscensionDB sunset)** — retained as history. The enrichment runtime
+this decision authorized is deleted: `ascension_db` is no longer a mechanics reconciliation tier, no
+canonical build makes a network request, and the client is the authoritative mechanical source
+(Decision 18, Decision 23). The half that survives is the half about the Builder — it remains
+authoritative for the talent graph and node descriptions, per Decision 1 and Decision 22.
 
 M1.8 treats the CoA builder payload as authoritative for class/tab ownership, graph structure, prerequisites, AE/TE costs, and tab gates. AscensionDB is the preferred source for spell and item tooltip enrichment, buff/effect text, equipment text, linked spell/item IDs, and tooltip-level evidence.
 
@@ -195,7 +199,9 @@ The local Ascension CoA game client (MPQ→DBC plus `Data/Content/*.json`) is th
 for mechanical spell data and WoW systems constants, layered additively onto the existing pipeline.
 db.ascension.gg is demoted from a canonical enrichment source to fallback-only for mechanical fields,
 because it is demonstrably stale (spell `805775` returns the outdated *Fang Venom: Lifeblood* rather
-than the current *Adrenal Venom*). The CoA Builder payload remains authoritative for the talent
+than the current *Adrenal Venom*). **M1.14E0R went further and removed it entirely** — fallback-only
+was still a path by which a stale value could reach a reader, so there is now no AscensionDB tier at
+all; an unextracted mechanical field is `null`, never a remote guess. The CoA Builder payload remains authoritative for the talent
 graph, legality, and node descriptions (extends Decision 1 and Decision 15).
 
 CoA attribution is derived from client-native signals — primarily archive-family membership
@@ -327,7 +333,10 @@ rank behavior, or level gates the client does not reflect — so the precedence 
 
     user-reported, reproducibly-verified live override
       >  current client DBC
-      >  (Builder / stale JSON / AscensionDB — informational only, never authoritative)
+      >  (Builder / stale JSON — informational only, never authoritative)
+
+AscensionDB appeared in that informational tier when this decision was written and was **removed** by
+M1.14E0R; it is not a source at any authority level.
 
 The Builder is removed from the legality authority chain entirely: it is itself an offline,
 possibly-stale source of unknown fidelity to the server, so a Builder disagreement is informational,

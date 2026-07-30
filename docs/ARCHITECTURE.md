@@ -74,7 +74,7 @@ This is intentional. Web scraping is brittle and should be isolated from build l
 1. Load `coa-meta-report-v1` JSON and optional scraper asset manifests.
 2. Build a landing page that indexes class/spec guides by role, class, confidence, and encounter.
 3. Generate one static guide page per class/spec/encounter scope.
-4. Render spell/talent icons, AscensionDB hotlinks, and local hover tooltip payloads from normalized records.
+4. Render spell/talent icons and local hover tooltip payloads from the published client generation and normalized records. Guide pages hotlink nothing off-site and fetch nothing at page load.
 5. Render CoA-style talent trees from normalized row/column, connection, cost, rank, prerequisite, and level-gate data.
 6. Keep analyzer-only terms behind tooltips and use player-facing copy in visible guide sections.
 

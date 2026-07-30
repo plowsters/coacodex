@@ -113,7 +113,7 @@ Relevant patterns:
 
 How to apply to CoA:
 
-- M1.11D should cache AscensionDB power payloads, icon assets, and parsed rows.
+- M1.11D cached AscensionDB power payloads, icon assets, and parsed rows. That pipeline was **removed** by M1.14E0R — mechanics and icons come from the local client — so this pattern now applies only to the opt-in icon-image downloader, not to any canonical build.
 - Use HTTP validators when available and SHA-256 content/parsed hashes as a fallback.
 - Keep conservative stale-age defaults and bounded concurrency to avoid unnecessary load on Project Ascension resources.
 

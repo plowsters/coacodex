@@ -37,8 +37,14 @@ M1.8 keeps `coa-normalized-v1` and adds optional source-aware fields:
 
 - `source_category`: `spec_tree`, `class_pool`, `trainer`, `misc_system`, `metadata_only`, or `unknown`.
 - `source_confidence`: `high`, `medium`, or `low`.
-- `availability`: builder, tooltip, DB tooltip, effective level, confidence, source, and notes.
-- `db_enrichment`: optional AscensionDB spell tooltip join data.
+- `availability`: builder, tooltip, DB tooltip, effective level, confidence, source, and notes. The
+  `db_tooltip_required_level` key survives for shape compatibility but is now always `null` — the source
+  that populated it was **removed** by M1.14E0R, so it can never contribute to
+  `effective_required_level`.
+
+M1.8 also added a `db_enrichment` join block. It was **removed** outright by M1.14E0R together with the
+rest of the AscensionDB enrichment runtime; no script writes or reads it, and consumers must not expect
+it.
 
 Consumers must continue to support records without these fields. When present, `availability.effective_required_level` may be used for lower-level eligibility only if `availability.level_confidence` is `high` or `medium`.
 

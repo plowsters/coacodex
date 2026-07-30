@@ -139,7 +139,7 @@ Requirements:
 
 Exit criteria:
 
-- `npm --prefix coa_scraper run pipeline:m1.8` regenerates normalized, enriched, and manifest artifacts.
+- The M1.8 pipeline command regenerated normalized, enriched, and manifest artifacts. It is **deleted**; the surviving command is `npm --prefix coa_scraper run pipeline`, which regenerates the normalized artifacts only.
 - Validation reports identify source-level uncertainty instead of silently treating unknown levels as reliable.
 
 ### Milestone 1.9: Combat Engine and Theorycraft Completion
@@ -240,14 +240,16 @@ Exit criteria:
 
 ### Phase 1 Continuation: Public Release and Systems Correctness (M1.12–M1.20)
 
-The M1.11 first pass is useful but not yet a defensible public resource: it depends on a stale
-db.ascension.gg source, its calculators do not model WoW's actual power systems, and it has visible
-correctness/UX gaps. Milestones M1.12–M1.20 take the tool to a public GitHub Pages release whose
+The M1.11 first pass is useful but not yet a defensible public resource: it depended on a stale
+db.ascension.gg source (since **removed** — M1.14E0R replaced it with client-native extraction), its
+calculators do not model WoW's actual power systems, and it has visible correctness/UX gaps. Milestones M1.12–M1.20 take the tool to a public GitHub Pages release whose
 numbers are grounded in the real game systems. Full decomposition, findings, and strategic decisions
 are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpowers/specs/2026-07-06-m1-12-to-m1-20-public-release-roadmap-design.md).
 
 - **M1.12 Public-Release UI Quick Fixes.** Status: implemented. Icons on nodes and spec cards
-  (AscensionDB hotlink), select-to-include role filter, updated disclaimer, header GitHub link,
+  (originally an AscensionDB hotlink; **superseded** by M1.14E0R.1's client-native icon catalog, so the
+  guide now renders a bundled client asset or an honest placeholder and links nothing off-site),
+  select-to-include role filter, updated disclaimer, header GitHub link,
   footer, and removal of leveling-path boilerplate. No engine/data changes. Design:
   [M1.12 UI Quick Fixes](superpowers/specs/2026-07-06-m1-12-public-release-ui-quick-fixes-design.md).
   Plan: [M1.12 Implementation Plan](superpowers/plans/2026-07-06-m1-12-public-release-ui-quick-fixes.md).
@@ -290,9 +292,10 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
   - **M1.14C Reconciliation and DB Sunset.** Status: implemented and merged to `main` (merge
     `9788714`, 2026-07-16; all 16 TDD tasks plus a final whole-branch review, zero Critical findings).
     Attribution-scoped (`is_coa`) client-spell projection plus per-field source-precedence
-    reconciliation (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred) in the Node mechanics
-    builder, retaining every competing value + a stable selection reason in an additive
-    `field_provenance`; demotes db.ascension.gg mechanical enrichment to fallback-only; keeps
+    reconciliation (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred — the `ascension_db` tier
+    was later **removed** outright by M1.14E0R, leaving `client_dbc` ▸ `verified_builder` ▸ `inferred`)
+    in the Node mechanics builder, retaining every competing value + a stable selection reason in an
+    additive `field_provenance`; demotes db.ascension.gg mechanical enrichment to fallback-only; keeps
     `coa-mechanics-v1` (loader round-trips the new field). Fails closed without a valid projection
     (`--allow-fallback-mechanics` writes a separate degraded artifact); real projection/manifest stay
     untracked. The mechanics manifest (`coa-mechanics-manifest-v1`) carries an aggregate audit
