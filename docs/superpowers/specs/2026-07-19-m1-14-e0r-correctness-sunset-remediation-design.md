@@ -456,7 +456,8 @@ the end, for that review.
 - **Cast/duration/range/icon joins:** run value-anchor joined-pair discovery for **all four now** in
   E0R. Promote only unique, human-reviewed results; an ambiguous result stays **unresolved** (`cell:
   null`, no raw observation) — *not* "raw-only," which is reserved for a located-but-non-promoted cell.
-  (This materially reduces E1a, which no longer carries join adjudication.)
+  (Written expecting all four to promote, which would have materially reduced E1a. **Realized: one
+  promoted, three came back `reviewed_ambiguous`** — see [Impact on M1.14E1](#impact-on-m114e1).)
 - **CI:** synthetic Python and Node suites run on every push/PR (GitHub Actions); the proprietary
   real-client tier stays local/self-hosted with a committed **hash-bound acceptance summary**.
 - **`power_type`:** require the negative anchor (A6); otherwise fully raw-only.
@@ -635,8 +636,62 @@ docs/  DECISIONS.md; client-spell-schema (v3); mechanics-schema (v2); generation
 
 ## Impact on M1.14E1
 
-E0R pulls **all four join adjudications** and the streaming/budget/publication hardening forward, so
-E1a shrinks: E1 no longer carries join discovery and inherits a streaming, transactionally-published,
-independently-verified substrate. E1 proceeds entirely **without AscensionDB** — its raw client
-operands (cooldown/GCD/cost/charge/effect) fill the fields E0R made honestly unavailable, and M1.16
-derives their effective values and rewires the consumers.
+**This section was rewritten in E0R.3 against the realized recon result.** As first written it said E0R
+pulled all four join adjudications forward, so E1a shrank and E1 would not carry join discovery at all.
+That described the outcome E0R aimed at, not the one it got, and an E1 implementer who believed it would
+begin by assuming cast time, duration, and range were available.
+
+**What actually happened** (acceptance generation `069a9b18`, recon `verified`, evidence committed in
+`reports/client_extract/coa_e0r_acceptance_summary.json`): the value-anchor joined-pair discovery ran for
+all four required joins, as designed. **One promoted** — `spell_icon_id` resolved uniquely to cell 133
+and is normalized. **Three did not**:
+
+| join | table | adjudication | FK-validity candidates |
+|---|---|---|---|
+| `casting_time_index` | `SpellCastTimes` | `reviewed_ambiguous` | 30 columns |
+| `duration_index` | `SpellDuration` | `reviewed_ambiguous` | 34 columns |
+| `range_index` | `SpellRange` | `reviewed_ambiguous` | 14 columns |
+
+Each stays `cell: null` / `unresolved` with no raw observation. That is E0R working: the ambiguity is
+measured, committed, and fail-closed, and `ambiguity_agreement` re-checks it on every recon so a silent
+change in the client cannot quietly turn one of them into a promotion.
+
+**E1 inherits these three as `unavailable`.** E1 must not populate cast time, effect duration, or spell
+range, and must not promote a candidate cell for them. Per-field readiness and the consumer interlock
+already enforce that mechanically — this is a constraint on E1's *design*, so the milestone is not
+planned around fields it cannot have. Everything E0R genuinely delivered is inherited as promised: the
+streaming, transactionally-published, independently-verified substrate, the enforced evidence model
+(evidence ≠ authorization), the resolved icon join, and a pipeline with no AscensionDB in it. E1's own
+scope — raw cooldown/GCD/cost/charge/effect operands, all inline in `Spell.dbc` — is untouched by this,
+because none of those fields depends on the three unresolved side-table joins.
+
+### Owner of the three unresolved joins: M1.14G
+
+Named, not deferred. "Later" with no owner is how a gap becomes permanent.
+
+Resolving any of the three requires a **value anchor**: one known spell's base cast time (ms), effect
+duration (ms), or min/max range (yards), from an admissible source, so that the single candidate column
+reproducing it can be identified. Under the anchor-evidence precedence in force — hash-bound
+client-static evidence, then a verified Builder payload field that explicitly encodes the value, with
+stock 3.3.5 as corroboration only for demonstrably-unchanged spells — **no such anchor exists today**:
+the Builder payload does not carry these values, client strings and BLP paths do not encode them, and
+remembered or AscensionDB values are inadmissible.
+
+M1.14G is the first milestone that establishes an instrument which could produce one: it already exists
+to resolve runtime carriers and behavior through APIs, events, UI, and controlled gameplay. Two things
+follow, and both are stated here so G does not inherit a hidden assumption the way E1 did:
+
+- **G cannot simply help itself to the anchor.** The precedence explicitly excludes runtime behavior. A
+  measured value from a controlled client becomes admissible only if the project owner extends the
+  precedence to admit it, under stated conditions (a controlled local client, a spell whose identity is
+  hash-bound, a reproducible read). That extension is an owner decision, not an implementer's.
+- **Earlier resolution stays open.** If either admissible source turns up first — a Builder payload
+  field that explicitly encodes ms/yards, or hash-bound client-static evidence naming the column, such
+  as a shipped layout definition — promote it then, under the existing precedence, in whichever
+  milestone finds it. Nothing about the assignment to G forbids that.
+
+**A second FK-validity scan is not new evidence.** The committed report already records exactly what
+that scan yields on this client (30 / 34 / 14 candidate columns). Re-running it reproduces a recorded
+quantity; promoting a cell on its strength would be precisely the unproven promotion E0R exists to
+prevent. Any future promotion must cite an anchor of the kind above, not a narrower scan, a plausibility
+argument, or the fact that one candidate looks like the stock column.

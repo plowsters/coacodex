@@ -326,6 +326,19 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     viable/not-viable spike — must resolve every discovered class resource's runtime carrier + behavior
     via APIs/events/UI/controlled gameplay and emit `coa-resource-contract-v1` records). Delineated in
     the umbrella; each gets its own spec when next in line.
+  - **M1.14G also owns the three unresolved `Spell.dbc` joins** (assigned in E0R.3). E0R ran value-anchor
+    joined-pair discovery for all four required joins and promoted one — `spell_icon_id` → cell 133.
+    `casting_time_index` (`SpellCastTimes`), `duration_index` (`SpellDuration`), and `range_index`
+    (`SpellRange`) came back **`reviewed_ambiguous`**: the FK-validity scan yields 30 / 34 / 14 candidate
+    columns and no admissible evidence distinguishes them, so cast time, effect duration, and spell range
+    are **unavailable** through E1/E2/E3 — not deferred pending effort, measured as unresolvable from the
+    evidence that exists. Promotion needs a **value anchor** (one known spell's ms/yards from an
+    admissible source); the Builder payload does not carry it and client strings do not encode it, so G is
+    the first milestone whose controlled-client instrument could produce one — and only if the
+    anchor-evidence precedence is explicitly extended to admit a measured value, which is an owner
+    decision. A second FK-validity scan is **not** new evidence; the recon report already records what it
+    yields. Detail:
+    [E0R → Impact on M1.14E1](superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md#impact-on-m114e1).
   - **M1.14E Mechanics Extraction Completion.** Status: specced (real-client recon done). Extend client
     extraction to the per-spell operands M1.14A/C/D left on the stale db/inferred tiers — cooldown +
     category cooldown, the GCD base operands D pushed here (`StartRecoveryTime`/`StartRecoveryCategory`,

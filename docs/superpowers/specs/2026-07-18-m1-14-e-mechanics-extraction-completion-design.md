@@ -424,6 +424,15 @@ entry/readiness gate**, never an E exit requirement (E never fabricates semantic
 - **E1 — Raw operands & closure.** Scalar/charge/effect operand envelopes + sidecar; 3-slot raw
   completeness + envelope states + `slot_activity`; joins + integrity rules; the statically discoverable
   mechanical closure + edge policy; **union output domain** in `coa-mechanics-v1`.
+  **E1 inherits three joins as `unavailable`, by measurement, not by deferral.** E0R ran the
+  value-anchor discovery for all four required joins and promoted one (`spell_icon_id` → cell 133);
+  `casting_time_index`, `duration_index`, and `range_index` came back `reviewed_ambiguous` (30 / 34 / 14
+  FK-validity candidate columns, no admissible anchor) and are owned by **M1.14G**. E1 must not plan
+  around cast time, effect duration, or spell range, must not promote a candidate cell for them, and
+  must not treat a re-run of the same FK-validity scan as new evidence. E1's own operands
+  (cooldown/GCD/cost/charge/effect) are all inline in `Spell.dbc` and do not depend on those three side
+  tables, so E1's scope is unaffected — only its assumptions are. See
+  [E0R → Impact on M1.14E1](2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md#impact-on-m114e1).
 - **E2 — Conservative interpretations.** Per-slot `verified` interpretations via the DSL (zero is valid);
   `coa-mechanics-v1` additive fields + repository round-trip; operand-vs-derived provenance.
 - **E3 — Static resource candidates.** Exhaustive declared-source census; `coa-resource-candidate-v1`
