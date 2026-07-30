@@ -3,7 +3,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from coa_client_extract.archive_backend import FakeArchiveBackend
-from coa_client_extract.spell_mechanics import recon_spell_mechanics, DEFAULT_BUDGET
+from coa_client_extract.spell_mechanics import recon_spell_mechanics
+
+RECON_CEILINGS = {          # E0R.2 T3.3: policy-shaped ceilings; a recon gates only the python_* pair
+    "max_serialized_bytes_per_child": 1 << 30, "max_whole_generation_bytes": 1 << 31,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
 
 # Column anchors: (id, power_type, school_mask, name, casting_time_index)
 ANCHOR_ROWS = [(133, 0, 4, "Fireball", 5), (116, 0, 16, "Frostbolt", 71),
@@ -42,11 +48,13 @@ def _policy(*, reviewed, bound=None):
         columns={"power_type": 41, "school_mask": 225, "name": 136, "casting_time_index": 28},
         enum_policy={"power_types": {-2, 0, 1, 2, 3, 4, 5, 6}, "school_bits": {1, 2, 4, 8, 16, 32, 64}},
         required_tables=["Spell", "SpellCastTimes"], expected_absent=["SpellEffect"],
+        tables={"Spell": {"key_cell": 0, "unique": True, "expected_field_count": 234},
+                "SpellCastTimes": {"key_cell": 0, "unique": True, "expected_field_count": 2}},
         index_fields={"casting_time_index": "SpellCastTimes"}, reviewed=reviewed, bound=bound)
 
 
 def _kwargs(policy):
-    return dict(spell_policy=policy, anchors=ANCHORS, budget=DEFAULT_BUDGET,
+    return dict(spell_policy=policy, anchors=ANCHORS, budget=RECON_CEILINGS,
                 extractor_commit="abc123", client_build="3.3.5a+T")
 
 
@@ -65,14 +73,28 @@ def test_review_required_when_unbound_and_delta_names_discovered_cells():
     assert r["source_pins"]["policy_sha256"] == "policyhash"
 
 
-def test_verified_when_reviewed_and_bound_matches():
+def test_verified_when_reviewed_and_structured_bound_matches():
+    # E0R verified status requires the reviewed policy's STRUCTURED bound to match the opened topology
+    # facet-for-facet (sha256 + full header + member/archive/patch chain) across every required table.
+    from coa_client_extract.topology import verify_source_topology
     b = _backend()
-    spell_sha = __import__("hashlib").sha256(
-        b.read_effective_file(Path("c.MPQ"), (Path("patch-T.MPQ"),), "DBFilesClient\\Spell.dbc").data).hexdigest()
-    bound = {"client_build": "3.3.5a+T", "source_dbc_sha256": {"Spell": spell_sha}}
+    topo = verify_source_topology(_policy(reviewed=True), b, Path("c.MPQ"), (Path("patch-T.MPQ"),))
+    tables = {t: {"sha256": s["sha256"], "header": s["header"],
+                  "source": {"member": s["member"], "effective_archive": s["effective_archive"],
+                             "patch_chain": s["patch_chain"]}} for t, s in topo["tables"].items()}
+    bound = {"client_build": "3.3.5a+T", "expected_absent": ["SpellEffect"], "tables": tables}
+    # E0R.1: `verified` now requires the join to be PROBED and adopted at the authored cell (28). Supply a
+    # state-bearing value anchor that resolves uniquely through (casting_time_index@28 -> base_ms@1).
+    join_anchors = {"casting_time_index": {
+        "side_table": "SpellCastTimes", "side_id_cell": 0, "side_value_cells": [1], "side_value_kind": "int32",
+        "anchors": [{"spell_id": 133, "expected_state": "resolved", "expected_value": 500},
+                    {"spell_id": 116, "expected_state": "resolved", "expected_value": 7100},
+                    {"spell_id": 78, "expected_state": "not_applicable"}]}}
     r = recon_spell_mechanics(b, Path("c.MPQ"), (Path("patch-T.MPQ"),),
-                              **_kwargs(_policy(reviewed=True, bound=bound)))
-    assert r["status"] == "verified" and r["blocking_findings"] == []
+                              **_kwargs(_policy(reviewed=True, bound=bound)), join_value_anchors=join_anchors)
+    assert r["status"] == "verified", (r["status"], r["join_pairs"], r["blocking_findings"])
+    assert r["blocking_findings"] == []
+    assert r["join_pairs"]["casting_time_index"]["pair"][0] == 28    # index cell discovered + adopted
 
 
 def test_blocked_when_expected_absent_table_present():

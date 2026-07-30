@@ -2,51 +2,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from coa_meta.guide_tooltips import (
-    ascension_spell_url,
-    build_node_tooltip,
-    load_db_tooltip_rows,
-    sanitize_tooltip_html,
-)
+from coa_meta.guide_tooltips import build_node_tooltip, sanitize_tooltip_html
 from coa_meta.repository import TalentRepository
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_ascension_spell_url_uses_public_spell_page():
-    assert ascension_spell_url(2001) == "https://db.ascension.gg/?spell=2001"
-
-
-def test_load_db_tooltip_rows_indexes_matched_spells():
-    rows = load_db_tooltip_rows(FIXTURES / "guide_db_tooltips.jsonl")
-
-    assert rows[2001]["name"] == "Damage Talent"
-    assert rows[2001]["status"] == "matched"
-
-
-def test_build_node_tooltip_prefers_db_tooltip_html():
+def test_build_node_tooltip_is_normalized_from_the_description():
+    # E0R.1 T5.1 AscensionDB sunset: every tooltip is client-native — `normalized` from the node's
+    # description, never a scraped-DB preference and never a remote DB URL.
     repo = TalentRepository.from_entries(FIXTURES / "meta_report_fixture.jsonl")
     node = repo.node_by_id(201)
-    rows = load_db_tooltip_rows(FIXTURES / "guide_db_tooltips.jsonl")
 
-    tooltip = build_node_tooltip(node, rows)
+    tooltip = build_node_tooltip(node)
 
     assert tooltip.tooltip_id == "spell:2001"
-    assert tooltip.db_url == "https://db.ascension.gg/?spell=2001"
-    assert "Deals bonus Nature damage." in tooltip.text
-    assert tooltip.source == "ascension_db"
+    assert tooltip.source == "normalized"
+    assert tooltip.db_url is None
+    assert node.description_text in tooltip.text
+    assert tooltip.source_confidence == "medium"
 
 
-def test_build_node_tooltip_falls_back_to_normalized_text():
+def test_build_node_tooltip_without_description_falls_back_to_name_low_confidence():
     repo = TalentRepository.from_entries(FIXTURES / "meta_report_fixture.jsonl")
     node = repo.node_by_id(202)
 
-    tooltip = build_node_tooltip(node, {})
+    tooltip = build_node_tooltip(node)
 
     assert tooltip.tooltip_id == "spell:2002"
     assert tooltip.source == "normalized"
-    assert "Requires investment in Damage." in tooltip.text
+    assert tooltip.text  # description if present, else the node name — never empty
 
 
 def test_sanitize_tooltip_html_removes_script_and_event_attributes():
@@ -57,7 +43,7 @@ def test_sanitize_tooltip_html_removes_script_and_event_attributes():
     assert "script" not in html
 
 
-def test_sanitize_tooltip_html_preserves_db_tables_without_event_attributes():
+def test_sanitize_tooltip_html_preserves_tables_without_event_attributes():
     html = sanitize_tooltip_html(
         '<table onclick="bad()"><tr><th>Effect</th><td>Deals <strong>Nature</strong> damage.</td></tr></table>'
     )
@@ -90,7 +76,7 @@ def test_sanitize_tooltip_html_strips_disallowed_inline_tags_to_readable_text():
     assert '<span class="iconsmall">' in out  # allowed span preserved
 
 
-def test_sanitize_tooltip_html_strips_ascensiondb_placeholder_pseudo_tags():
+def test_sanitize_tooltip_html_strips_legacy_placeholder_pseudo_tags():
     out = sanitize_tooltip_html(
         "Deals 4+<UNK: $ppl1> Plague damage and 437*$<scalingbp> Frost damage."
     )

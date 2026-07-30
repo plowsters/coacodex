@@ -10,12 +10,15 @@ from coa_client_extract.cli import decode_advancement, main, regenerate
 
 
 def _client(tmp_path: Path) -> Path:
+    from tests._spell_fixtures import SYNTHETIC_CONTENT_BODY
+
     data = tmp_path / "Data"
     data.mkdir()
     for name in ("common.MPQ", "patch.MPQ", "patch-C.MPQ"):
         (data / name).write_bytes(b"MPQ\x1a")
     (data / "Content").mkdir()
-    (data / "Content" / "SpellRankData.json").write_text('[{"Spell":805775,"Rank":1}]')
+    # These exact bytes are what SYNTHETIC_CONTENT_SOURCES binds by sha256 (E0R.2 T2.1).
+    (data / "Content" / "SpellRankData.json").write_text(SYNTHETIC_CONTENT_BODY)
     return data
 
 
@@ -45,56 +48,122 @@ def _ca_tables():
     return ca, ct, tt, ess, sla
 
 
+# v3 Spell.dbc fixture: 8 cells (id@0, name@1, power_type@2, school_mask@3, casting_time_index@4,
+# duration_index@5, range_index@6, spell_icon_id@7). One custom spell (805775, is_coa via id-floor).
 _SPELL_STRINGS = b"\x00Adrenal Venom\x00"
-_SPELL_BYTES = struct.pack("<4sIIII", b"WDBC", 1, 4, 16, len(_SPELL_STRINGS)) + \
-    struct.pack("<IIII", 805775, 1, 3, 5) + _SPELL_STRINGS
+_SPELL_BYTES = struct.pack("<4sIIII", b"WDBC", 1, 8, 32, len(_SPELL_STRINGS)) + \
+    struct.pack("<8I", 805775, 1, 0, 8, 3, 5, 1, 100) + _SPELL_STRINGS
+
+_ICON_PATH = "Interface\\Icons\\Spell_Nature_Corrosion.blp"
+_ICON_BLP = b"BLP2fake-icon-bytes"
+
+# E0R.2 T2.4: reviewed ceilings are now MANDATORY on the publish path, so the synthetic policy carries an
+# explicit block instead of inheriting hard-coded defaults. Deliberately generous: a fixture that fails on
+# size would be testing the fixture. `tests/_streaming_probe.py` overrides these for its 100k-row runs.
+SYNTHETIC_BUDGET = {
+    "max_serialized_bytes_per_child": 64 * 1024 * 1024,
+    "max_whole_generation_bytes": 256 * 1024 * 1024,
+    "python_peak_rss_mb": 16384, "python_elapsed_s": 3600,
+    "node_peak_rss_mb": 16384, "node_elapsed_s": 3600,
+}
 
 
-def _bound_spell_policy(client_build="3.3.5a+patch-C"):
-    """A reviewed policy bound to the fake Spell.dbc bytes so regenerate's client-binding hold passes.
-    Spell fixture is 4 cells (id@0, name@1, casting_time_index@2, duration_index@3); power_type and
-    school_mask are absent from the fixture, so they carry null cells (emitted as unresolved)."""
-    import hashlib
-    from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
+def _full_policy_doc(client_build="3.3.5a+patch-C"):
+    """The reviewed 5-table policy doc (Spell + 4 side tables + all joins incl. the SpellIcon string join),
+    WITHOUT its structured bound — the caller computes the bound from the shared topology verifier so the
+    A2 hard hold matches the exact bytes the fake backend serves."""
+    from coa_client_extract.spell_layout import compute_policy_sha256
 
-    def f(cell, kind, layout, interp, promo):
+    def f(cell, kind, promo, layout="verified", interp="verified"):
         return {"cell": cell, "kind": kind, "layout": layout, "interpretation": interp,
                 "promotion": promo, "evidence": "cli fixture"}
 
-    V = ("verified", "verified")
     tables = {
-        "Spell": {"expected_field_count": 4, "fields": {
-            "id": f(0, "uint32", *V, "normalized"), "name": f(1, "string", *V, "normalized"),
-            "power_type": f(None, "int32", "unproven", "unproven", "raw_only"),
-            "school_mask": f(None, "uint32", "unproven", "unproven", "raw_only"),
-            "casting_time_index": f(2, "uint32", *V, "raw_only"),
-            "duration_index": f(3, "uint32", *V, "raw_only")}},
-        "SpellCastTimes": {"expected_field_count": 2, "fields": {
-            "id": f(0, "uint32", *V, "raw_only"), "base_ms": f(1, "int32", *V, "raw_only")}},
-        "SpellDuration": {"expected_field_count": 2, "fields": {
-            "id": f(0, "uint32", *V, "raw_only"), "base_ms": f(1, "int32", *V, "raw_only")}},
+        "Spell": {"expected_field_count": 8, "key_cell": 0, "unique": True, "fields": {
+            "id": f(0, "uint32", "normalized"), "name": f(1, "string", "normalized"),
+            "power_type": f(2, "int32", "normalized"), "school_mask": f(3, "uint32", "normalized"),
+            "casting_time_index": f(4, "uint32", "raw_only"), "duration_index": f(5, "uint32", "raw_only"),
+            "range_index": f(6, "uint32", "raw_only"),
+            "spell_icon_id": f(7, "uint32", "normalized")}},   # T2.3: adjudicated icon string-join promoted
+        "SpellCastTimes": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
+            "id": f(0, "uint32", "raw_only"), "base_ms": f(1, "int32", "raw_only")}},
+        "SpellDuration": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
+            "id": f(0, "uint32", "raw_only"), "base_ms": f(1, "int32", "raw_only")}},
+        "SpellRange": {"expected_field_count": 3, "key_cell": 0, "unique": True, "fields": {
+            "id": f(0, "uint32", "raw_only"), "min_yd": f(1, "int32", "raw_only"),
+            "max_yd": f(2, "int32", "raw_only")}},
+        "SpellIcon": {"expected_field_count": 2, "key_cell": 0, "unique": True, "fields": {
+            "id": f(0, "uint32", "normalized"), "path": f(1, "string", "normalized")}},
+        # E0R.2 T2.1: the ancillary CoA tables are bound TOPOLOGY-ONLY (no `fields`), exactly as T0.2
+        # bound them in the real policy. The contract's cardinality rules name these tables, so a policy
+        # that does not bind them cannot state the source domain of the children derived from them.
+        # Field counts/record sizes are the ones _ca_tables() actually serves.
+        "CharacterAdvancement": {"expected_field_count": 10, "key_cell": 0, "unique": True},
+        "CharacterAdvancementClassTypes": {"expected_field_count": 23, "key_cell": 0, "unique": True},
+        "CharacterAdvancementTabTypes": {"expected_field_count": 19, "key_cell": 0, "unique": True},
+        "CharacterAdvancementEssence": {"expected_field_count": 9, "key_cell": 0, "unique": True},
+        "SkillLineAbility": {"expected_field_count": 14, "key_cell": 0, "unique": True},
     }
     joins = {
-        "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes", "side_value_field": "base_ms"},
-        "duration_ms": {"index_field": "duration_index", "side_table": "SpellDuration", "side_value_field": "base_ms"},
+        "cast_time_ms": {"index_field": "casting_time_index", "side_table": "SpellCastTimes",
+                         "side_value_field": "base_ms", "promotion": "raw_only"},
+        "duration_ms": {"index_field": "duration_index", "side_table": "SpellDuration",
+                        "side_value_field": "base_ms", "promotion": "raw_only"},
+        "range_min_yd": {"index_field": "range_index", "side_table": "SpellRange",
+                         "side_value_field": "min_yd", "promotion": "raw_only"},
+        "range_max_yd": {"index_field": "range_index", "side_table": "SpellRange",
+                         "side_value_field": "max_yd", "promotion": "raw_only"},
+        "spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon",
+                          "side_value_field": "path", "promotion": "normalized"},
     }
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
-    anchors = {"spells": [{"id": 133, "name": "Fireball", "power_type": 0, "school_mask": 4}]}
+    anchors = {"spells": [{"id": 805775, "name": "Adrenal Venom", "power_type": 0, "school_mask": 8}]}
     anchors["sha256"] = compute_policy_sha256(anchors)
-    p = {"schema_version": "coa-spell-layout-v1", "reviewed": True,
-         "bound": {"client_build": client_build,
-                   "source_dbc_sha256": {"Spell": hashlib.sha256(_SPELL_BYTES).hexdigest()}},
-         "required_tables": ["Spell"], "expected_absent": [], "enum_policy": enum,
-         "anchor_set": anchors, "tables": tables, "joins": joins}
+    from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
+    p = {"schema_version": "coa-spell-layout-v2", "reviewed": True, "bound": None,
+         "required_tables": sorted(tables),
+         "expected_absent": [], "enum_policy": enum, "anchor_set": anchors, "tables": tables,
+         "joins": joins, "content_sources": SYNTHETIC_CONTENT_SOURCES,
+         # E0R.2 T2.4: the publish path no longer falls back to hard-coded ceilings when a policy
+         # declares none, so a synthetic policy declares its own — generous, because this fixture is
+         # about the transaction, not about the size of three rows.
+         "budget": SYNTHETIC_BUDGET}
+    from coa_client_extract.spell_layout import derive_artifact_contract
+    p["artifact_contract"] = derive_artifact_contract(p)
     p["sha256"] = compute_policy_sha256(p)
-    return load_spell_policy(p)
+    return p, client_build
+
+
+def _bound_spell_policy(backend, client_root, client_build="3.3.5a+patch-C"):
+    """Load the reviewed 5-table policy with a structured bound computed from the SAME shared topology
+    verifier regenerate uses, so every facet (sha256/header/member/archive/patch chain) matches exactly."""
+    from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
+    from coa_client_extract.topology import verify_source_topology
+    from coa_client_extract.archive_plan import discover_plan
+
+    doc, build = _full_policy_doc(client_build)
+    policy0 = load_spell_policy(doc)
+    plan = discover_plan(client_root)
+    root, attach = plan.open_chain
+    report = verify_source_topology(policy0, backend, root, attach)
+    bound_tables = {name: {"sha256": t["sha256"], "header": t["header"],
+                           "source": {"member": t["member"], "effective_archive": t["effective_archive"],
+                                      "patch_chain": t["patch_chain"]}}
+                    for name, t in report["tables"].items()}
+    doc = dict(doc)
+    doc["bound"] = {"client_build": build, "expected_absent": [], "tables": bound_tables}
+    doc["sha256"] = compute_policy_sha256(doc)
+    return load_spell_policy(doc)
 
 
 def _fake_backend():
     import struct
     cast = struct.pack("<II", 3, 1500)
     dur = struct.pack("<II", 5, 18000)
+    rng = struct.pack("<Iii", 1, 0, 40)                        # SpellRange id=1, min_yd=0, max_yd=40
+    icon_strings = b"\x00" + _ICON_PATH.encode("latin-1") + b"\x00"
+    icon = struct.pack("<II", 100, 1)                          # SpellIcon id=100 -> path offset 1
 
     def dbc(rows, fc, rs, s=b"\x00"):
         return struct.pack("<4sIIII", b"WDBC", len(rows), fc, rs, len(s)) + b"".join(rows) + s
@@ -103,7 +172,9 @@ def _fake_backend():
         "DBFilesClient\\Spell.dbc": [(Path("common.MPQ"), _SPELL_BYTES)],
         "DBFilesClient\\SpellCastTimes.dbc": [(Path("common.MPQ"), dbc([cast], 2, 8))],
         "DBFilesClient\\SpellDuration.dbc": [(Path("common.MPQ"), dbc([dur], 2, 8))],
-        "DBFilesClient\\SpellRange.dbc": [(Path("common.MPQ"), dbc([struct.pack("<I", 1) + b"\x00" * 152], 39, 156))],
+        "DBFilesClient\\SpellRange.dbc": [(Path("common.MPQ"), dbc([rng], 3, 12))],
+        "DBFilesClient\\SpellIcon.dbc": [(Path("common.MPQ"), dbc([icon], 2, 8, icon_strings))],
+        _ICON_PATH: [(Path("common.MPQ"), _ICON_BLP)],         # the actual BLP bytes the catalog hashes
     }
     ca, ct, tt, ess, sla = _ca_tables()
     entries["DBFilesClient\\CharacterAdvancement.dbc"] = [(Path("common.MPQ"), ca)]
@@ -136,51 +207,97 @@ def _synthetic_layouts():
 
 
 def test_regenerate_writes_artifacts_with_injected_backend(tmp_path):
-    # Inject synthetic layouts matching the fake backend's DBC bytes; real layouts are
-    # exercised by the Task 10 acceptance test. Asserts orchestration end to end.
+    # Task 10: regenerate streams a full transactional v3 generation, gated by the shared topology hard
+    # hold, validated by path in Python AND Node, budgeted, and published pointer-last. Asserts the whole
+    # orchestration (client-DBC spell child + icon catalog + advancement children + candidate->publish).
+    from coa_client_extract.publish import resolve_active_generation, REQUIRED_CHILDREN
+    client_root = _client(tmp_path)
     out = tmp_path / "out"
-    manifest = regenerate(_client(tmp_path), out, backend=_fake_backend(),
-                          layouts=_synthetic_layouts(), spell_policy=_bound_spell_policy())
+    policy = _bound_spell_policy(_fake_backend(), client_root)
+    # The Node trust boundary checks the staged policy child against a lock; this test uses a SYNTHETIC
+    # policy, so point Node at a lock matching it (production uses the committed lock for the real policy).
+    lock = tmp_path / "spell_layout.lock.json"
+    lock.write_text(json.dumps({"schema_version": "coa-spell-layout-lock-v1", "sha256": policy.sha256}))
+    manifest = regenerate(client_root, out, backend=_fake_backend(),
+                          layouts=_synthetic_layouts(), spell_policy=policy, node_lock_path=lock)
+    # Noncanonical fixed-path compatibility summary (published; carries the generation id + budget).
     assert manifest["schema_version"] == "coa-client-extract-manifest-v1"
+    assert manifest["publication_state"] == "published"
+    assert manifest["budget"]["within_budget"] is True
     assert manifest["unknown_symbol_inventory"] == {"power_type": [], "school_bits": []}
-    assert (out / "coa_client_spell.jsonl").is_file()
-    assert (out / "coa_client_content.jsonl").is_file()
-    assert (out / "coa_client_archive_plan.json").is_file()
+    assert manifest["client_build"] == "3.3.5a+patch-C"   # from the discovered plan's top patch
     assert (out / "coa_client_extract_manifest.json").is_file()
-    spell = json.loads((out / "coa_client_spell.jsonl").read_text().splitlines()[0])
-    assert spell["spell_id"] == 805775
-    # attribution is now filled from the client advancement graph (805775 -> Venomancer node)
-    assert spell["coa_attribution"]["is_coa"] is True
-    assert spell["coa_attribution"]["modes"] == ["coa"]
-    assert spell["coa_attribution"]["archive_family"] == "base"   # raw M1.14A signal retained
-    assert spell["coa_attribution"]["id_range"] == "high"
-    assert spell["memberships"][0]["class_display"] == "Venomancer"   # stable memberships[] attached
-    # every contributing table records the archive that supplied it
-    assert set(spell["provenance"]["source_dbcs"]) == {
-        "Spell", "SpellCastTimes", "SpellDuration", "SpellRange"
-    }
-    # build descriptor derived from the discovered plan's top patch (patch-C.MPQ)
-    assert manifest["client_build"] == "3.3.5a+patch-C"
 
-    adv = [json.loads(l) for l in (out / "coa_client_advancement.jsonl").read_text().splitlines()]
-    assert adv[0]["schema_version"] == "coa-client-advancement-v1"
-    assert adv[0]["class"]["display"] == "Venomancer" and adv[0]["name"] == "Adrenal Venom"
-    assert adv[0]["coa_attribution"]["is_coa"] is True
-    assert adv[0]["raw"]["cols"]["0"] == 6086       # index-keyed audit map (JSON stringifies int keys)
-    assert (out / "coa_client_class_types.jsonl").is_file()
-    tabs = [json.loads(l) for l in (out / "coa_client_tab_types.jsonl").read_text().splitlines()]
-    assert tabs[0]["schema_version"] == "coa-client-tab-types-v1" and tabs[0]["name"] == "Class"
-    ess = [json.loads(l) for l in (out / "coa_client_essence.jsonl").read_text().splitlines()]
-    assert ess[0]["schema_version"] == "coa-client-essence-v1"      # raw progression, undecoded
-
-    # Task 7 producer: regenerate publishes a transactional generation + a validated pointer, and the
-    # resolver accepts it (the Node build requires this pointer for a canonical run).
-    from coa_client_extract.publish import resolve_active_generation
+    # The authoritative manifest is the published generation manifest-v3; the resolver accepts it and it
+    # registers every required child (design A5).
     assert (out / "coa_client_extract.pointer.json").is_file()
     resolved = resolve_active_generation(out)
-    assert set(resolved["children"]) == {"coa_client_spell_coa.jsonl", "coa_client_spell_projection.manifest.json"}
-    assert resolved["manifest"]["binding"]["policy_sha256"]
-    assert resolved["manifest"]["unknown_symbol_inventory"] == {"power_type": [], "school_bits": []}
+    assert resolved["manifest"]["schema_version"] == "coa-client-extract-manifest-v3"
+    assert resolved["manifest"]["publication_state"] == "published"
+    assert set(REQUIRED_CHILDREN) <= set(resolved["children"])
+    assert resolved["manifest"]["binding"]["policy_sha256"] == policy.sha256
+    assert resolved["manifest"]["binding"]["topology"]["client_build"] == "3.3.5a+patch-C"
+
+    # E0R.2 T2.1: the contract's cardinality rules resolved against the REVIEWED policy, non-vacuously —
+    # 23 class types is the source table's own record count, not a floor anyone guessed.
+    children, bound = resolved["manifest"]["children"], policy.bound["tables"]
+    for child, table in (("coa_client_spell.jsonl", "Spell"),
+                         ("coa_client_class_types.jsonl", "CharacterAdvancementClassTypes"),
+                         ("coa_client_tab_types.jsonl", "CharacterAdvancementTabTypes"),
+                         ("coa_client_essence.jsonl", "CharacterAdvancementEssence")):
+        assert children[child]["records"] == bound[table]["header"]["record_count"], child
+    assert children["coa_client_class_types.jsonl"]["records"] == 23
+    derivations = resolved["manifest"]["binding"]["derivations"]
+    adv = derivations["coa_client_advancement.jsonl"]
+    assert adv["kept"] + adv["rejected"] == bound["CharacterAdvancement"]["header"]["record_count"]
+    assert adv["kept"] == children["coa_client_advancement.jsonl"]["records"]
+    content = derivations["coa_client_content.jsonl"]
+    assert content["kept"] + content["rejected"] == content["source_entries"] == 1
+
+    gen_dir = resolved["gen_dir"]
+    # --- the client-DBC spell child is now the compact v3 row (identity + mechanics + coa_attribution) ---
+    spell = json.loads((gen_dir / "coa_client_spell.jsonl").read_text().splitlines()[0])
+    assert spell["schema_version"] == "coa-client-spell-v4"
+    assert spell["spell_id"] == 805775 and spell["name"] == "Adrenal Venom"
+    assert spell["coa_attribution"]["is_coa"] is True          # id-floor attribution (>= 100000)
+    assert spell["coa_attribution"]["id_range"] == "high"
+    assert spell["mechanics"]["power_type"] == 0 and spell["mechanics"]["school_mask"] == 8
+    assert "raw" in spell and "id" in spell["raw"]             # the compact raw substrate is retained
+
+    # --- the CoA projection is the is_coa subset of the same rows ---
+    proj = [json.loads(l) for l in (gen_dir / "coa_client_spell_coa.jsonl").read_text().splitlines()]
+    assert [r["spell_id"] for r in proj] == [805775]
+    assert proj[0]["schema_version"] == "coa-client-spell-projection-v3"
+
+    # --- the icon catalog covers every spell and hashes the ACTUAL BLP bytes ---
+    icons = {r["spell_id"]: r for r in
+             (json.loads(l) for l in (gen_dir / "coa_client_spell_icons.jsonl").read_text().splitlines())}
+    assert set(icons) == {805775}
+    # E0R.2 T6.3: the association references the asset; the path, hash and archive live once on the
+    # asset child instead of once per spell.
+    assets = {r["asset_id"]: r for r in
+              (json.loads(l) for l in (gen_dir / "coa_client_icon_assets.jsonl").read_text().splitlines())}
+    asset = assets[icons[805775]["asset_ref"]]
+    assert asset["availability"] == "source_only" and icons[805775]["readiness"] == "available"
+    assert asset["source_asset_sha256"] == __import__("hashlib").sha256(_ICON_BLP).hexdigest()
+    # honest resolved-icon coverage rides in the authoritative generation manifest
+    cov = resolved["manifest"]["icon_coverage"]
+    assert cov["resolved_paths"] == 1 and cov["assets_present"] == 1
+    assert cov["placeholders"] == 0 and cov["spells"] == 1
+
+    # --- the advancement children are still produced from the CA graph (805775 -> Venomancer) ---
+    adv = [json.loads(l) for l in (gen_dir / "coa_client_advancement.jsonl").read_text().splitlines()]
+    assert adv[0]["schema_version"] == "coa-client-advancement-v1"
+    assert adv[0]["class"]["display"] == "Venomancer" and adv[0]["name"] == "Adrenal Venom"
+    assert adv[0]["raw"]["cols"]["0"] == 6086
+    tabs = [json.loads(l) for l in (gen_dir / "coa_client_tab_types.jsonl").read_text().splitlines()]
+    assert tabs[0]["schema_version"] == "coa-client-tab-types-v1" and tabs[0]["name"] == "Class"
+    ess = [json.loads(l) for l in (gen_dir / "coa_client_essence.jsonl").read_text().splitlines()]
+    assert ess[0]["schema_version"] == "coa-client-essence-v1"      # raw progression, undecoded
+
+    # --- the reviewed policy is staged verbatim as a child (Node re-derives eligibility from it) ---
+    staged_policy = json.loads((gen_dir / "spell_layout_v2.json").read_text())
+    assert staged_policy["sha256"] == policy.sha256
 
 
 def test_main_fails_closed_without_stormlib(tmp_path, capsys):

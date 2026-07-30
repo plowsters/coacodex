@@ -84,7 +84,7 @@ Responsibilities:
 - Convert raw builder records into normalized, versioned domain records.
 - Preserve raw source records.
 - Infer secondary features such as tags, damage schools, resources, and text-derived hints.
-- Join builder records with optional AscensionDB tooltip enrichment while preserving builder legality as the source of truth.
+- Join builder records with the published client generation's mechanics while preserving builder legality as the source of truth. (Through M1.11 this join carried optional AscensionDB tooltip enrichment; M1.14E0R **removed** it.)
 - Emit validation reports.
 
 Inputs:
@@ -97,8 +97,6 @@ Outputs:
 - `coa_entries.pretty.json`
 - `coa_classes.json`
 - `coa_essence_caps.json`
-- `coa_db_spell_tooltips.jsonl`
-- `coa_db_enrichment_summary.json`
 - `coa_source_level_report.json`
 - `coa_metadata_tab_report.json`
 - normalization report
@@ -478,7 +476,7 @@ Responsibilities:
 
 - Render a guide index and individual class/spec guide pages from `coa-meta-report-v1`.
 - Provide player-facing Overview, Builds, Talent Tree, Rotation, Stats, Gear, Abilities/Talents, Warnings, and Data Notes sections.
-- Use normalized icon paths, local scraper assets, and AscensionDB spell links for spell/talent presentation.
+- Use the client generation's icon catalog, normalized icon paths, and local scraper assets for spell/talent presentation. Remote AscensionDB spell links were **removed** by M1.14E0R; an unresolved icon renders an honest placeholder rather than an off-site image.
 - Render CoA-style talent trees from row/column, edge, rank, cost, level, and prerequisite data.
 - Provide hover tooltips, metric explanations, role filters, encounter filters, and responsive navigation.
 - Compare builds by projected source: theory, empirical, simulated, or blended as later phases add them.

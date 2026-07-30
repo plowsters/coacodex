@@ -4,12 +4,26 @@ import math
 import struct
 from dataclasses import dataclass, field
 
+from .contracts import DECODED_REASONS, OBSERVATION_STATES
+
 PROOF_STATES = ("verified", "reference", "unproven", "contradicted")
 _KINDS = ("int32", "uint32", "float")            # numeric envelope kinds; strings use StringObservation
-_STATES = ("present", "not_applicable", "unresolved")
 _TOKEN = object()
 _ORDER = {"verified": 3, "reference": 2, "unproven": 1, "contradicted": 0}
 _INV = {v: k for k, v in _ORDER.items()}
+
+
+class ObservationError(ValueError):
+    """An observation was constructed with a state or decoded_reason outside the closed vocabulary
+    (E0R.2 T0.1). Enforced at construction because T6.2 serializes these as integer wire codes: a value
+    with no code cannot round-trip, and a silent default would corrupt the lossless-extraction claim."""
+
+
+def _check_vocabulary(state: str, decoded_reason: str) -> None:
+    if state not in OBSERVATION_STATES:
+        raise ObservationError(f"observation state {state!r} not in {OBSERVATION_STATES}")
+    if decoded_reason not in DECODED_REASONS:
+        raise ObservationError(f"decoded_reason {decoded_reason!r} not in {DECODED_REASONS}")
 
 
 @dataclass(frozen=True)
@@ -66,6 +80,7 @@ class Envelope:
     def __post_init__(self):
         if self._token is not _TOKEN:
             raise TypeError("construct Envelope via make_envelope()/absent_envelope()/make_domain_gated_envelope()")
+        _check_vocabulary(self.state, self.decoded_reason)
 
     def to_dict(self):
         return {"state": self.state, "raw_u32": self.raw_u32, "decoded": self.decoded,
@@ -95,7 +110,8 @@ def make_envelope(raw_u32, *, kind, proof, evidence_ref) -> Envelope:
 def absent_envelope(*, proof, evidence_ref, state) -> Envelope:
     _validate("uint32", evidence_ref)
     if state not in ("not_applicable", "unresolved"):
-        raise ValueError("absent_envelope requires a non-present state")
+        raise ObservationError(
+            f"absent_envelope requires a non-present state (not_applicable|unresolved), got {state!r}")
     return Envelope(state, None, None, "not_present", proof, evidence_ref, _TOKEN)
 
 
@@ -122,6 +138,7 @@ class StringObservation:
     def __post_init__(self):
         if self._token is not _TOKEN:
             raise TypeError("construct StringObservation via make_string_observation()")
+        _check_vocabulary(self.state, self.decoded_reason)
 
     def to_dict(self):
         return {"state": self.state, "raw_offset": self.raw_offset, "resolved": self.resolved,
@@ -155,6 +172,7 @@ class JoinObservation:
     def __post_init__(self):
         if self._token is not _TOKEN:
             raise TypeError("construct JoinObservation via make_join()")
+        _check_vocabulary(self.state, self.decoded_reason)
 
     def to_dict(self):
         return {"state": self.state, "components": {k: v.to_dict() for k, v in self.components.items()},
@@ -183,6 +201,26 @@ def make_join(components: dict, *, resolution, decode) -> JoinObservation:
         (not isinstance(value, float) or math.isfinite(value))
     return JoinObservation("resolved", components, composed, value if ok else None,
                            "decoded" if ok else "non_finite", _TOKEN)
+
+
+def make_string_join(components: dict, *, resolution, side_key: str = "side_value") -> JoinObservation:
+    """A join whose side value is a StringObservation (e.g. SpellIcon.path). Mirrors make_join's states,
+    but the resolved value is the side observation's `resolved` text; a string cannot be re-decoded from
+    an offset, so consumers verify equality against `resolved`. index_zero -> not_applicable,
+    side_row_missing -> unresolved, and a withheld composed proof (or an unresolved side) withholds."""
+    if not components:
+        raise ValueError("string join requires components")
+    composed = compose_proof(*(c.proof for c in components.values()))
+    if resolution == "index_zero":
+        return JoinObservation("not_applicable", components, composed, None, "index_zero", _TOKEN)
+    if resolution == "side_row_missing":
+        return JoinObservation("unresolved", components, composed, None, "side_row_missing", _TOKEN)
+    if resolution != "resolved":
+        raise ValueError(f"invalid string-join resolution {resolution!r} (fail closed)")
+    side = components[side_key]
+    if not semantic_promotion_eligible(composed) or side.resolved is None:
+        return JoinObservation("resolved", components, composed, None, "proof_withheld", _TOKEN)
+    return JoinObservation("resolved", components, composed, side.resolved, "decoded", _TOKEN)
 
 
 def refine_enum(value, allowed):

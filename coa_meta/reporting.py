@@ -228,6 +228,11 @@ class MetaRunConfig:
     rotation_duration_ms: int = 90_000
     rotation_candidates: int = 48
     gear_profile_path: Path | None = None
+    # E0R.1 T5.4: heuristic estimates are an explicit CALLER decision (`--allow-heuristic`), never
+    # self-granted from the data being missing. With this off (the default), a build whose actions lack
+    # load-bearing gcd/cooldown/costs gets an explicit `blocked` rotation section — never a quietly
+    # heuristic guide presented as theorycraft.
+    allow_heuristic: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -255,6 +260,7 @@ class MetaRunConfig:
             "rotation_duration_ms": self.rotation_duration_ms,
             "rotation_candidates": self.rotation_candidates,
             "gear_profile_path": str(self.gear_profile_path) if self.gear_profile_path else None,
+            "allow_heuristic": self.allow_heuristic,
         }
 
 
@@ -567,16 +573,23 @@ class MetaReportRunner:
             assert result.state is not None
             simulation_result = None
             if self.config.simulate:
-                simulation_result = simulate_build(
-                    result.state,
-                    repository,
-                    apl_doc,
-                    SimulationConfig(
-                        duration_ms=self.config.simulation_duration_ms,
-                        iterations=self.config.simulation_iterations,
-                        seed=self.config.simulation_seed,
-                    ),
-                ).to_dict()
+                # E0R.1 T5.4: simulate_build converts talent nodes to combat actions with INVENTED
+                # amounts/costs/cooldowns (it never reads the client mechanics), so it runs only under
+                # explicit authorization; otherwise the report says so instead of shipping estimates.
+                if not self.config.allow_heuristic:
+                    simulation_result = simulation_blocked_section()
+                else:
+                    simulation_result = simulate_build(
+                        result.state,
+                        repository,
+                        apl_doc,
+                        SimulationConfig(
+                            duration_ms=self.config.simulation_duration_ms,
+                            iterations=self.config.simulation_iterations,
+                            seed=self.config.simulation_seed,
+                            allow_heuristic=True,
+                        ),
+                    ).to_dict()
             apl_payload = apl_doc.to_dict()
             rotation_summary = _rotation_summary(apl_payload, role)
             rotation_guide = None
@@ -686,6 +699,16 @@ class MetaReportRunner:
                 return None, ("rotation_guide_no_executable_candidates", *action_catalog.warnings)
 
             max_resources, initial_resources = _rotation_resource_defaults(action_catalog)
+            # The simulated rotation guide is a THEORYCRAFT illustration built on client timing
+            # (cooldown/gcd/costs) that E1 has not yet extracted. E0R.1 T5.4: when that data is missing
+            # the canonical report BLOCKS with an explicit, machine-readable section naming every
+            # offending (action, field, reason) — it does not authorize itself to go heuristic. A caller
+            # who wants estimates asks for them (`allow_heuristic`), and the guide is then labeled.
+            readiness = action_catalog.quantitative_readiness
+            if not readiness["ready"] and not self.config.allow_heuristic:
+                return rotation_blocked_section(readiness), (
+                    "rotation_guide_blocked_missing_load_bearing_data", *action_catalog.warnings)
+            timing_heuristic = not readiness["ready"]
             scored = []
             for candidate in rotation_candidates:
                 result = simulate_apl(
@@ -697,6 +720,7 @@ class MetaReportRunner:
                         target_count=_target_count_for_encounter(encounter),
                         initial_resources=initial_resources,
                         max_resources=max_resources,
+                        allow_heuristic=timing_heuristic,
                     ),
                 )
                 scored.append(score_rotation_result(result, role, action_catalog))
@@ -712,10 +736,45 @@ class MetaReportRunner:
                 encounter=encounter,
                 build_id=build_id,
             )
-            warnings = tuple(dict.fromkeys((*guide.warnings, *action_catalog.warnings)))
-            return guide.to_dict(), warnings
+            extra = ("rotation_timing_heuristic_pending_e1",) if timing_heuristic else ()
+            warnings = tuple(dict.fromkeys((*guide.warnings, *action_catalog.warnings, *extra)))
+            payload = guide.to_dict()
+            # `source` stays the guide's own provenance kind (theorycraft/simulated/...); the interlock
+            # verdict rides on its own keys so a consumer can read BOTH without either being clobbered.
+            payload["status"] = "heuristic" if timing_heuristic else "verified"
+            payload["quantitative_source"] = "heuristic" if timing_heuristic else "verified"
+            return payload, warnings
         except Exception as exc:  # pragma: no cover - defensive report fallback
             return None, (f"rotation_guide_failed:{exc.__class__.__name__}",)
+
+
+def rotation_blocked_section(readiness: dict[str, Any]) -> dict[str, Any]:
+    """The canonical answer when a quantitative guide cannot be produced honestly (E0R.1 T5.4): an
+    explicit, machine-readable `blocked` section naming every offending (action, field, status, reason)
+    — never a silently heuristic guide, and never a missing section a consumer might read as "no data"."""
+    return {
+        "schema_version": "coa-rotation-guide-blocked-v1",
+        "status": "blocked",
+        "source": "blocked",
+        "reason": "missing_load_bearing_data",
+        "detail": ("gcd/cooldown/costs are not yet extracted for every action; a quantitative rotation "
+                   "cannot be simulated without inventing them. Re-run with heuristic mode explicitly "
+                   "authorized to get labeled estimates."),
+        "blocking": [dict(item) for item in readiness.get("blocking", [])],
+    }
+
+
+def simulation_blocked_section() -> dict[str, Any]:
+    """The canonical answer when a build simulation was requested but heuristic estimates were not
+    authorized (E0R.1 T5.4). Explicit and machine-readable — never a missing key, never estimates."""
+    return {
+        "schema_version": "coa-simulation-result-blocked-v1",
+        "status": "blocked",
+        "source": "blocked",
+        "reason": "heuristic_not_authorized",
+        "detail": ("the build simulation estimates amounts, costs and cooldowns from node tags rather "
+                   "than the client mechanics; authorize heuristic mode to receive labeled estimates."),
+    }
 
 
 def _rotation_summary(apl_payload: dict[str, Any], role: str) -> dict[str, Any]:
@@ -776,7 +835,7 @@ def _rotation_resource_defaults(action_catalog: Any) -> tuple[dict[str, float], 
     resource_names: set[str] = set()
     generated_names: set[str] = set()
     for action in action_catalog.actions:
-        resource_names.update(action.costs)
+        resource_names.update(action.costs or {})   # costs is nullable (unknown) in coa-mechanics-v2
         resource_names.update(action.generates)
         generated_names.update(action.generates)
     max_resources = {resource: 100.0 for resource in resource_names}
@@ -912,8 +971,8 @@ def render_html_report(
     report: MetaReport,
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
-    db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
 ) -> str:
     if entries_path is not None:
         from .guide_writer import render_guide_index_html
@@ -921,9 +980,9 @@ def render_html_report(
         return render_guide_index_html(
             report,
             entries_path=entries_path,
-            db_tooltips_path=db_tooltips_path,
-            asset_root=getattr(asset_resolver, "asset_root", None),
+                asset_root=getattr(asset_resolver, "asset_root", None),
             builder_layout_root=builder_layout_root,
+            icon_catalog=icon_catalog,
         )
 
     data = report.to_dict()
@@ -1094,8 +1153,8 @@ def write_report_outputs(
     formats: tuple[str, ...] = ("json", "md", "html"),
     asset_resolver: Any | None = None,
     entries_path: Path | str | None = None,
-    db_tooltips_path: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
     write_backend_trust: bool = False,
     backend_trust_out: Path | str | None = None,
 ) -> tuple[Path, ...]:
@@ -1118,9 +1177,9 @@ def write_report_outputs(
                         report,
                         output_dir,
                         entries_path=entries_path,
-                        db_tooltips_path=db_tooltips_path,
                         asset_root=getattr(asset_resolver, "asset_root", None),
                         builder_layout_root=builder_layout_root,
+                        icon_catalog=icon_catalog,
                     )
                 )
                 continue

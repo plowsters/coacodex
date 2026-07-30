@@ -61,7 +61,6 @@ def test_build_guide_site_creates_index_and_spec_routes():
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=FIXTURES / "guide_db_tooltips.jsonl",
     )
 
     assert site.index_path == "index.html"
@@ -84,48 +83,34 @@ def test_guide_nodes_include_links_tooltips_and_icons():
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=FIXTURES / "guide_db_tooltips.jsonl",
     )
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)
 
-    assert node.db_url == "https://db.ascension.gg/?spell=2001"
+    assert node.db_url is None                          # no remote AscensionDB link (E0R)
     assert node.tooltip_id == "spell:2001"
     assert node.asset.asset_id.startswith("icon:")
+    assert node.asset.source == "placeholder"           # no client icon catalog supplied -> placeholder
 
 
-def test_guide_builder_prefers_db_icon_asset_path(tmp_path: Path):
-    db_path = tmp_path / "db_tooltips.jsonl"
-    db_path.write_text(
-        json.dumps(
-            {
-                "kind": "spell",
-                "id": 2001,
-                "status": "matched",
-                "name": "Damage Talent",
-                "icon": "spell_nature_poison",
-                "icon_asset_path": "dist/assets/icons/spell_nature_poison.png",
-                "tooltip_html": "<table><tr><td>Deals bonus Nature damage.</td></tr></table>",
-                "tooltip_text": "Deals bonus Nature damage.",
-                "linked_spell_ids": [],
-                "linked_item_ids": [],
-                "name_match": True,
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+def test_guide_builder_renders_a_placeholder_for_a_client_icon_row(tmp_path: Path):
+    """E0R client-native icons: the catalog is consulted by spell_id and NO AscensionDB icon name or
+    cached path is ever reached.
+
+    This asserted that a `converted` row rendered a bundle asset. E0R.2 T2.5 prohibited that status
+    (its bundle validator was never implemented) and T6.3 removed the key it lived on, so a verified
+    client BLP renders a placeholder — the guarantee that remains is the one about never hotlinking."""
     site = build_guide_site(
         _report(),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=db_path,
+        icon_catalog={2001: {"spell_id": 2001, "asset_ref": "a" * 32, "readiness": "available"}},
     )
     damage = site.specs[0]
     node = next(item for item in damage.nodes if item.entry_id == 201)
 
-    assert node.asset.href == "icons/spell_nature_poison.png"
-    assert node.asset.source == "ascension_db_asset"
-    assert node.asset.missing is False
+    assert node.asset.source == "placeholder"
+    assert node.asset.href is None
+    assert "db.ascension.gg" not in str(node.asset.href or "")
 
 
 def test_guide_build_cards_include_static_tree_payloads():
@@ -217,6 +202,7 @@ def test_guide_build_cards_include_simulated_rotation_guide_when_available():
             simulate_rotations=True,
             rotation_duration_ms=10_000,
             rotation_candidates=8,
+            allow_heuristic=True,     # E0R.1 T5.4: estimates are opt-in; without it the card is blocked
         )
     ).run()
     site = build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl")

@@ -24,7 +24,13 @@ def _site():
             require_budget_fraction=0.0,
         )
     ).run()
-    return build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl")
+    # Client-native icons (E0R.2 T6.3 dialect): an association row per spell, referencing an asset.
+    # Nothing here renders an <img>: a client BLP is not browser-renderable, and the one status that
+    # used to render one (`converted`) was prohibited by T2.5 for having no bundle validator.
+    icon_catalog = {sid: {"spell_id": sid, "asset_ref": f"{sid:032d}", "readiness": "available"}
+                    for sid in (1000, 1001, 1002, 2001, 2002, 3001)}
+    return build_guide_site(report, entries_path=FIXTURES / "meta_report_fixture.jsonl",
+                            icon_catalog=icon_catalog)
 
 
 def _hybrid_site():
@@ -134,12 +140,16 @@ def test_index_places_hybrid_specs_in_secondary_role_sections():
     assert 'data-role-chip="support"' in html
 
 
-def test_index_spec_cards_render_spec_icon_image():
+def test_index_spec_cards_render_a_spec_icon_placeholder_never_a_hotlink():
+    """The <img> this asserted could only come from a `converted` client asset, which T2.5 prohibited
+    and T6.3 left no key for. What the card must still do is render the icon slot — and never reach a
+    remote or cached-DB image to fill it."""
     html = render_index_html(_site())
 
     assert 'class="spec-icon"' in html
     segment = html.split('class="spec-icon"', 1)[1][:200]
-    assert "<img" in segment
+    assert "spec-icon-core" in segment
+    assert "db.ascension.gg" not in html and "<img" not in segment
 
 
 def test_render_spec_html_includes_sections_and_omits_empty_warnings():
@@ -161,7 +171,8 @@ def test_render_spec_html_links_spell_and_tooltip_ids():
 
     html = render_spec_html(site, spec)
 
-    assert "https://db.ascension.gg/?spell=2001" in html
+    # E0R: no remote AscensionDB link is rendered; the client-side tooltip id still anchors the node.
+    assert "db.ascension.gg" not in html
     assert 'data-tooltip-id="spell:2001"' in html
 
 

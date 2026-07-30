@@ -1,8 +1,11 @@
 import struct
 
 from coa_client_extract.recordview import open_view
-from coa_client_extract.spell_layout import compute_policy_sha256, load_spell_policy
-from coa_client_extract.spell_v2 import build_spell_v2_records
+from coa_client_extract.spell_layout import (
+    compute_policy_sha256, derive_artifact_contract, load_spell_policy,
+)
+from coa_client_extract.spell_record import build_spell_v2_records
+from tests._spell_fixtures import SYNTHETIC_CONTENT_SOURCES
 
 # Synthetic Spell record: 9 uint32 cells.
 #  0 id | 1 power_type | 2 school_mask | 3 name_off | 4 desc_off
@@ -74,13 +77,19 @@ def _policy(*, reviewed=True, bound=None):
         "range_max_yd": {"index_field": "range_index", "side_table": "SpellRange", "side_value_field": "max_yd"},
         "spell_icon_id": {"index_field": "spell_icon_id", "side_table": "SpellIcon", "side_value_field": "id"},
     }
+    for _t in tables.values():                      # v2: every table declares its key cell + uniqueness
+        _t.setdefault("key_cell", 0); _t.setdefault("unique", True)
+    for _j in joins.values():                        # v2: joins carry explicit promotion (all un-adjudicated)
+        _j.setdefault("promotion", "raw_only")
     enum = {"power_types": [-2, 0, 1, 2, 3, 4, 5, 6], "school_bits": [1, 2, 4, 8, 16, 32, 64]}
     enum["sha256"] = compute_policy_sha256(enum)
     anchor_set = {"spells": [{"id": 133, "name": "Fireball", "power_type": 0, "school_mask": 4}]}
     anchor_set["sha256"] = compute_policy_sha256(anchor_set)
-    p = {"schema_version": "coa-spell-layout-v1", "reviewed": reviewed, "bound": bound,
+    p = {"schema_version": "coa-spell-layout-v2", "reviewed": reviewed, "bound": bound,
          "required_tables": ["Spell"], "expected_absent": [], "enum_policy": enum,
-         "anchor_set": anchor_set, "tables": tables, "joins": joins}
+         "anchor_set": anchor_set, "tables": tables, "joins": joins,
+         "content_sources": SYNTHETIC_CONTENT_SOURCES}
+    p["artifact_contract"] = derive_artifact_contract(p)     # E0R.2 T2.3: reviewed observation domain
     p["sha256"] = compute_policy_sha256(p)
     return load_spell_policy(p)
 

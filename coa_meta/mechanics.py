@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-MECHANICS_SCHEMA_VERSION = "coa-mechanics-v1"
+from coa_client_extract.contracts import (
+    LOAD_BEARING_FIELDS,
+    READINESS_INVARIANTS,
+    READINESS_REASON_CODES,
+    READINESS_REASON_COMPATIBILITY,
+    READINESS_STATUSES,
+)
+
+MECHANICS_SCHEMA_VERSION = "coa-mechanics-v2"
 
 
 class MechanicsLoadError(ValueError):
@@ -127,7 +135,8 @@ class MechanicRecord:
     charges: int | None = None
     duration_ms: int | None = None
     tick_interval_ms: int | None = None
-    costs: dict[str, float] = field(default_factory=dict)
+    costs: dict[str, float] | None = None    # v2: None = unknown (missing != free {}); {} = verified empty
+    field_readiness: dict[str, dict] = field(default_factory=dict, compare=False, hash=False)
     generates: dict[str, float] = field(default_factory=dict)
     spends: dict[str, float] = field(default_factory=dict)
     max_targets: int | None = None
@@ -156,7 +165,6 @@ class MechanicRecord:
                 "charges": self.charges,
                 "duration_ms": self.duration_ms,
                 "tick_interval_ms": self.tick_interval_ms,
-                "costs": self.costs,
                 "generates": self.generates,
                 "spends": self.spends,
                 "max_targets": self.max_targets,
@@ -167,6 +175,11 @@ class MechanicRecord:
             },
             drop_empty=True,
         )
+        # v2: costs is ALWAYS explicit — null (unknown) is a distinct, load-bearing value that must never
+        # be dropped to a default {} downstream (missing != default, design B3).
+        data["costs"] = self.costs
+        if self.field_readiness:
+            data["field_readiness"] = self.field_readiness
         if self.field_provenance:
             data["field_provenance"] = self.field_provenance
         if self.raw:
@@ -176,7 +189,9 @@ class MechanicRecord:
 
 def mechanic_from_raw(raw: dict[str, Any], source: str = "<memory>") -> MechanicRecord:
     if raw.get("schema_version") != MECHANICS_SCHEMA_VERSION:
-        raise MechanicsLoadError(f"{source} has unsupported schema_version {raw.get('schema_version')!r}")
+        raise MechanicsLoadError(
+            f"{source} has unsupported schema_version {raw.get('schema_version')!r} "
+            f"(require {MECHANICS_SCHEMA_VERSION})")
     spell_id = _as_int(raw.get("spell_id"))
     if not spell_id:
         raise MechanicsLoadError(f"{source} missing numeric spell_id")
@@ -186,6 +201,14 @@ def mechanic_from_raw(raw: dict[str, Any], source: str = "<memory>") -> Mechanic
     kind = str(raw.get("kind") or "")
     if not kind:
         raise MechanicsLoadError(f"{source} missing kind")
+    # v2: costs is None (unknown) | {} (verified empty) | {resource: amount}. A missing key parses to None
+    # (unknown), NOT to a free {} — the readiness state, not nullness, distinguishes unknown from empty.
+    costs = _number_map_or_none(raw["costs"]) if "costs" in raw else None
+    field_readiness = _validate_field_readiness(
+        raw.get("field_readiness") or {},
+        {"costs": costs, "cooldown_ms": _as_int_or_none(raw.get("cooldown_ms")),
+         "gcd_ms": _as_int_or_none(raw.get("gcd_ms"))},
+        source)
     return MechanicRecord(
         schema_version=MECHANICS_SCHEMA_VERSION,
         spell_id=spell_id,
@@ -204,7 +227,8 @@ def mechanic_from_raw(raw: dict[str, Any], source: str = "<memory>") -> Mechanic
         charges=_as_int_or_none(raw.get("charges")),
         duration_ms=_as_int_or_none(raw.get("duration_ms")),
         tick_interval_ms=_as_int_or_none(raw.get("tick_interval_ms")),
-        costs=_number_map(raw.get("costs")),
+        costs=costs,
+        field_readiness=field_readiness,
         generates=_number_map(raw.get("generates")),
         spends=_number_map(raw.get("spends")),
         max_targets=_as_int_or_none(raw.get("max_targets")),
@@ -309,6 +333,65 @@ def _number_map(value: Any) -> dict[str, float]:
         parsed = _as_float_or_none(raw_amount)
         if parsed is not None:
             out[str(key)] = parsed
+    return out
+
+
+def _number_map_or_none(value: Any) -> dict[str, float] | None:
+    """v2 nullable resource map: None stays None (unknown); a dict (incl. {}) becomes a number map."""
+    if value is None:
+        return None
+    return _number_map(value)
+
+
+def _validate_field_readiness(fr: Any, value_map: dict[str, Any], source: str) -> dict[str, dict]:
+    """Validate the per-field readiness block as a COMPLETE truth table (E0R.1 T5.2):
+
+    status x value  — `available` requires a present non-null value; `verified_empty` requires an
+                      actually-EMPTY set/map (a non-empty map is a contradiction); the value_must_be_null
+                      statuses (`unavailable`/`ambiguous`/`not_applicable`) require a null value.
+    status x reason — every reason_code must be compatible with its status
+                      (contracts.READINESS_REASON_COMPATIBILITY), e.g. `proven_empty` only ever explains
+                      `verified_empty`, and `not_extracted` can never claim it.
+    omission        — a load-bearing field (costs/cooldown_ms/gcd_ms) that is null MUST carry a readiness
+                      entry; a silent omission is exactly the ambiguity readiness exists to remove.
+    """
+    if not isinstance(fr, dict):
+        raise MechanicsLoadError(f"{source} field_readiness must be an object")
+    out: dict[str, dict] = {}
+    for fname, entry in fr.items():
+        if not isinstance(entry, dict) or "status" not in entry or "reason_code" not in entry:
+            raise MechanicsLoadError(f"{source} field_readiness[{fname!r}] needs status + reason_code")
+        status, reason = entry["status"], entry["reason_code"]
+        if status not in READINESS_STATUSES:
+            raise MechanicsLoadError(f"{source} field_readiness[{fname!r}] bad status {status!r}")
+        if reason not in READINESS_REASON_CODES:
+            raise MechanicsLoadError(f"{source} field_readiness[{fname!r}] bad reason_code {reason!r}")
+        if status not in READINESS_REASON_COMPATIBILITY[reason]:
+            raise MechanicsLoadError(
+                f"{source} field_readiness[{fname!r}] incompatible reason_code {reason!r} for status "
+                f"{status!r} (compatible: {sorted(READINESS_REASON_COMPATIBILITY[reason])})")
+        must_be_null, _blocking, set_valued_only = READINESS_INVARIANTS[status]
+        if fname in value_map:
+            value = value_map[fname]
+            if must_be_null and value is not None:
+                raise MechanicsLoadError(
+                    f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires a null value")
+            if status == "available" and value is None:
+                raise MechanicsLoadError(
+                    f"{source} field_readiness[{fname!r}] readiness invariant: available requires a value")
+            if set_valued_only:
+                if not isinstance(value, dict):
+                    raise MechanicsLoadError(
+                        f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires a set/map value")
+                if value:
+                    raise MechanicsLoadError(
+                        f"{source} field_readiness[{fname!r}] readiness invariant: {status} requires an EMPTY "
+                        f"collection, got {len(value)} entrie(s)")
+        out[fname] = {"status": status, "reason_code": reason}
+    for fname in LOAD_BEARING_FIELDS:
+        if fname in value_map and value_map[fname] is None and fname not in out:
+            raise MechanicsLoadError(
+                f"{source} load-bearing field {fname!r} is null and requires a readiness entry explaining why")
     return out
 
 

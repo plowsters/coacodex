@@ -202,3 +202,10 @@ MPQs** (`Interface\AddOns\AscensionUI`, `Ascension_CoATalents`, …), not loose 
 *Maintenance: update the confidence label when a RECON/REPORTED field is verified. This doc is a
 navigation aid, not a schema contract — the authoritative field maps live in
 `coa_client_extract/dbc_layouts.py` (once M1.14E corrects them) and the per-artifact schema docs.*
+
+## M1.14E0R confidence note
+
+The current real client's `Spell.dbc` is bound by sha256 + full header in the reviewed
+`coa-spell-layout-v2` policy; offsets are the recon-proven ones (`power_type@41`, `school_mask@225`), not
+stock 3.3.5a. `SpellEffect`/`SpellCooldowns` are confirmed **absent** on this client (effects/cooldowns are
+inline); their operand extraction is M1.14E1.

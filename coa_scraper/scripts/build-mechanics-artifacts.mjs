@@ -5,22 +5,44 @@ import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 
-import { readJsonl } from "./lib/ascensiondb.mjs";
-import { reconcileField, dbIdentityReference, applyDbIdentityGate, REASON } from "./lib/mechanics-reconcile.mjs";
+import { readJsonl } from "./lib/jsonl.mjs";
+import { reconcileField, identityReference, REASON } from "./lib/mechanics-reconcile.mjs";
 import { fieldCandidates } from "./lib/mechanics-candidates.mjs";
 import { isPresent } from "./lib/mechanics-normalize.mjs";
 import { loadAndValidateProjection, MechanicsBuildError } from "./lib/mechanics-projection.mjs";
 import { resolveGeneration, GenerationResolveError } from "./lib/generation.mjs";
 
-const MECHANICS_SCHEMA_VERSION = "coa-mechanics-v1";
+const MECHANICS_SCHEMA_VERSION = "coa-mechanics-v2";
+
+// v2: cooldown/gcd/costs lost their only source when AscensionDB was removed, so they are null (unknown)
+// with an explicit readiness reason — NEVER a defaulted 0/1500/{} (missing != default, design B3). E1's
+// SpellCooldowns/operand extraction supplies them; until then they are honestly unavailable.
+function pendingReadiness() {
+  return {
+    cooldown_ms: { status: "unavailable", reason_code: "pending_e1_operand" },
+    gcd_ms: { status: "unavailable", reason_code: "pending_e1_operand" },
+    costs: { status: "unavailable", reason_code: "pending_e1_operand" },
+  };
+}
 
 const CLIENT_FIELDS = ["cast_time_ms", "duration_ms", "range_yards", "schools", "power_type"];
+// AscensionDB previously supplied cooldown/gcd/costs; with the DB removed these have NO canonical source
+// here and are emitted null/{} (E0R: missing != default). Task 12 makes them nullable with readiness.
 const DB_ONLY_FIELDS = ["cooldown_ms", "gcd_ms", "costs"];
 const KIND_BEHAVIOR_ORDER = { pet_action: 0, cooldown: 1, ability: 2, debuff: 3, passive: 4 };
 
-export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
-  const clientById = new Map(projection.map((r) => [Number(r.spell_id), r]));
-  const dbById = new Map(spellRows.map((r) => [Number(r.id ?? r.spell_id), r]));
+// Canonical mechanics from the CLIENT projection + the verified Builder only. E0R.1 T5.3 removed the
+// vestigial `spellRows` input: the DB-era scraped rows were retired as a reconciliation source, and an
+// accepted-but-ignored parameter is a standing invitation to smuggle unproven data back in.
+// `clientById` is the projection LOOKUP the canonical path now streams into (E0R.2 T5.1); `projection`
+// remains for the legacy v2/array callers, which build the same Map from what they already hold.
+//
+// E0R.2 T5.2: a GENERATOR. Rows come out ascending by spell_id, one at a time, and the write loop is
+// the only thing that ever holds one — the artifact is ~3,600 rows, so the win is not the bytes but
+// that the output can be a stream at all. Every statistic folds in beside the write (statsAccumulator),
+// because a generator cannot be walked four more times the way the array was.
+export function* buildCanonicalMechanics({ entries, projection = [], clientById = null }) {
+  clientById = clientById || new Map(projection.map((r) => [Number(r.spell_id), r]));
 
   const bySpell = new Map();
   for (const entry of entries) {
@@ -30,51 +52,37 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
     bySpell.get(sid).push(entry);
   }
 
-  const rows = [];
   for (const [sid, rawNodes] of [...bySpell.entries()].sort((a, b) => a[0] - b[0])) {
     // Determinism: canonicalize nodes by entry_id so reversing input order is byte-identical.
     const nodes = [...rawNodes].sort((a, b) => Number(a.entry_id) - Number(b.entry_id));
     const clientRec = clientById.get(sid) || null;
-    const dbRow = dbById.get(sid) || null;
 
     const clientName = clientRec?.name || "";
     const builderNames = nodes.map((n) => n.name).filter(Boolean);
-    const referenceName = dbIdentityReference({ clientName, builderNames, dbName: dbRow?.name || "" });
-    const gate = dbRow ? applyDbIdentityGate({ dbRow, referenceName }) : { excluded: false, reason: null };
-    const dbUsable = Boolean(dbRow && !gate.excluded);
 
     const fieldProvenance = {};
     const selected = {};
 
-    // name: client_dbc → verified_builder (consensus) → ascension_db (only if identity-usable)
-    const nameOut = reconcileField({ field: "name", candidates: nameCandidates({ clientRec, nodes, dbRow, dbUsable }) });
+    // name: client_dbc → verified_builder (consensus)
+    const nameOut = reconcileField({ field: "name", candidates: nameCandidates({ clientRec, nodes }) });
     fieldProvenance.name = nameOut.provenance;
-    const name = nameOut.selected ?? (clientName || builderNames[0] || dbRow?.name || "");
+    const name = nameOut.selected ?? (clientName || builderNames[0] || "");
 
-    // reconciled mechanical fields (client/builder/db)
+    // reconciled mechanical fields (client/builder)
     for (const field of CLIENT_FIELDS) {
-      const candidates = fieldCandidates({ field, clientRec, builderNodes: nodes, dbRow, dbExcluded: gate.excluded, dbExclusionReason: gate.reason });
+      const candidates = fieldCandidates({ field, clientRec, builderNodes: nodes });
       if (candidates.length === 0) continue;
       const { selected: value, provenance } = reconcileField({ field, candidates });
       fieldProvenance[field] = provenance;
       if (value !== undefined) selected[field] = value;
     }
 
-    // db-only fields: single-source field_provenance (barred when the db row failed identity)
-    for (const field of DB_ONLY_FIELDS) {
-      const fp = dbOnlyProvenance({ field, dbRow, dbUsable, gate });
-      if (fp) fieldProvenance[field] = fp;
-    }
-
-    // Tooltip used to classify kind and infer effects. When the identity-matched db row supplies
-    // the tooltip, that participation is recorded in provenance (not silently attributed to the
-    // builder); otherwise fall back to the first builder description in entry_id order.
-    const dbTooltip = dbUsable && dbRow.tooltip_text ? String(dbRow.tooltip_text) : "";
+    // Tooltip (for kind classification + effect inference) is now Builder-only: the first builder
+    // description in entry_id order. cooldown/gcd/costs lost their only source with AscensionDB.
     const builderTooltip = nodes.map((n) => n.description_text).filter(Boolean)[0] || "";
-    const tooltipText = dbTooltip || builderTooltip;
-    const tooltipMeta = dbTooltip
-      ? { text: dbTooltip, source: "ascension_db", tier: "ascension_db", source_id: `ascension_db:${dbRow.id}` }
-      : { text: builderTooltip, source: "builder", tier: "verified_builder", source_id: `builder_node:${nodes[0]?.entry_id}` };
+    const tooltipText = builderTooltip;
+    const tooltipMeta = { text: builderTooltip, source: "builder", tier: "verified_builder",
+                         source_id: `builder_node:${nodes[0]?.entry_id}` };
 
     // kind: derived from ALL nodes (order-independent) + the tooltip's real source
     const { kind, provenance: kindProv } = resolveKind(nodes, tooltipText, tooltipMeta);
@@ -85,25 +93,35 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
     // plus the tooltip — never one arbitrary node — so output is input-order-independent.
     const mergedTags = [...new Set(nodes.flatMap((n) => n.tags || []))].sort();
     const mergedEntry = { tags: mergedTags, description_text: builderTooltip };
-    const effects = inferEffects({ entry: mergedEntry, tooltipText, spellRow: dbUsable ? dbRow : null, schools, durationMs: selected.duration_ms ?? null });
+    const effects = inferEffects({ entry: mergedEntry, tooltipText, schools, durationMs: selected.duration_ms ?? null });
     fieldProvenance.effects = effectsProvenance({ effects, tooltip: tooltipMeta });
 
-    rows.push({
+    // power_type is null-honest: the client decode is withheld (T1.3) and the Builder resources inference
+    // never backfills it (T1.4), so a missing power_type is null with an unavailable/no_static_anchor
+    // readiness — never "" and never the heuristic value.
+    const powerType = selected.power_type ?? null;
+    const readiness = pendingReadiness();
+    if (powerType === null) {
+      readiness.power_type = { status: "unavailable", reason_code: "no_static_anchor" };
+    }
+
+    yield {
       schema_version: MECHANICS_SCHEMA_VERSION,
       spell_id: sid,
       name,
       kind,
       source_node_ids: [...new Set(nodes.map((n) => Number(n.entry_id)).filter(Number.isFinite))].sort((a, b) => a - b),
-      source_urls: dbUsable ? sourceUrls(dbRow) : [],
+      source_urls: [],
       school: schools.length === 1 ? schools[0] : "",
       schools,
-      power_type: selected.power_type || "",
+      power_type: powerType,
       cast_time_ms: selected.cast_time_ms ?? null,
       duration_ms: selected.duration_ms ?? null,
       range_yards: selected.range_yards ?? null,
-      cooldown_ms: dbUsable ? numberOrNull(dbRow.cooldown_ms) : null,
-      gcd_ms: dbUsable ? numberOrNull(dbRow.gcd_ms) : null,
-      costs: dbUsable ? costsObject(dbRow.power_costs) : {},
+      cooldown_ms: null,               // no canonical source after AscensionDB removal (null + readiness)
+      gcd_ms: null,
+      costs: null,
+      field_readiness: readiness,
       generates: {},
       spends: {},
       effects,
@@ -115,43 +133,16 @@ export function buildMechanicsRows({ entries, spellRows, projection = [] }) {
         category: clientRec?.mechanics?.category ?? null,
         spell_icon_id: clientRec?.mechanics?.spell_icon_id ?? null,
         school_mask: clientRec?.mechanics?.school_mask ?? null,
-        db_status: dbRow?.status || null,
-        db_excluded: gate.excluded,
-        db_exclusion_reason: gate.reason,
-        linked_item_ids: dbUsable ? (dbRow.linked_item_ids || []) : [],
       },
-    });
+    };
   }
-  return rows;
 }
 
-function nameCandidates({ clientRec, nodes, dbRow, dbUsable }) {
+function nameCandidates({ clientRec, nodes }) {
   const out = [];
   if (clientRec?.name) out.push({ source: "client_dbc", precedence_tier: "client_dbc", source_id: `client_spell:${clientRec.spell_id}`, source_field: "name", raw_value: clientRec.name, normalized_value: clientRec.name, confidence: clientRec?.coa_attribution?.confidence || "low", eligible: true, eligibility_reasons: [] });
   for (const n of nodes) if (n.name) out.push({ source: "builder", precedence_tier: "verified_builder", source_id: `builder_node:${n.entry_id}`, source_field: "name", raw_value: n.name, normalized_value: n.name, confidence: "high", eligible: true, eligibility_reasons: [] });
-  if (dbUsable && dbRow?.name) out.push({ source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`, source_field: "name", raw_value: dbRow.name, normalized_value: dbRow.name, confidence: "medium", eligible: true, eligibility_reasons: [] });
   return out;
-}
-
-function dbOnlyProvenance({ field, dbRow, dbUsable, gate }) {
-  if (!dbRow) return null;
-  const rawByField = { cooldown_ms: dbRow.cooldown_ms, gcd_ms: dbRow.gcd_ms, costs: dbRow.power_costs };
-  const raw = rawByField[field];
-  if (!isPresent(raw)) return null;
-  const value = field === "costs" ? costsObject(raw) : numberOrNull(raw);
-  const eligible = dbUsable;
-  return {
-    selected_source: eligible ? "ascension_db" : null,
-    selected_tier: eligible ? "ascension_db" : null,
-    selected_value: eligible ? value : null,
-    selection_reason: eligible ? REASON.DB_FALLBACK : REASON.OMITTED_NO_ELIGIBLE_CANDIDATE,
-    warnings: [],
-    candidates: [{
-      source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`,
-      source_field: field, raw_value: raw, normalized_value: value, confidence: "medium",
-      eligible, eligibility_reasons: eligible ? [] : [gate.reason || REASON.DB_IDENTITY_MISMATCH],
-    }],
-  };
 }
 
 // kind is classified from every node's entry_type AND the tooltip text (the tooltip can flip the
@@ -170,7 +161,7 @@ function resolveKind(nodes, tooltipText, tooltip) {
     candidates.push({
       source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
       source_field: "tooltip_text", raw_value: null, normalized_value: chosen,
-      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: false,   // tooltip is Builder-only now
     });
   }
   return {
@@ -194,7 +185,7 @@ function effectsProvenance({ effects, tooltip }) {
     candidates.push({
       source: tooltip.source, precedence_tier: tooltip.tier, source_id: tooltip.source_id,
       source_field: "tooltip_text", raw_value: null, normalized_value: effects.length,
-      confidence: "low", eligible: true, eligibility_reasons: [], contributed: tooltip.source === "ascension_db",
+      confidence: "low", eligible: true, eligibility_reasons: [], contributed: false,   // tooltip is Builder-only now
     });
   }
   return {
@@ -216,10 +207,10 @@ function buildProvenance(fieldProvenance) {
     if (fp.selected_source) used.add(fp.selected_source);
     for (const c of fp.candidates || []) if (c.contributed) used.add(c.source);
   }
-  const conf = { client_dbc: "high", builder: "medium", ascension_db: "medium", inferred: "low" };
-  const notes = { client_dbc: "client_dbc_mechanical", builder: "verified_builder_or_inferred", ascension_db: "db_fallback", inferred: "inferred" };
+  const conf = { client_dbc: "high", builder: "medium", inferred: "low" };
+  const notes = { client_dbc: "client_dbc_mechanical", builder: "verified_builder_or_inferred", inferred: "inferred" };
   const out = [];
-  for (const src of ["client_dbc", "builder", "ascension_db", "inferred"]) {
+  for (const src of ["client_dbc", "builder", "inferred"]) {
     if (used.has(src)) out.push({ source: src, parser: "build-mechanics-artifacts", confidence: conf[src], notes: [notes[src]] });
   }
   if (out.length === 0) out.push({ source: "inferred", parser: "build-mechanics-artifacts", confidence: "low", notes: ["no_source"] });
@@ -235,24 +226,11 @@ function recordConfidence(fp) {
   return anyClient ? "medium" : "low";
 }
 
-export function summarizeMechanicsArtifacts({ mechanicsRows, itemRows }) {
-  const kinds = countBy(mechanicsRows, row => row.kind);
-  const confidence = countBy(mechanicsRows, row => row.confidence);
-  return {
-    schema_version: "coa-mechanics-artifact-summary-v1",
-    generated_at: new Date().toISOString(),
-    mechanics_count: mechanicsRows.length,
-    item_count: itemRows.length,
-    mechanic_kind_counts: kinds,
-    mechanic_confidence_counts: confidence
-  };
-}
-
-function inferEffects({ entry, tooltipText, spellRow, schools = [], durationMs = null }) {
+function inferEffects({ entry, tooltipText, schools = [], durationMs = null }) {
   const tags = entry?.tags || [];
   const school = schools.length === 1 ? schools[0] : (schools.length ? "" : inferSchool(tooltipText));
-  const resolvedDuration = durationMs ?? numberOrNull(spellRow?.duration_ms) ?? inferDurationMs(tooltipText);
-  const periodMs = numberOrNull(spellRow?.period_ms);
+  const resolvedDuration = durationMs ?? inferDurationMs(tooltipText);
+  const periodMs = null;                       // no per-spell tick source survives; E1 supplies it
   const amount = inferAmount(tooltipText);
   if (tags.includes("heal") || /\bheal/i.test(tooltipText)) {
     return [
@@ -337,38 +315,15 @@ function inferSchool(text) {
   return match ? match[1].toLowerCase() : "";
 }
 
-function costsObject(costs) {
-  const output = {};
-  for (const item of costs || []) {
-    const resource = item?.resource ? String(item.resource) : "";
-    const amount = Number(item?.amount);
-    if (resource && Number.isFinite(amount)) {
-      output[resource] = amount;
-    }
-  }
-  return output;
-}
-
-export function sourceUrls(row) {
-  const urls = [
-    row?.source_url,
-    row?.provenance?.url,
-    ...(Array.isArray(row?.source_urls) ? row.source_urls : [])
-  ].filter(Boolean);
-  return [...new Set(urls)];
-}
-
+// E0R.1 T5.3: unknown stays unknown. `Number(null)`/`Number("")`/`Number([])` are all 0 in JS, so a
+// bare Number() coercion silently turns a missing value into a REAL zero — the exact missing-is-default
+// defect this milestone exists to remove. Only an actual number (or a numeric string) converts.
 export function numberOrNull(value) {
+  if (value === null || value === undefined || typeof value === "boolean") return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  if (typeof value !== "number" && typeof value !== "string") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function countBy(rows, keyFn) {
-  return rows.reduce((acc, row) => {
-    const key = keyFn(row) || "unknown";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
 }
 
 function sha256File(p) { return crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex"); }
@@ -379,37 +334,87 @@ function atomicWrite(targetPath, data) {
   fs.renameSync(tmp, targetPath);
 }
 
-function jsonlBytes(rows) {
-  return rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "");
-}
+// E0R.2 T4.1: the fields that carry a readiness verdict — pendingReadiness()'s three, plus power_type,
+// which is null-honest with an unavailable/no_static_anchor readiness whenever the client decode is
+// withheld. Explicit rather than derived from the rows, because the denominator has to be knowable
+// WITHOUT the rows: derived from them, a field that stopped being emitted would leave the set silently.
+export const READINESS_FIELDS = ["cooldown_ms", "costs", "gcd_ms", "power_type"];
 
-function winnerCounts(rows) {
-  const bySource = {}; const byTier = {};
-  for (const r of rows) {
-    for (const [f, fp] of Object.entries(r.field_provenance || {})) {
-      if (!fp.selected_source) continue;
-      bySource[f] = bySource[f] || {}; byTier[f] = byTier[f] || {};
-      bySource[f][fp.selected_source] = (bySource[f][fp.selected_source] || 0) + 1;
-      byTier[f][fp.selected_tier] = (byTier[f][fp.selected_tier] || 0) + 1;
-    }
-  }
-  return { bySource, byTier };
-}
-
-function aggregateCounts(rows) {
+// Coverage of the fields with NO winning source — the population `source_coverage`
+// (per_field_winner_counts_by_source) is silent about, because it counts only fields that HAVE one.
+// A consumer needs both to size the artifact honestly.
+//
+// The denominator is rows x READINESS_FIELDS, not "the readiness entries we happened to emit": a row
+// that stops carrying an entry must show up as `absent` rather than shrink the denominator until the
+// ratio looks fine again. Every (row, field) pair lands in exactly one status and one reason bucket.
+// E0R.2 T5.2: ONE fold over the rows, folded into the write loop. `winnerCounts`, `aggregateCounts`
+// and `fieldReadinessCoverage` were three more passes over a materialized array; a generated row is
+// seen once, so every statistic has to be accumulated as it goes past. The result is defined to be
+// byte-identical to what those three produced — a golden artifact hash and a golden statistics block
+// pin exactly that.
+export function statsAccumulator() {
+  const bySource = {}, byTier = {};
+  const readinessFields = {};
+  for (const field of READINESS_FIELDS) readinessFields[field] = { considered: 0, statuses: {}, reason_codes: {} };
+  const readinessStatuses = {}, readinessReasons = {};
+  let recordCount = 0;
   let unresolved_conflicts = 0, ineligible_candidates = 0, omitted_fields = 0, kind_disagreements = 0;
-  for (const r of rows) {
-    const fp = r.field_provenance || {};
-    for (const p of Object.values(fp)) {
-      if (Array.isArray(p.candidates)) {
-        for (const c of p.candidates) if (c.eligible === false) ineligible_candidates++;
-        if (!p.selected_source && p.candidates.length > 0) omitted_fields++;
+  const bump = (into, key) => { into[key] = (into[key] || 0) + 1; };
+
+  return {
+    observe(row) {
+      recordCount += 1;
+
+      const fp = row.field_provenance || {};
+      for (const [field, p] of Object.entries(fp)) {
+        if (p.selected_source) {
+          bySource[field] = bySource[field] || {}; byTier[field] = byTier[field] || {};
+          bump(bySource[field], p.selected_source);
+          bump(byTier[field], p.selected_tier);
+        }
+        if (Array.isArray(p.candidates)) {
+          for (const c of p.candidates) if (c.eligible === false) ineligible_candidates++;
+          if (!p.selected_source && p.candidates.length > 0) omitted_fields++;
+        }
+        if (p.selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT) unresolved_conflicts++;
       }
-      if (p.selection_reason === REASON.OMITTED_UNRESOLVED_CONFLICT) unresolved_conflicts++;
-    }
-    if (fp.kind && fp.kind.selection_reason === REASON.KIND_NODE_DISAGREEMENT_RESOLVED) kind_disagreements++;
-  }
-  return { unresolved_conflicts, ineligible_candidates, omitted_fields, kind_disagreements };
+      if (fp.kind && fp.kind.selection_reason === REASON.KIND_NODE_DISAGREEMENT_RESOLVED) kind_disagreements++;
+
+      const readiness = row.field_readiness || {};
+      for (const field of READINESS_FIELDS) {
+        const entry = readiness[field];
+        const status = entry ? (entry.status ?? "unspecified") : "absent";
+        const reason = entry ? (entry.reason_code ?? "unspecified") : "absent";
+        readinessFields[field].considered += 1;
+        bump(readinessFields[field].statuses, status);
+        bump(readinessFields[field].reason_codes, reason);
+        bump(readinessStatuses, status);
+        bump(readinessReasons, reason);
+      }
+    },
+    result() {
+      return {
+        record_count: recordCount,
+        per_field_winner_counts_by_source: bySource,
+        per_field_winner_counts_by_tier: byTier,
+        field_readiness_coverage: {
+          schema_version: "coa-mechanics-readiness-coverage-v1",
+          rows: recordCount,
+          fields_considered: recordCount * READINESS_FIELDS.length,
+          statuses: readinessStatuses, reason_codes: readinessReasons, fields: readinessFields,
+        },
+        counts: { unresolved_conflicts, ineligible_candidates, omitted_fields, kind_disagreements },
+      };
+    },
+  };
+}
+
+// The T4.1 entry point, over any iterable — ONE implementation, so the standalone view and the folded
+// one can never disagree about what a denominator is.
+export function fieldReadinessCoverage(rows) {
+  const acc = statsAccumulator();
+  for (const row of rows) acc.observe(row);
+  return acc.result().field_readiness_coverage;
 }
 
 function gitHeadCommit() {
@@ -420,20 +425,38 @@ function gitHeadCommit() {
   }
 }
 
-export function buildMechanicsArtifact({ entries, spellRows, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {} }) {
+// E0R.2 T4.3: WHAT this build read, stated as five identities the producer's acceptance run re-derives
+// independently. Without them a mechanics artifact is bound to nothing — it could have been built from
+// another generation, another policy or another Builder corpus and still look canonical.
+export const MECHANICS_BINDING_KEYS = ["builder_entries_sha256", "input_generation_id", "policy_sha256",
+                                       "pointer_manifest_sha256", "projection_child_sha256"];
+
+export function mechanicsInputBinding(resolved, builderEntriesSha256) {
+  const manifest = resolved?.manifest || {};
+  const children = manifest.children || {};
+  return {
+    input_generation_id: resolved?.generationId ?? null,
+    pointer_manifest_sha256: resolved?.pointerManifestSha256 ?? null,
+    policy_sha256: (manifest.binding || {}).policy_sha256 ?? null,
+    projection_child_sha256: (children["coa_client_spell_coa.jsonl"] || {}).sha256 ?? null,
+    builder_entries_sha256: builderEntriesSha256 ?? null,
+  };
+}
+
+export function buildMechanicsArtifact({ entries, projectionPath, manifestPath, outDir, allowFallback = false, inputs = {}, policyPath = null }) {
   const builderSpellIds = new Set(entries.map((e) => Number(e.spell_id)).filter(Number.isFinite));
-  const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds });
+  const loaded = loadAndValidateProjection({ projectionPath, manifestPath, builderSpellIds, policyPath });
 
   if (loaded.absent) {
     if (!allowFallback) throw new MechanicsBuildError("projection absent; refusing canonical build (pass --allow-fallback-mechanics for a degraded build)");
-    const rows = buildMechanicsRows({ entries, spellRows, projection: [] });
+    const rows = buildCanonicalMechanics({ entries, projection: [] });
     // A degraded build writes ONLY the coa_mechanics.fallback.* files. It NEVER writes the canonical
     // filename — MechanicsRepository reads the JSONL directly and would ingest degraded bytes as
     // canonical regardless of a canonical:false marker. There is no override.
     return writeArtifact({ rows, outDir, canonical: false, clientSource: "absent", fallbackAuthorized: true, loaded, inputs, base: "coa_mechanics.fallback" });
   }
 
-  const rows = buildMechanicsRows({ entries, spellRows, projection: loaded.projection });
+  const rows = buildCanonicalMechanics({ entries, clientById: loaded.clientById });
   return writeArtifact({ rows, outDir, canonical: true, clientSource: "present", fallbackAuthorized: false, loaded, inputs, base: "coa_mechanics" });
 }
 
@@ -444,9 +467,24 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
   const jsonlPath = path.join(outDir, jsonlName);
   const manifestPath = path.join(outDir, manifestName);
 
-  const body = jsonlBytes(rows);
-  const sha = crypto.createHash("sha256").update(body).digest("hex");
-  const { bySource, byTier } = winnerCounts(rows);
+  // Stream the OUTPUT serialization: row-by-row write to a temp file with an incremental hash — never a
+  // whole-output string or a post-hoc re-read of the artifact (E0R.1 T4.2).
+  // E0R.2 T5.2: and the STATISTICS fold in beside it. `rows` is a one-shot generator now, so this loop
+  // is the only pass over it — the record count is counted here rather than read off a `.length` that
+  // no longer exists.
+  const jsonlTmp = `${jsonlPath}.tmp-${process.pid}-${Date.now()}`;
+  const outFd = fs.openSync(jsonlTmp, "w");
+  const outHash = crypto.createHash("sha256");
+  const stats = statsAccumulator();
+  for (const r of rows) {
+    const line = Buffer.from(JSON.stringify(r) + "\n");
+    fs.writeSync(outFd, line);
+    outHash.update(line);
+    stats.observe(r);
+  }
+  fs.closeSync(outFd);
+  const sha = outHash.digest("hex");
+  const measured = stats.result();
   const manifest = {
     schema_version: "coa-mechanics-manifest-v1",
     generated_at: new Date().toISOString(),
@@ -454,22 +492,27 @@ function writeArtifact({ rows, outDir, canonical, clientSource, fallbackAuthoriz
     reconciliation_policy_version: "m1.14c-1",
     reconciler_commit: canonical ? (inputs.reconciler_commit ?? null) : null,
     client_build: loaded.absent ? null : (loaded.client_build ?? null),
+    // A degraded build read no generation, so it binds to none — and says so rather than claiming one.
+    binding: canonical ? (inputs.binding ?? null) : null,
     inputs: {
       builder_entries: inputs.builder_entries || null,
       db_spell_tooltips: inputs.db_spell_tooltips || null,
       projection: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_path || null, sha256: loaded.projection_sha256 },
       projection_manifest: loaded.absent ? { path: null, sha256: null } : { path: inputs.projection_manifest_path || null, sha256: loaded.manifest_sha256 },
     },
-    outputs: { mechanics_jsonl: jsonlName, sha256: sha, record_count: rows.length },
+    outputs: { mechanics_jsonl: jsonlName, sha256: sha, record_count: measured.record_count },
     coverage: loaded.absent ? null : loaded.coverage,
-    per_field_winner_counts_by_source: bySource,
-    per_field_winner_counts_by_tier: byTier,
-    counts: aggregateCounts(rows),
+    per_field_winner_counts_by_source: measured.per_field_winner_counts_by_source,
+    per_field_winner_counts_by_tier: measured.per_field_winner_counts_by_tier,
+    // E0R.2 T4.1: the other half of the picture — the fields with no winning source at all, sized
+    // against an exact rows x fields denominator (see statsAccumulator).
+    field_readiness_coverage: measured.field_readiness_coverage,
+    counts: measured.counts,
   };
 
   // manifest-as-validity-marker: remove previous manifest first, then JSONL, then manifest — each atomic.
   if (fs.existsSync(manifestPath)) fs.rmSync(manifestPath);
-  atomicWrite(jsonlPath, body);
+  fs.renameSync(jsonlTmp, jsonlPath);
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return { canonical, manifest };
 }
@@ -486,7 +529,6 @@ if (isCliEntryPoint()) {
   };
   const has = (name) => args.includes(name);
   const entriesPath = flag("--builder-entries", "dist/coa_entries.jsonl");
-  const dbPath = flag("--db-spells", "dist/coa_db_spell_tooltips.jsonl");
   const outDir = flag("--out", "dist");
   const pointerPath = flag("--client-extract-pointer", null);
   const allowFallbackFlag = has("--allow-fallback-mechanics");
@@ -494,7 +536,7 @@ if (isCliEntryPoint()) {
 
   // Producer publishes the pointer; the consumer REQUIRES it for a canonical run. The legacy fixed-path
   // projection runs only under the existing --allow-fallback-mechanics degraded path.
-  let projectionPath, projManifestPath, allowFallback;
+  let projectionPath, projManifestPath, policyPath, allowFallback, resolvedGeneration = null;
   if (pointerPath) {
     if (has("--projection") || has("--projection-manifest")) {
       console.error("pass EITHER --client-extract-pointer OR --projection/--projection-manifest, not both");
@@ -502,8 +544,10 @@ if (isCliEntryPoint()) {
     }
     try {
       const resolved = resolveGeneration(pointerPath);
+      resolvedGeneration = resolved;
       projectionPath = resolved.children["coa_client_spell_coa.jsonl"];
       projManifestPath = resolved.children["coa_client_spell_projection.manifest.json"];
+      policyPath = resolved.children["spell_layout_v2.json"];    // the reviewed policy child (v3 verify)
     } catch (err) {
       if (err instanceof GenerationResolveError) { console.error(`error: client-extract pointer: ${err.message}`); process.exit(2); }
       throw err;
@@ -522,14 +566,15 @@ if (isCliEntryPoint()) {
     allowFallback = true;
   }
   const entries = readJsonl(entriesPath);
-  const spellRows = fs.existsSync(dbPath) ? readJsonl(dbPath) : [];
+  const entriesSha256 = sha256File(entriesPath);
   try {
     const { canonical, manifest } = buildMechanicsArtifact({
-      entries, spellRows, projectionPath, manifestPath: projManifestPath, outDir,
-      allowFallback,
+      entries, projectionPath, manifestPath: projManifestPath, outDir,
+      allowFallback, policyPath,
       inputs: {
-        builder_entries: { path: entriesPath, sha256: sha256File(entriesPath) },
-        db_spell_tooltips: fs.existsSync(dbPath) ? { path: dbPath, sha256: sha256File(dbPath) } : null,
+        binding: resolvedGeneration ? mechanicsInputBinding(resolvedGeneration, entriesSha256) : null,
+        builder_entries: { path: entriesPath, sha256: entriesSha256 },
+        db_spell_tooltips: null,
         projection_path: projectionPath, projection_manifest_path: projManifestPath,
         reconciler_commit: gitHeadCommit(),
       },

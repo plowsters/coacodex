@@ -100,3 +100,27 @@ def test_coa_system_sentinel_contributes_coa_mode_not_a_new_mode():
     assert m["class_internal"] == "ConquestOfAzeroth"
     assert m["mode"] == "coa"
     assert m["class_kind"] == "coa_system"
+
+
+def test_multimode_coa_plus_stock_is_still_coa():
+    # E0R regression: a spell that participates on BOTH a CoA-class node and a stock node is still
+    # authoritatively is_coa (because "coa" is among its modes) — the two-pass projection set includes it,
+    # never depending on the spell_id id-floor.
+    nodes = [
+        _node(1, 503748, 15, "coa_class", "WitchDoctor"),
+        _node(2, 503748, 3, "stock", "Mage"),
+    ]
+    a = attribute(nodes, {})[503748].result
+    assert a.is_coa is True
+    assert set(a.modes) == {"coa", "stock"} and a.exclusive_mode is None   # multi-mode, no single owner
+    # the authoritative CoA id set (what iter_spell_records consumes) includes a multi-mode CoA spell
+    coa_ids = {sid for sid, sa in attribute(nodes, {}).items() if sa.result.is_coa}
+    assert 503748 in coa_ids
+
+
+def test_stock_only_spell_is_not_coa_even_at_a_high_id():
+    # A purely-stock (or reborn) node at a high spell id is NOT CoA — proving is_coa never leaks from the
+    # spell_id>=100000 id floor.
+    nodes = [_node(1, 900123, 3, "stock", "Mage")]
+    coa_ids = {sid for sid, sa in attribute(nodes, {}).items() if sa.result.is_coa}
+    assert 900123 not in coa_ids

@@ -17,7 +17,10 @@ class APLRuntimeState:
     debuffs: dict[str, int] = field(default_factory=dict)
     active_enemies: int = 1
     target_health_pct: float = 100.0
-    gcd_ms: int = 1500
+    # E0R.1 T5.4: the gcd is UNKNOWN until a proven value is supplied. It was 1500 by default, which
+    # silently answered `remains<gcd` with an invented number; an unknown gcd now makes the condition
+    # unevaluable (reported), never quietly true or false.
+    gcd_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,8 @@ class APLInterpreter:
 
         match = re.fullmatch(r"dot\.([a-z0-9_]+)\.remains<gcd", condition)
         if match:
+            if state.gcd_ms is None:
+                return False, f"unevaluable_condition_unknown_gcd:{condition}"
             remains = state.debuffs.get(match.group(1), 0)
             return remains < state.gcd_ms, None
 

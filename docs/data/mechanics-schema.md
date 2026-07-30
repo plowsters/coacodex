@@ -1,10 +1,13 @@
 # Mechanics Schema
 
-Mechanics records use schema version `coa-mechanics-v1`.
+Mechanics records use schema version `coa-mechanics-v2`. The loader **hard-rejects** `coa-mechanics-v1`
+— see [M1.14E0R — `coa-mechanics-v2`](#m114e0r--coa-mechanics-v2) below for what changed. The v1 field
+list is retained here because v2 is a superset: every field below still applies unless a v2 note says
+otherwise.
 
 ## Purpose
 
-Mechanics records describe how spells, passives, buffs, debuffs, pets, and item effects behave when the simulator or report explainers need more than builder legality data. The schema is intentionally tolerant of partial records because many fields are inferred from AscensionDB tooltips or later log calibration.
+Mechanics records describe how spells, passives, buffs, debuffs, pets, and item effects behave when the simulator or report explainers need more than builder legality data. The schema is tolerant of partial records because a field's value is only as good as the tier that supplied it: `client_dbc` ▸ `verified_builder` ▸ `inferred`, with per-field readiness recording *why* an absent field is absent. (Before M1.14E0R.1 the tolerance existed for a different reason — many fields were inferred from AscensionDB tooltips. That tier is deleted; an unavailable field is now a recorded observation, not a gap waiting on a scrape.)
 
 ## Required Fields
 
@@ -19,7 +22,9 @@ Mechanics records describe how spells, passives, buffs, debuffs, pets, and item 
 ## Common Optional Fields
 
 - `source_node_ids`: builder node IDs associated with the spell
-- `source_urls`: AscensionDB or other source URLs
+- `source_urls`: external source URLs. **Always `[]` in a canonical build since M1.14E0R.1** — the
+  AscensionDB tier that populated it is deleted and a canonical build is network-free. The field
+  survives for hand-authored and legacy records.
 - `school`, `power_type`, `range_yards`
 - `schools`: additive multi-school list — see [Schools](#schools) below
 - `cast_time_ms`, `gcd_ms`, `cooldown_ms`, `charges`
@@ -34,9 +39,10 @@ Mechanics records describe how spells, passives, buffs, debuffs, pets, and item 
 - `raw`: audit-only payload, never a normalized-field replacement. As emitted by
   `build-mechanics-artifacts.mjs`, `raw.tags` carries the merged, set-like union of every
   contributing builder node's tags — **builder tags are not a top-level field**; they live under
-  `raw.tags` only. `raw` also carries `category`, `spell_icon_id`, `school_mask` (client-sourced,
-  when present) and the AscensionDB audit trio `db_status`, `db_excluded`, `db_exclusion_reason`,
-  plus `linked_item_ids`. None of `raw.*` is part of the normalized contract.
+  `raw.tags` only. `raw` also carries `category`, `spell_icon_id` and `school_mask` (client-sourced,
+  when present). None of `raw.*` is part of the normalized contract. **Corrected by M1.14E0R.1:** this
+  list previously named an AscensionDB audit trio (`db_status`, `db_excluded`, `db_exclusion_reason`)
+  and `linked_item_ids`; none of those keys is emitted, because nothing produces them.
 
 ## Effect Fields
 
@@ -59,7 +65,7 @@ Effects may include `school`, `target`, `amount`, `aura`, `stat`, `trigger_spell
 
 Every inferred or source-derived record should include provenance:
 
-- `source`: builder, ascension_db, tooltip_parser, override, log_calibration, or another explicit source
+- `source`: client_dbc, builder, tooltip_parser, override, log_calibration, or another explicit source
 - `source_id`: source-local identifier such as `spell:2001`
 - `source_url`: optional canonical URL
 - `parser`: parser or rule name
@@ -104,10 +110,10 @@ Each value has the shape:
 
 ```jsonc
 {
-  "selected_source": "client_dbc" | "builder" | "ascension_db" | "inferred" | null,
-  "selected_tier": "client_dbc" | "verified_builder" | "ascension_db" | "inferred" | null,
+  "selected_source": "client_dbc" | "builder" | "inferred" | null,
+  "selected_tier": "client_dbc" | "verified_builder" | "inferred" | null,
   "selected_value": <the value that won, or null if the field was omitted>,
-  "selection_reason": "highest_precedence_eligible" | "only_candidate" | "db_fallback"
+  "selection_reason": "highest_precedence_eligible" | "only_candidate"
     | "inferred_last_resort" | "inferred_from_text" | "kind_node_disagreement_resolved"
     | "omitted_unresolved_conflict" | "omitted_no_eligible_candidate",
   "warnings": ["kind_node_disagreement", ...],
@@ -119,28 +125,28 @@ Each entry in `candidates[]` records one source's contribution attempt, whether 
 
 ```jsonc
 {
-  "source": "client_dbc" | "builder" | "ascension_db",
-  "precedence_tier": "client_dbc" | "verified_builder" | "ascension_db" | "inferred",
-  "source_id": "client_spell:805775" | "builder_node:1234" | "ascension_db:9001",
+  "source": "client_dbc" | "builder",
+  "precedence_tier": "client_dbc" | "verified_builder" | "inferred",
+  "source_id": "client_spell:805775" | "builder_node:1234",
   "source_field": "cast_time_ms" | "school_mask" | "entry_type" | "tooltip_text" | ...,
   "raw_value": <value as read from the source, before normalization>,
   "normalized_value": <value after normalization, or null>,
   "confidence": "high" | "medium" | "low",
   "eligible": true | false,
   "eligibility_reasons": ["client_table_drift", "unknown_mask_bit", "unknown_enum",
-    "same_tier_conflict", "db_identity_mismatch", "db_identity_unverifiable", ...],
+    "same_tier_conflict", "inferred_power_type_withheld", ...],
   "contributed": true   // present ONLY on `kind` and `effects` candidates
 }
 ```
 
-A candidate's `source` is always one of `client_dbc`, `builder`, or `ascension_db` — **never**
+A candidate's `source` is always one of `client_dbc` or `builder` — **never**
 `inferred`. `inferred` is a *tier* / *field-level source*, not a candidate source: it appears only as
 a candidate's `precedence_tier` (see below) and as a field-level `selected_source` / `selected_tier`
 (on the `effects` field, whose value is heuristically inferred rather than drawn from any single
 candidate).
 
-`precedence_tier` is one of four ranked tiers, highest first: `client_dbc` → `verified_builder` →
-`ascension_db` → `inferred`. Within a tier, if two or more present candidates disagree, **all**
+`precedence_tier` is one of three ranked tiers, highest first: `client_dbc` → `verified_builder` →
+`inferred` (E0R deleted the former `ascension_db` tier). Within a tier, if two or more present candidates disagree, **all**
 candidates in that tier are marked `eligible: false` with reason `same_tier_conflict` and the field
 falls through to the next tier (never a node-order winner). The first eligible candidate in
 precedence order wins.
@@ -149,7 +155,7 @@ precedence order wins.
 fixed tier: for the `name` and `kind` fields a builder candidate is `verified_builder`, but for the
 five reconciled *mechanical* fields (`schools`, `power_type`, `cast_time_ms`, `duration_ms`,
 `range_yards`) a builder candidate is `inferred` (builder-derived mechanics are inferred data, ranked
-below `ascension_db`). This is why `per_field_winner_counts_by_tier` (in the manifest) will show
+last). This is why `per_field_winner_counts_by_tier` (in the manifest) will show
 `verified_builder` wins for `name`/`kind` but **never** for `schools`/`power_type`/etc. — a builder
 win on a mechanical field is counted under `inferred`, not `verified_builder`.
 
@@ -158,12 +164,9 @@ The `contributed` flag exists only on the `kind` and `effects` entries in `field
 inferred from tag/tooltip text) are **not** reconciled through the tiered precedence engine above —
 they are derived from every builder node plus the record's tooltip text. `contributed: true` marks
 each candidate whose value was actually incorporated into the emitted result — so for `kind`, **every**
-builder-node candidate is `contributed` (the classification is derived from all nodes), and the
-tooltip candidate is `contributed` only when it is db-sourced; for `effects`, the db tooltip candidate
-is `contributed` only when db-sourced. Marking the db tooltip this way is how the record-level
-`provenance` array (below) can list `ascension_db` even when no top-level field's `selected_source`
-is `ascension_db` — a DB-sourced tooltip that only informed `kind`/`effects` still counts as DB
-participation.
+builder-node candidate is `contributed` (the classification is derived from all nodes). Since the E0R
+sunset the tooltip itself is builder-sourced (`verified_builder`), so `kind`/`effects` participation
+is attributed to the builder; no record can list an `ascension_db` contribution.
 
 ## Record-Level `confidence`
 
@@ -175,7 +178,8 @@ per-field `selected_source` values:
 2. `"medium"` — the `"high"` condition isn't met, but at least one field anywhere in the record was
    selected from `client_dbc`.
 3. `"low"` — no field was selected from `client_dbc` (the record relies entirely on
-   builder/AscensionDB/inferred data).
+   `verified_builder`/`inferred` data — the two tiers that remain below `client_dbc` after
+   M1.14E0R.1 deleted `ascension_db`).
 
 ## Mechanics Manifest (`coa-mechanics-manifest-v1`)
 
@@ -207,8 +211,8 @@ so a crash never leaves a stale manifest next to a new JSONL.
     "builder_missing_from_projection": 0,
     "projection_only": 34
   },
-  "per_field_winner_counts_by_source": { "cast_time_ms": { "client_dbc": 900, "ascension_db": 50 }, ... },
-  "per_field_winner_counts_by_tier": { "cast_time_ms": { "client_dbc": 900, "ascension_db": 50 }, ... },
+  "per_field_winner_counts_by_source": { "cast_time_ms": { "client_dbc": 900, "builder": 50 }, ... },
+  "per_field_winner_counts_by_tier": { "cast_time_ms": { "client_dbc": 900, "inferred": 50 }, ... },
   "counts": { "unresolved_conflicts": 0, "ineligible_candidates": 0, "omitted_fields": 0, "kind_disagreements": 0 }
 }
 ```
@@ -263,3 +267,12 @@ omitted). The four counts:
 - Consumers must tolerate missing optional fields.
 - Low-confidence mechanics should not silently produce high-confidence simulation results.
 - Raw source payloads are audit data and should not replace normalized fields unless debugging enrichment drift.
+
+## M1.14E0R — `coa-mechanics-v2`
+
+`costs` is now `dict | None` (`null` = unknown, `{}` = verified empty) and is **always serialized
+explicitly** (missing ≠ default). Each record may carry `field_readiness` `{field: {status, reason_code}}`
+validated against the readiness state machine — see
+[field-readiness-schema.md](field-readiness-schema.md). The loader hard-rejects `coa-mechanics-v1`. With
+AscensionDB removed, `cooldown_ms`/`gcd_ms`/`costs` are `null` + `{unavailable, pending_e1_operand}` until
+M1.14E1 supplies the operands.

@@ -1,6 +1,6 @@
 # CoA Meta Analyzer Documentation
 
-This directory documents the architecture and release roadmap for the Conquest of Azeroth meta analyzer. The current repository contains the Phase 1 package, the scraper/normalization pipeline, legacy prototype scripts, implemented M1.10 guide-site work, and an implemented first pass of the M1.11 report-correctness, data-parity, and simulation-hardening milestone (sub-milestones A–G).
+This directory documents the architecture and release roadmap for the Conquest of Azeroth meta analyzer. The current repository contains the Phase 1 package, the scraper/normalization pipeline, the client-native extraction producer, legacy prototype scripts, the M1.10 guide site, the M1.11 report-correctness/data-parity/simulation-hardening pass (A–G), and the in-progress M1.14 client DBC data foundation.
 
 ## Document Map
 
@@ -18,7 +18,8 @@ This directory documents the architecture and release roadmap for the Conquest o
 The current codebase has these main areas:
 
 - `coa_meta/`: Phase 1 package for normalized data loading, build legality/search, scoring profiles, APL generation, combat engine scaffolding, mechanics inference, stat/gear placeholders, report generation, and CLI entrypoints.
-- `coa_scraper/`: Playwright/HAR capture, Next Flight payload extraction, normalization, AscensionDB enrichment, and captured reports/dist artifacts.
+- `coa_scraper/`: Playwright/HAR capture, Next Flight payload extraction, normalization, mechanics artifact building from a published client-extraction pointer, and captured reports/dist artifacts.
+- `coa_client_extract/`: the client-native extraction producer — MPQ/DBC reading behind a StormLib binding, the reviewed client-bound layout policy, and transactional publication of a hash-pinned generation.
 - `coa_optimizer_extensible.py` and `coa_graph_optimizer.py`: legacy prototype optimizer scripts retained for experimentation and compatibility.
 - `CoADataLogger/`: minimal WotLK 3.3.5 addon scaffold that captures player-sourced combat events and basic snapshots to SavedVariables.
 
@@ -47,16 +48,18 @@ The report emits projected theorycraft indexes. It does not emit observed DPS, s
 
 The command writes progress logs to stderr, including start, artifact/report stages, output formats, and completion.
 
-For the M1.10 static guide-site renderer, include DB tooltip enrichment when available:
+For the static guide-site renderer, ask for the HTML format:
 
 ```bash
 python -m coa_meta meta \
   --entries coa_scraper/dist/coa_entries.jsonl \
   --classes coa_scraper/dist/coa_classes.json \
-  --db-tooltips coa_scraper/dist/coa_db_spell_tooltips.jsonl \
   --out reports/meta \
   --format html
 ```
+
+Spell icons and hover tooltips resolve from the published client generation, so the renderer takes no
+tooltip-enrichment input and makes no network request.
 
 This writes `index.html`, `meta-report.html`, `specs/*.html`, and static assets under `reports/meta/assets/`. Spec pages include static talent trees, level snapshots, diverse recommended builds, and player-facing core rotation loops when the corresponding report fields are available.
 
@@ -92,20 +95,48 @@ python coa_optimizer_extensible.py optimize \
 
 For compatibility, the prototype now resolves a missing root-level `dist/coa_entries.jsonl` to `coa_scraper/dist/coa_entries.jsonl` when that artifact exists.
 
-## Optional M1.8 DB Enrichment
+## Client-Native Mechanics Extraction
 
-The default Phase 1 report path remains network-free after artifacts exist. To refresh source and level enrichment from AscensionDB, run:
+Spell mechanics come from the local Ascension client, not from a remote database. The M1.8/M1.9 DB
+enrichment pipeline was **retired** by M1.14E0R: its runtime is deleted, `ascension_db` is no longer a
+reconciliation tier, and a canonical build makes no network request at all.
+
+Extraction runs against a real client install and publishes a hash-pinned generation:
 
 ```bash
-npm run pipeline:m1.8
+python -m coa_client_extract mechanics-recon --client-root "$COA_CLIENT_ROOT" --out reports/client_extract
+python -m coa_client_extract regenerate --client-root "$COA_CLIENT_ROOT" --out reports/client_extract
 ```
 
-From inside `coa_scraper/`, the equivalent command is `npm run pipeline:m1.8`; from any other working
-directory, use `npm --prefix coa_scraper run pipeline:m1.8`.
+`mechanics-recon` is the hard hold: it proves the client topology against the reviewed layout policy and
+must report `verified` before a `regenerate` may promote any value. `regenerate` stages a candidate
+generation, validates it in both Python and Node, and only then writes the pointer the consumers read.
+`$COA_CLIENT_ROOT` is the client's `Data` directory; both commands need the proprietary client and are
+therefore local-only, never CI steps.
 
-This writes DB tooltip artifacts and an enriched entries file. AscensionDB enrichment is used for provenance and lower-level confidence; it does not replace builder legality fields.
+The Node consumer builds its mechanics artifacts from that pointer:
+
+```bash
+npm --prefix coa_scraper run build-mechanics
+```
+
+It fails closed when the pointer is absent or unready rather than substituting a default, so a missing
+cost or cooldown stays `null` (unknown) instead of becoming a fabricated number.
 
 ## Current Status
+
+Phase 1 is mid-**M1.14** (client DBC data foundation). Mechanics, legality, and icons resolve from the
+local client under a reviewed, hash-bound policy; per-field readiness marks what is genuinely extracted
+and what remains unavailable, and consumers fail closed on the difference. Cast time, effect duration,
+and spell range are **not** yet available — their `Spell.dbc` columns are not uniquely resolvable from
+admissible evidence (see [ROADMAP.md](ROADMAP.md), M1.14G). Rankings therefore remain projected
+theorycraft indexes, not empirical or recommendation-grade output.
+
+### Milestone History (as shipped)
+
+The entries below record each milestone as it shipped, and are **history**: several describe
+AscensionDB enrichment, DB tooltips, and remote icon hotlinks, all of which M1.14E0R removed in favour
+of the client-native pipeline described above.
 
 M1.11, the Phase 1 report-correctness, data-parity, and simulation-hardening milestone, is implemented as a first pass across all sub-milestones (A–G) and merged to `main`. It corrected guide output where the M1.10 static site was useful but not yet faithful enough to the CoA Builder, intended roles, source assets, or rotation expectations. See [ROADMAP.md](ROADMAP.md), [M1.11 Design](superpowers/specs/2026-07-05-m1-11-report-correctness-data-parity-design.md), and [M1.11 Implementation Plan](superpowers/plans/2026-07-05-m1-11-report-correctness-data-parity.md).
 

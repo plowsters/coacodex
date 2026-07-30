@@ -77,6 +77,7 @@ def _result(
     )
     return RotationSimulationResult(
         source=candidate_id,
+        source_kind="verified",
         duration_ms=60_000,
         events=events,
         resources={},

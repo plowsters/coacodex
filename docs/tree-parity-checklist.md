@@ -39,7 +39,6 @@ Generate the guide with the captured layout root:
 PYTHONPATH=. python -m coa_meta meta \
   --entries coa_scraper/dist/coa_entries.jsonl \
   --classes coa_scraper/dist/coa_classes.json \
-  --db-tooltips coa_scraper/dist/coa_db_spell_tooltips.jsonl \
   --builder-layout-root coa_scraper/reports/tree_layout \
   --out reports/meta \
   --format html

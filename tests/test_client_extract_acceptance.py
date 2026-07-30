@@ -22,41 +22,50 @@ DB = REPO / "coa_scraper/dist/coa_db_spell_tooltips.jsonl"
 def test_spell_805775_is_current_adrenal_venom(tmp_path):
     from coa_client_extract.cli import regenerate
     from coa_client_extract.errors import BackendUnavailable
+    from coa_client_extract.publish import resolve_active_generation
 
     try:
         manifest = regenerate(CLIENT_ROOT, tmp_path)  # real StormLib backend, real layouts
     except BackendUnavailable:
         pytest.skip("StormLib not available")
 
+    # Noncanonical fixed-path summary; the authoritative manifest is the published generation manifest-v3.
     assert manifest["schema_version"] == "coa-client-extract-manifest-v1"
+    assert manifest["publication_state"] == "published"
+    assert manifest["budget"]["within_budget"] is True
 
-    rows = [json.loads(line) for line in (tmp_path / "coa_client_spell.jsonl").read_text().splitlines()]
+    resolved = resolve_active_generation(tmp_path)
+    assert resolved["manifest"]["schema_version"] == "coa-client-extract-manifest-v3"
+    gen = resolved["gen_dir"]
+    rows = [json.loads(line) for line in (gen / "coa_client_spell.jsonl").read_text().splitlines()]
     by_id = {r["spell_id"]: r for r in rows}
     assert 805775 in by_id, "spell 805775 not extracted"
     venom = by_id[805775]
-    assert venom["schema_version"] == "coa-client-spell-v2"
+    # The full-table child is the compact client-DBC v3 row: identity + normalized mechanics + attribution
+    # + compact raw; per-row provenance/proof are hoisted to the manifest binding (design A4).
+    assert venom["schema_version"] == "coa-client-spell-v4"
     assert "Adrenal Venom" in venom["name"]
     assert "Fang Venom" not in venom["name"]  # not the stale db value
-    assert venom["provenance"]["policy_sha256"]                 # v2: bound policy pinned in provenance
+    assert venom["coa_attribution"]["policy_sha256"]           # v3: policy pinned on the row's attribution
     assert venom["mechanics"]["power_type"] == 3               # energy @41, per-value gate (in-domain)
-    assert venom["coa_attribution"]["is_coa"] is True          # M1.14B fills attribution
-    assert "coa" in venom["coa_attribution"]["modes"]
+    assert venom["coa_attribution"]["is_coa"] is True          # id-floor attribution (805775 >= 100000)
+    assert "raw" in venom and "id" in venom["raw"]             # compact raw substrate retained
 
-    # Empirical finding (real client, 2026-07): the current authoritative Spell.dbc — the one
-    # carrying 805775 = Adrenal Venom — is supplied by patch-T.MPQ, NOT a patch-C* archive.
-    # So the archive_family raw signal is "other" (undecided), not "coa": Decision 18's
-    # patch-C*-only CoA heuristic is incomplete, and reconciling the patch-T family is M1.14B's
-    # job. M1.14A only asserts provenance is real and internally consistent.
+    # archive_family is the raw M1.14A signal, derived from the effective archive of the Spell.dbc member,
+    # now hoisted ONCE to the manifest binding topology instead of repeated on every row (design A4).
     from coa_client_extract.archive_plan import family_of
 
-    effective = venom["provenance"]["effective_archive"]
+    topo = resolved["manifest"]["binding"]["topology"]
+    effective = topo["tables"]["Spell"]["effective_archive"]
     assert effective.lower().endswith(".mpq")
     assert venom["coa_attribution"]["archive_family"] == family_of(effective)
-    # source_dbcs records every contributing table, and Spell's matches the effective archive
-    assert venom["provenance"]["source_dbcs"]["Spell"] == effective
-    # v2 also reads SpellIcon for the icon join; every side table present on the real client is listed
-    assert {"Spell", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellIcon"} <= set(
-        venom["provenance"]["source_dbcs"])
+    # Every required table is bound in the manifest topology (the shared A2 verifier proved them present).
+    assert {"Spell", "SpellCastTimes", "SpellDuration", "SpellRange", "SpellIcon"} <= set(topo["tables"])
+
+    # The icon catalog covers 805775 and hashes the actual client BLP bytes (not the path string).
+    icons = {json.loads(l)["spell_id"]: json.loads(l)
+             for l in (gen / "coa_client_spell_icons.jsonl").read_text().splitlines()}
+    assert 805775 in icons and icons[805775]["asset_status"] in ("source_only", "converted", "missing")
 
 
 @pytest.mark.skipif(not CLIENT_ROOT.is_dir(), reason="Ascension client not installed at COA_CLIENT_ROOT")
@@ -64,16 +73,18 @@ def test_real_client_advancement_parity(tmp_path):
     from coa_client_extract.cli import regenerate
     from coa_client_extract.errors import BackendUnavailable
 
+    from coa_client_extract.publish import resolve_active_generation
     builder_path = Path("coa_scraper/dist/coa_entries.jsonl")
     try:
         regenerate(CLIENT_ROOT, tmp_path, builder_entries_path=str(builder_path),
                    client_only_adjudication_path="reports/client_extract/client_only_adjudication.json")
     except BackendUnavailable:
         pytest.skip("StormLib not available")
+    gen = resolve_active_generation(tmp_path)["gen_dir"]           # canonical children live in gen-<uuid>/
 
     # --- class taxonomy: exactly 21 playable CoA classes, ConquestOfAzeroth (35) sentinel excluded ---
     class_types = [json.loads(l) for l in
-                   (tmp_path / "coa_client_class_types.jsonl").read_text().splitlines()]
+                   (gen / "coa_client_class_types.jsonl").read_text().splitlines()]
     playable = [c for c in class_types if c["kind"] == "coa_class"]
     assert len(playable) == 21
     assert all(c["class_type_id"] != 35 for c in playable)
@@ -124,24 +135,20 @@ def test_real_client_advancement_parity(tmp_path):
 
     # --- 805775 is current "Adrenal Venom" on a Venomancer node; attribution filled ---
     adv = [json.loads(l) for l in
-           (tmp_path / "coa_client_advancement.jsonl").read_text().splitlines()]
+           (gen / "coa_client_advancement.jsonl").read_text().splitlines()]
     venom = [n for n in adv if n["spell_id"] == 805775]
     assert venom and any(n["class"]["display"] == "Venomancer" for n in venom)
     assert any(n["name"] == "Adrenal Venom" for n in venom)
     assert all(n["coa_attribution"]["is_coa"] is True for n in venom)
 
     # --- shared spell 503748 = two distinct Witch Doctor nodes (node identity != spell identity) ---
-    assert len([n for n in adv if n["spell_id"] == 503748]) == 2
-    spells = {json.loads(l)["spell_id"]: json.loads(l) for l in
-              (tmp_path / "coa_client_spell.jsonl").read_text().splitlines()}
-    assert 503748 in spells and len(spells[503748]["memberships"]) == 2
-    # the client ships its NATIVE class label (CamelCase "WitchDoctor"); class 15 is not one of the 3
-    # curated semantic aliases, so it stays client-native. The Builder's spaced "Witch Doctor" is a
-    # representation difference normalized only for parity (canonical_class_label), never rewritten into
-    # the artifact — so both memberships canonicalize to the Witch Doctor class.
+    # Class membership now lives in the advancement child (the v3 spell child is the compact client-DBC
+    # row); the two Witch Doctor nodes for 503748 both canonicalize to the Witch Doctor class label.
+    wd_nodes = [n for n in adv if n["spell_id"] == 503748]
+    assert len(wd_nodes) == 2
     from coa_client_extract.parity import canonical_class_label
-    assert all(canonical_class_label(m["class_display"]) == canonical_class_label("Witch Doctor")
-               for m in spells[503748]["memberships"])
+    assert all(canonical_class_label(n["class"]["display"]) == canonical_class_label("Witch Doctor")
+               for n in wd_nodes)
 
 
 @pytest.fixture
@@ -190,7 +197,7 @@ def test_805775_client_wins_and_db_gate_matches_observed(client_mechanics_dir):
                if l.strip() and json.loads(l).get("id") == 805775), None)
     assert db is not None, "805775 must be present in coa_db_spell_tooltips.jsonl to exercise the identity gate"
 
-    # EXACT port of Node's normalizeName (lib/ascensiondb.mjs): lowercase, non-alphanumeric runs → single
+    # EXACT port of Node's normalizeName (lib/jsonl.mjs): lowercase, non-alphanumeric runs → single
     # space, trim. Must match byte-for-byte or the test could assert the wrong gate branch.
     def norm(s): return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
     if norm(db.get("name")) != norm("Adrenal Venom"):

@@ -1,0 +1,80 @@
+{
+  "artifact_contract": {
+    "icon_observation_domain": [],
+    "nullable_mechanics_keys": [
+      "cast_time_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_mechanics_keys": [
+      "cast_time_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_raw_observations": [
+      "cast_time_ms",
+      "power_type",
+      "school_mask"
+    ]
+  },
+  "content_sources": {
+    "directory": "Content",
+    "required_files": {
+      "SpellRankData.json": {
+        "kind": "spell_rank",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_entries": 0
+      }
+    }
+  },
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "promotion": "normalized",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    }
+  },
+  "schema_version": "coa-spell-layout-v2",
+  "sha256": "9a9ac4c3414a802d441b449cf70724849a20f2ec9039e0f205dbf810320ad6ea",
+  "tables": {
+    "Spell": {
+      "fields": {
+        "casting_time_index": {
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "power_type": {
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "school_mask": {
+          "interpretation": "reference",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      }
+    },
+    "SpellCastTimes": {
+      "fields": {
+        "base_ms": {
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "id": {
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      }
+    }
+  }
+}

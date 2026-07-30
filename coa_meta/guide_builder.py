@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .builder_tree_layout import load_builder_tree_layouts
@@ -14,7 +15,7 @@ from .guide_models import (
     GuideSpec,
 )
 from .guide_tree import build_guide_tree, build_guide_tree_panel
-from .guide_tooltips import build_node_tooltip, load_db_tooltip_rows
+from .guide_tooltips import build_node_tooltip
 from .leveling_path import build_leveling_path
 from .reporting import MetaReport, slugify_key
 from .repository import TalentRepository
@@ -33,19 +34,34 @@ GUIDE_SECTIONS = (
 )
 
 
+def load_client_icon_catalog(path: Path | str | None) -> dict[int, dict] | None:
+    """Load the client-native coa-client-spell-icons-v1 catalog (one JSONL row per spell) into a
+    {spell_id: row} map for GuideAssetCatalog. `None` path -> `None` (the guide then renders placeholders,
+    never a DB hotlink). This is the ONLY icon source the production guide may consult."""
+    if path is None:
+        return None
+    catalog: dict[int, dict] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        catalog[int(row["spell_id"])] = row
+    return catalog
+
+
 def build_guide_site(
     report: MetaReport,
     *,
     entries_path: Path | str,
-    db_tooltips_path: Path | str | None = None,
     asset_root: Path | str | None = None,
     builder_layout_root: Path | str | None = None,
+    icon_catalog: dict | None = None,
 ) -> GuideSite:
     data = report.to_dict()
     repository = TalentRepository.from_entries(entries_path)
-    db_rows = load_db_tooltip_rows(db_tooltips_path)
     builder_layouts = load_builder_tree_layouts(builder_layout_root) if builder_layout_root else None
-    assets = GuideAssetCatalog(asset_root)
+    assets = GuideAssetCatalog(icon_catalog=icon_catalog, asset_root=asset_root)
     tooltips = {}
     specs = []
 
@@ -60,14 +76,11 @@ def build_guide_site(
         ]
         guide_nodes = []
         for node in sorted(relevant_nodes, key=lambda item: (item.tab_name != "Class", item.row, item.col, item.name)):
-            db_row = db_rows.get(node.spell_id or -1)
-            tooltip = build_node_tooltip(node, db_rows)
+            tooltip = build_node_tooltip(node)
             tooltips[tooltip.tooltip_id] = tooltip
-            asset = assets.icon_for(
-                str((db_row or {}).get("icon") or node.raw.get("icon") or node.raw.get("iconPath") or ""),
-                node.name,
-                local_path=(db_row or {}).get("icon_asset_path"),
-            )
+            # Client-native: icons resolve ONLY from the client icon catalog by spell_id (no DB icon name,
+            # no cached DB asset path).
+            asset = assets.icon_for(None, node.name, spell_id=node.spell_id)
             guide_nodes.append(
                 GuideNode(
                     entry_id=node.entry_id,

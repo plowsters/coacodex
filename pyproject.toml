@@ -20,13 +20,15 @@ coa-meta = "coa_meta.cli:main"
 packages = ["coa_meta", "coa_meta.combat", "coa_client_extract"]
 
 [tool.setuptools.package-data]
-coa_meta = [
-  "data/scoring_profiles/*.json",
-  "data/apl_profiles/*.json",
-  "data/role_overrides.json",
-  "data/spec_roles.json"
-]
-coa_client_extract = ["data/*.json"]
+# RECURSIVE on purpose (`**` needs setuptools >= 62.3, and the build requires >= 68). The prior
+# `coa_client_extract = ["data/*.json"]` matched one directory level, so `data/generation_contracts/`
+# — the hash-pinned generation-contract registry the publication layer loads at import — shipped in no
+# wheel at all, and `coa_meta/data/live_sanity_watchlist.json` was omitted the same way. An editable
+# install cannot expose either defect, because it puts the whole source tree on the path.
+# `tests/test_package_metadata.py` holds these patterns to the tracked `data/` tree, and CI's `wheel`
+# job proves the built artifact really carries the files rather than trusting the glob.
+coa_meta = ["data/**/*.json"]
+coa_client_extract = ["data/**/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not stormlib and not client'"

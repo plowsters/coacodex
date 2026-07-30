@@ -20,6 +20,9 @@ class RotationSimulationConfig:
     ally_health_pct: float = 100.0
     actor_health_pct: float = 100.0
     damage_window_active: bool = False
+    # E0R B5: a canonical sim fails CLOSED if any action lacks load-bearing gcd/cooldown/costs. Opt into
+    # invented estimates (gcd 1500, no cooldown, no cost) ONLY with this explicit flag.
+    allow_heuristic: bool = False
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,10 @@ class ActionUsage:
 @dataclass(frozen=True)
 class RotationSimulationResult:
     source: str
+    # E0R.1 T5.4: how this result was produced. "verified" = every action carried proven load-bearing
+    # data; "heuristic" = the caller explicitly authorized invented estimates. A consumer never has to
+    # infer which it is holding.
+    source_kind: str
     duration_ms: int
     events: tuple[RotationEvent, ...]
     resources: dict[str, float]
@@ -77,6 +84,13 @@ def simulate_apl(
     action_catalog: ActionCatalog,
     config: RotationSimulationConfig,
 ) -> RotationSimulationResult:
+    # Fail closed before running a single quantitative tick unless heuristic estimates are explicitly
+    # authorized — a null gcd/cooldown/costs must never be silently defaulted (design B5). Authorization
+    # is a caller decision, never self-granted from the data being missing (E0R.1 T5.4).
+    readiness = action_catalog.quantitative_readiness
+    if not config.allow_heuristic:
+        action_catalog.assert_quantitative_ready()
+    source_kind = "verified" if readiness["ready"] else "heuristic"
     state = _MutableState(
         time_ms=0,
         resources=dict(config.initial_resources),
@@ -115,7 +129,7 @@ def simulate_apl(
         usage.setdefault(action.action_key, []).append(state.time_ms)
 
         _spend_and_generate(action, state)
-        if action.cooldown_ms > 0:
+        if (action.cooldown_ms or 0) > 0:
             state.cooldown_ready[action.action_key] = state.time_ms + action.cooldown_ms
 
         for effect in action.effects:
@@ -156,8 +170,11 @@ def simulate_apl(
         for key, times in usage.items()
     }
 
+    if source_kind == "heuristic":
+        state.warnings.insert(0, "quantitative_heuristic_authorized")
     return RotationSimulationResult(
         source=config.source,
+        source_kind=source_kind,
         duration_ms=config.duration_ms,
         events=tuple(events),
         resources=dict(state.resources),
@@ -194,7 +211,7 @@ def _select_action(
             continue
         if state.cooldown_ready.get(action.action_key, 0) > state.time_ms:
             continue
-        if any(_resource_value(state.resources, resource) < cost for resource, cost in action.costs.items()):
+        if any(_resource_value(state.resources, resource) < cost for resource, cost in (action.costs or {}).items()):
             continue
         return apl_action, action
     return None
@@ -248,7 +265,7 @@ def _condition_passes(
 
 
 def _spend_and_generate(action: CatalogAction, state: _MutableState) -> None:
-    for resource, amount in action.costs.items():
+    for resource, amount in (action.costs or {}).items():
         current = _resource_value(state.resources, resource)
         state.resources[resource] = max(0.0, current - float(amount))
     for resource, amount in action.generates.items():

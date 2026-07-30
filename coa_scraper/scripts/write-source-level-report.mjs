@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadJson, writeJson } from "./lib/artifacts.mjs";
-import { readJsonl } from "./lib/ascensiondb.mjs";
+import { readJsonl } from "./lib/jsonl.mjs";
 import { summarizeMetadataTabs } from "./lib/source-level.mjs";
 
 export function buildSourceLevelReport(entries, classes) {

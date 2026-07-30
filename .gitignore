@@ -24,7 +24,12 @@ coa_scraper/data/raw/
 
 # Usually do not commit generated archives
 *.zip
-reports/meta/assets/guide-site-manifest.json
+
+# M1.14E0R.1 T2.5: the generated guide site + the scraped DB tooltip catalog carry db.ascension.gg
+# hotlinks and are build OUTPUTS, not authority — regenerate them (client-native) locally, never commit.
+# The generator, templates, and source fonts stay tracked under coa_meta/.
+reports/meta/
+coa_scraper/dist/coa_db_spell_tooltips.jsonl
 
 # Claude Design reference materials (local design product, not part of the repo)
 design/
@@ -56,9 +61,25 @@ reports/client_extract/coa_client_extract_manifest.json
 coa_scraper/dist/coa_client_extract_manifest.json
 reports/client_extract/coa_spell_mechanics_recon.json
 coa_scraper/dist/coa_spell_mechanics_recon.json
+# The Builder parity report embeds client node samples (ids/names) — client-derived, never committed.
+# Its provenance pins + verdict ride in the tracked coa_e0r_acceptance_summary.json instead.
+reports/client_extract/coa_builder_parity_report.json
+coa_scraper/dist/coa_builder_parity_report.json
 
 # M1.14D client-derived WoW constants — regenerate from your own client (never committed).
 # The tracked reports/client_extract/wow_class_axis_adjudication.json is NOT ignored.
 reports/client_extract/coa_wow_constants_recon.json
 coa_scraper/dist/coa_wow_constants.json
 coa_scraper/dist/coa_wow_constants.manifest.json
+
+# M1.14E0R AscensionDB sunset: the DB-enrichment pipeline is removed, so its outputs are orphaned
+# disposables — regenerated only by the (deleted) enrichment scripts; never committed.
+coa_scraper/dist/coa_entries.enriched.jsonl
+coa_scraper/reports/coa_db_enrichment_summary.json
+coa_scraper/reports/coa_ascensiondb_cache_manifest.json
+coa_scraper/reports/coa_ascensiondb_cache_summary.json
+
+# M1.14E0R acceptance-run transients (process lock + ad-hoc logs) — never committed
+reports/client_extract/.publish.lock
+reports/client_extract/_regenerate.log
+reports/client_extract/_recon.log

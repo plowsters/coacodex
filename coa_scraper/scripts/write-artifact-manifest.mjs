@@ -13,17 +13,10 @@ const scriptPaths = [
   "scripts/summarize-coa-payload.mjs",
   "scripts/export-coa-normalized.mjs",
   "scripts/build-class-profile-input.mjs",
-  "scripts/lib/ascensiondb.mjs",
-  "scripts/lib/ascensiondb-cache.mjs",
   "scripts/lib/capture-options.mjs",
   "scripts/lib/icon-assets.mjs",
   "scripts/lib/source-level.mjs",
-  "scripts/enrich-ascensiondb-assets.mjs",
-  "scripts/enrich-ascensiondb.mjs",
-  "scripts/apply-db-enrichment.mjs",
-  "scripts/enrich-linked-items.mjs",
   "scripts/build-mechanics-artifacts.mjs",
-  "scripts/build-item-artifacts.mjs",
   "scripts/write-source-level-report.mjs",
   "scripts/validate-normalized.mjs",
   "scripts/write-artifact-manifest.mjs",
@@ -45,36 +38,26 @@ const artifactPaths = [
   "reports/coa_validation_summary.json",
   "reports/coa_source_level_report.json",
   "reports/coa_metadata_tab_report.json",
-  "reports/coa_db_enrichment_summary.json",
-  "reports/coa_item_enrichment_summary.json",
-  "reports/coa_ascensiondb_cache_manifest.json",
-  "reports/coa_ascensiondb_cache_summary.json",
   "dist/coa_entries.jsonl",
   "dist/coa_entries.pretty.json",
   "dist/coa_classes.json",
   "dist/coa_essence_caps.json",
   "dist/coa_class_profile_input.json",
-  "dist/coa_db_spell_records.jsonl",
-  "dist/coa_db_spell_tooltips.jsonl",
-  "dist/coa_db_item_records.jsonl",
-  "dist/coa_db_item_tooltips.jsonl",
-  "dist/coa_db_effect_records.jsonl",
-  "dist/coa_db_asset_records.jsonl",
-  "dist/coa_entries.enriched.jsonl",
   "dist/coa_mechanics.jsonl",
   "dist/coa_mechanics.manifest.json",
-  "dist/coa_mechanics.fallback.manifest.json",
-  "dist/coa_items.jsonl"
+  "dist/coa_mechanics.fallback.manifest.json"
 ];
 
 function optionalRecord(relativePath, rootDir) {
   try {
     return artifactRecord(path.join(rootDir, relativePath), rootDir);
-  } catch (err) {
+  } catch {
+    // Note the REPO-RELATIVE path only — never the machine-local absolute path from the error message,
+    // which would pollute the committed manifest with a /home/<user>/... leak (E0R hygiene).
     return {
       path: relativePath,
       missing: true,
-      note: err.message
+      note: `missing: ${relativePath}`
     };
   }
 }

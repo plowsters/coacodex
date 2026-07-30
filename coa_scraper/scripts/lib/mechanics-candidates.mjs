@@ -38,17 +38,7 @@ function builderNormalized(node, field) {
   return { raw: null, value: null, inferred: true };
 }
 
-function dbNormalized(dbRow, field) {
-  if (!dbRow) return { raw: null, value: null };
-  switch (field) {
-    case "cast_time_ms": return { raw: dbRow.cast_time_ms, value: isPresent(dbRow.cast_time_ms) ? dbRow.cast_time_ms : null };
-    case "duration_ms": return { raw: dbRow.duration_ms, value: isPresent(dbRow.duration_ms) ? dbRow.duration_ms : null };
-    case "range_yards": return { raw: dbRow.range_yards, value: isPresent(dbRow.range_yards) ? dbRow.range_yards : null };
-    default: return { raw: null, value: null };
-  }
-}
-
-export function fieldCandidates({ field, clientRec, builderNodes, dbRow, dbExcluded, dbExclusionReason = null }) {
+export function fieldCandidates({ field, clientRec, builderNodes }) {
   const out = [];
   if (clientRec) {
     const { raw, value, unknownBits, unknown } = clientNormalized(clientRec, field);
@@ -69,22 +59,18 @@ export function fieldCandidates({ field, clientRec, builderNodes, dbRow, dbExclu
   for (const node of builderNodes || []) {
     const { raw, value } = builderNormalized(node, field);
     if (value === null) continue;
+    // E0R.1 T1.4: power_type is a proof-gated client field. Its Builder `resources` inference is a
+    // heuristic hint and must NEVER backfill a withheld client value — record it INELIGIBLE and
+    // heuristic-tagged so it survives only as a diagnostic candidate, never as the canonical value.
+    const inferredPowerType = field === "power_type";
     out.push({
       source: "builder", precedence_tier: "inferred", source_id: `builder_node:${node.entry_id}`,
       source_field: field === "schools" ? "damage_schools" : "resources",
-      raw_value: raw, normalized_value: value, confidence: "medium", eligible: true, eligibility_reasons: [],
+      raw_value: raw, normalized_value: value, confidence: "medium",
+      eligible: !inferredPowerType,
+      eligibility_reasons: inferredPowerType ? [REASON.INFERRED_POWER_TYPE_WITHHELD] : [],
+      ...(inferredPowerType ? { heuristic: true } : {}),
     });
-  }
-  if (dbRow) {
-    const { raw, value } = dbNormalized(dbRow, field);
-    if (value !== null) {
-      const reasons = dbExcluded ? [dbExclusionReason || REASON.DB_IDENTITY_MISMATCH] : [];
-      out.push({
-        source: "ascension_db", precedence_tier: "ascension_db", source_id: `ascension_db:${dbRow.id}`,
-        source_field: field, raw_value: raw, normalized_value: value, confidence: "medium",
-        eligible: !dbExcluded, eligibility_reasons: reasons,
-      });
-    }
   }
   return out;
 }

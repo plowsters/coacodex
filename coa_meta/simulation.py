@@ -6,6 +6,7 @@ from typing import Any
 from .apl import APLDocument
 from .combat.engine import CombatEngine, CombatEngineConfig
 from .combat.state import ActionEffect, ActorState, CombatAction
+from .action_catalog import QuantitativeScopeUnready
 from .domain import BuildState, TalentNode
 from .repository import TalentRepository
 
@@ -18,6 +19,10 @@ class SimulationConfig:
     iterations: int = 1
     seed: int = 1
     target_count: int = 1
+    # E0R.1 T5.4: this whole path converts talent nodes to combat actions with INVENTED amounts, costs,
+    # cooldowns and gcds (it never consults the client mechanics), so it is heuristic by construction and
+    # runs only when the caller says so. Default OFF; the output is labeled `source: "heuristic"`.
+    allow_heuristic: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,10 @@ def simulate_build(
     config: SimulationConfig | None = None,
 ) -> SimulationResult:
     config = config or SimulationConfig()
+    if not config.allow_heuristic:
+        raise QuantitativeScopeUnready(
+            "simulate_build estimates amounts/costs/cooldowns from node tags and never reads the client "
+            "mechanics; pass SimulationConfig(allow_heuristic=True) to authorize a heuristic run")
     iterations = max(1, config.iterations)
     actions, warnings = _combat_actions_from_apl(state, repository, apl)
     total_damage = 0.0
@@ -86,7 +95,7 @@ def simulate_build(
     seconds = max(config.duration_ms / 1000, 1)
     return SimulationResult(
         schema_version=SIMULATION_RESULT_SCHEMA_VERSION,
-        source="simulated",
+        source="heuristic",          # invented defaults; never presented as a verified simulation
         duration_ms=config.duration_ms,
         iterations=iterations,
         seed=config.seed,
@@ -128,6 +137,10 @@ def _combat_actions_from_apl(
 
 
 def _action_from_node(node: TalentNode, category: str) -> CombatAction:
+    # HEURISTIC factory: this estimates amount/costs/cooldown/gcd from node tags + category (it does NOT
+    # consult the client mechanics). It is the invented-defaults path (gcd 1500, cooldown 45s for a
+    # cooldown, _estimated_costs) — the canonical APL sim (rotation_simulation.simulate_apl) fails closed
+    # instead of reaching here unless heuristic mode is explicitly authorized (design B5).
     amount = _estimated_amount(node, category)
     effect_type = "heal" if "heal" in node.tags else "damage"
     duration_ms = 12_000 if "dot" in node.tags and effect_type == "damage" else None

@@ -1,0 +1,235 @@
+{
+  "anchor_set": {
+    "sha256": "f265890134e888d3e2f8e43b988ea3b4ab3d26a9a0542ca196800fd3b17d241a",
+    "spells": [
+      {
+        "id": 1,
+        "name": "Alpha",
+        "power_type": 3,
+        "school_mask": 4
+      }
+    ]
+  },
+  "artifact_contract": {
+    "icon_observation_domain": [
+      "spell_icon_id"
+    ],
+    "nullable_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "school_mask"
+    ],
+    "required_raw_observations": [
+      "cast_time_ms",
+      "duration_ms",
+      "id",
+      "name",
+      "power_type",
+      "school_mask"
+    ]
+  },
+  "bound": null,
+  "content_sources": {
+    "directory": "Content",
+    "required_files": {
+      "SpellRankData.json": {
+        "kind": "spell_rank",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_entries": 0
+      }
+    }
+  },
+  "enum_policy": {
+    "power_types": [
+      -2,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "school_bits": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
+  },
+  "expected_absent": [],
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "promotion": "normalized",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    },
+    "duration_ms": {
+      "index_field": "duration_index",
+      "promotion": "raw_only",
+      "side_table": "SpellDuration",
+      "side_value_field": "base_ms"
+    },
+    "spell_icon_id": {
+      "index_field": "spell_icon_id",
+      "promotion": "normalized",
+      "side_table": "SpellIcon",
+      "side_value_field": "path"
+    }
+  },
+  "required_tables": [
+    "Spell",
+    "SpellCastTimes",
+    "SpellDuration",
+    "SpellIcon"
+  ],
+  "reviewed": true,
+  "schema_version": "coa-spell-layout-v2",
+  "sha256": "740e6cd9ac90b08c6b3e86ab0ebafbd7d0af06a931e14e3279a855e66782a91f",
+  "tables": {
+    "Spell": {
+      "expected_field_count": 6,
+      "fields": {
+        "casting_time_index": {
+          "cell": 4,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "duration_index": {
+          "cell": null,
+          "evidence": "corpus: reviewed_ambiguous (null cell)",
+          "interpretation": "reference",
+          "kind": "uint32",
+          "layout": "unproven",
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "name": {
+          "cell": 1,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "power_type": {
+          "cell": 2,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "school_mask": {
+          "cell": 3,
+          "evidence": "corpus",
+          "interpretation": "reference",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "spell_icon_id": {
+          "cell": 5,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellCastTimes": {
+      "expected_field_count": 2,
+      "fields": {
+        "base_ms": {
+          "cell": 1,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellDuration": {
+      "expected_field_count": 2,
+      "fields": {
+        "base_ms": {
+          "cell": 1,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellIcon": {
+      "expected_field_count": 2,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "path": {
+          "cell": 1,
+          "evidence": "corpus",
+          "interpretation": "verified",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    }
+  }
+}

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .contracts import BOUND_HEADER_FIELDS, BOUND_SOURCE_FIELDS
 from .spell_proof import PROOF_STATES
 
-SCHEMA = "coa-spell-layout-v1"
+SCHEMA = "coa-spell-layout-v2"
 _KINDS = ("int32", "uint32", "float", "string")
 _PROMOTIONS = ("normalized", "raw_only")
 _DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -45,6 +47,7 @@ class JoinPolicy:
     index_field: str      # a Spell column holding the FK into the side table
     side_table: str       # e.g. "SpellCastTimes"
     side_value_field: str # the side-table column carrying the resolved value (e.g. "base_ms")
+    promotion: str        # "normalized" | "raw_only" — whether the emitted join value is authorized
 
 
 @dataclass(frozen=True)
@@ -57,8 +60,11 @@ class SpellPolicy:
     joins: dict[str, JoinPolicy]   # emitted_value -> JoinPolicy
     required_tables: tuple[str, ...]
     expected_absent: tuple[str, ...]
+    content_sources: dict          # the Content JSON binding (E0R.2 T0.2 — no WDBC source exists)
+    artifact_contract: dict        # the FULL observation domain a row must carry (E0R.2 T2.3)
     anchor_set: dict
     _enum: dict
+    doc: dict         # the exact source payload, staged verbatim as the reviewed-policy generation child
 
     # -- recon-facing views (spell_mechanics.recon_spell_mechanics consumes these) --
     @property
@@ -123,9 +129,125 @@ def _validate_field(table: str, name: str, spec: dict, field_count: int) -> Fiel
                        spec["promotion"], spec["evidence"])
 
 
+def _validate_bound(bound: dict) -> dict:
+    """The structured A2 bound: per-table sha256 + full 5-field header + logical source (member,
+    effective_archive, patch_chain). Rejects the flat E0 shape so a stale flat bound cannot slip through."""
+    if "source_dbc_sha256" in bound:
+        raise SpellPolicyError("bound uses the flat source_dbc_sha256 shape; E0R requires bound.tables{}")
+    if not isinstance(bound.get("client_build"), str):
+        raise SpellPolicyError("bound.client_build must be a string")
+    tables = bound.get("tables")
+    if not isinstance(tables, dict) or not tables:
+        raise SpellPolicyError("bound.tables must be a non-empty dict")
+    for tname, spec in tables.items():
+        if not isinstance(spec.get("sha256"), str) or len(spec["sha256"]) != 64:
+            raise SpellPolicyError(f"bound.tables.{tname}.sha256 must be a 64-char hex digest")
+        header = spec.get("header", {})
+        for h in BOUND_HEADER_FIELDS:
+            if h not in header:
+                raise SpellPolicyError(f"bound.tables.{tname}.header missing {h!r}")
+        source = spec.get("source", {})
+        for s in BOUND_SOURCE_FIELDS:
+            if s not in source:
+                raise SpellPolicyError(f"bound.tables.{tname}.source missing {s!r}")
+        if os.path.isabs(str(source["effective_archive"])):
+            raise SpellPolicyError(f"bound.tables.{tname}.source.effective_archive must be a logical name")
+    return bound
+
+
+_BUDGET_CEILINGS = ("max_serialized_bytes_per_child", "max_whole_generation_bytes",
+                    "python_peak_rss_mb", "python_elapsed_s", "node_peak_rss_mb", "node_elapsed_s")
+
+
+def derive_artifact_contract(payload: dict) -> dict:
+    """The observation domain a v3 row must carry, DERIVED from the layout (E0R.2 T2.3).
+
+    Lossless extraction means every field has an OBSERVATION, even when it has no normalized value. A
+    join in `unresolved` state is still a required cell; omitting it is silent loss, which is exactly
+    what E0R exists to prevent. So the domain is:
+
+      * every Spell scalar that is EMITTED — i.e. not one of the index columns a join consumes (those
+        appear as join components, never as top-level cells); plus
+      * every join name except the icon join, which lands in the icon child rather than the spell row.
+
+    The policy AUTHORS this block and the loader checks it against this derivation, so a reviewed claim
+    that has drifted from the layout it describes fails at load instead of silently under-checking.
+    """
+    joins = payload.get("joins") or {}
+    icon_joins = {name for name, spec in joins.items() if spec.get("side_table") == "SpellIcon"}
+    index_fields = {spec["index_field"] for spec in joins.values()}
+    scalars = set(payload.get("tables", {}).get("Spell", {}).get("fields", {})) - index_fields
+    mechanics = sorted((scalars - {"id", "name", "description"}) | (set(joins) - icon_joins))
+    return {
+        "required_raw_observations": sorted(scalars | (set(joins) - icon_joins)),
+        "required_mechanics_keys": mechanics,
+        # ALL mechanics keys are structurally nullable, school_mask included: a proven policy still
+        # yields a null normalized value when an unseen school bit trips the per-value domain gate
+        # (`value_out_of_domain`). Nullability is structural; whether a null is LEGITIMATE is a semantic
+        # question the per-row verifier answers, not something a static list can express.
+        "nullable_mechanics_keys": mechanics,
+        "icon_observation_domain": sorted(icon_joins),
+    }
+
+
+_ARTIFACT_CONTRACT_KEYS = ("required_raw_observations", "required_mechanics_keys",
+                           "nullable_mechanics_keys", "icon_observation_domain")
+
+
+def _validate_artifact_contract(payload: dict) -> dict:
+    """A reviewed observation domain, checked against the layout it claims to describe.
+
+    Before this, the domain lived in an optional `required_scalar_fields` list that the PRODUCTION
+    policy did not carry at all — so Node's full-domain check read `policyDoc.required_scalar_fields ||
+    []` and asked nothing of any real row. An unchecked JSON property that only one consumer reads is
+    not a contract."""
+    contract = payload.get("artifact_contract")
+    if not isinstance(contract, dict):
+        raise SpellPolicyError("policy must declare an artifact_contract (the observation domain)")
+    if set(contract) != set(_ARTIFACT_CONTRACT_KEYS):
+        raise SpellPolicyError(
+            f"artifact_contract must have exactly {sorted(_ARTIFACT_CONTRACT_KEYS)}, "
+            f"got {sorted(contract)}")
+    for key in _ARTIFACT_CONTRACT_KEYS:
+        value = contract[key]
+        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+            raise SpellPolicyError(f"artifact_contract.{key} must be a list of field names")
+        if sorted(value) != value or len(set(value)) != len(value):
+            raise SpellPolicyError(f"artifact_contract.{key} must be sorted and unique")
+    derived = derive_artifact_contract(payload)
+    if contract != derived:
+        diff = {k: {"declared": contract[k], "derived": derived[k]}
+                for k in _ARTIFACT_CONTRACT_KEYS if contract[k] != derived[k]}
+        raise SpellPolicyError(
+            f"artifact_contract has drifted from the layout it describes: {diff}")
+    return contract
+
+
+def _validate_budget(budget: dict) -> None:
+    """The policy-bound ceilings block (E0R.1 T4.3): six positive-int ceilings + optional per-child
+    overrides keyed by plain child filenames (no separators/traversal)."""
+    if not isinstance(budget, dict):
+        raise SpellPolicyError("budget must be a dict")
+    for key in _BUDGET_CEILINGS:
+        v = budget.get(key)
+        if type(v) is not int or isinstance(v, bool) or v <= 0:
+            raise SpellPolicyError(f"budget.{key} must be a positive int")
+    overrides = budget.get("per_child_overrides", {})
+    if not isinstance(overrides, dict):
+        raise SpellPolicyError("budget.per_child_overrides must be a dict")
+    for name, v in overrides.items():
+        if not name or "/" in name or "\\" in name or ".." in name:
+            raise SpellPolicyError(f"budget.per_child_overrides key {name!r} is not a plain child name")
+        if type(v) is not int or isinstance(v, bool) or v <= 0:
+            raise SpellPolicyError(f"budget.per_child_overrides[{name!r}] must be a positive int")
+    unknown = set(budget) - set(_BUDGET_CEILINGS) - {"per_child_overrides"}
+    if unknown:
+        raise SpellPolicyError(f"budget has unknown keys {sorted(unknown)}")
+
+
 def load_spell_policy(payload: dict) -> SpellPolicy:
     if payload.get("schema_version") != SCHEMA:
-        raise SpellPolicyError(f"schema_version must be {SCHEMA!r}")
+        raise SpellPolicyError(f"schema_version must be {SCHEMA!r} (coa-spell-layout-v2)")
     if not isinstance(payload.get("reviewed"), bool):
         raise SpellPolicyError("reviewed must be a bool")
 
@@ -137,6 +259,12 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
         fc = tspec.get("expected_field_count")
         if type(fc) is not int or fc <= 0:
             raise SpellPolicyError(f"{tname}: expected_field_count must be a positive int")
+        key_cell = tspec.get("key_cell")
+        if type(key_cell) is not int or isinstance(key_cell, bool) or not (0 <= key_cell < fc):
+            raise SpellPolicyError(f"{tname}: key_cell {key_cell!r} out of [0,{fc})")
+        unique = tspec.get("unique")
+        if not isinstance(unique, bool):
+            raise SpellPolicyError(f"{tname}: unique must be a bool")
         fields, seen_cells = {}, {}
         for fname, fspec in tspec.get("fields", {}).items():
             fp = _validate_field(tname, fname, fspec, fc)
@@ -145,19 +273,29 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
                     raise SpellPolicyError(f"{tname}: cell {fp.cell} reused by {seen_cells[fp.cell]!r} and {fname!r}")
                 seen_cells[fp.cell] = fname
             fields[fname] = fp
-        tables[tname] = {"expected_field_count": fc, "fields": fields}
+        tables[tname] = {"expected_field_count": fc, "key_cell": key_cell, "unique": unique, "fields": fields}
 
     # joins reference real Spell index columns + real side tables/value columns
     joins: dict[str, JoinPolicy] = {}
     for jname, jspec in payload.get("joins", {}).items():
         idx, side, val = jspec.get("index_field"), jspec.get("side_table"), jspec.get("side_value_field")
+        promo = jspec.get("promotion")
         if idx not in tables["Spell"]["fields"]:
             raise SpellPolicyError(f"join {jname}: index_field {idx!r} not a Spell field")
         if side not in tables:
             raise SpellPolicyError(f"join {jname}: side_table {side!r} not defined")
         if val not in tables[side]["fields"]:
             raise SpellPolicyError(f"join {jname}: side_value_field {val!r} not in {side}")
-        joins[jname] = JoinPolicy(idx, side, val)
+        if "id" not in tables[side]["fields"]:
+            raise SpellPolicyError(f"join {jname}: side_table {side!r} has no 'id' field")
+        if promo not in _PROMOTIONS:
+            raise SpellPolicyError(f"join {jname}: promotion {promo!r} not in {_PROMOTIONS}")
+        if promo == "normalized":
+            # A normalized join emits only when every contributing component is itself normalized.
+            for role, tbl, fname in (("index", "Spell", idx), ("side_id", side, "id"), ("side_value", side, val)):
+                if tables[tbl]["fields"][fname].promotion != "normalized":
+                    raise SpellPolicyError(f"join {jname}: normalized join has a raw_only component {fname}")
+        joins[jname] = JoinPolicy(idx, side, val, promo)
 
     enum = payload.get("enum_policy", {})
     power_types, school_bits = enum.get("power_types"), enum.get("school_bits")
@@ -177,10 +315,30 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     if compute_policy_sha256(anchor_set) != anchor_set.get("sha256"):
         raise SpellPolicyError("anchor_set.sha256 mismatch")
 
+    required_tables = tuple(payload.get("required_tables", []))
+    expected_absent = tuple(payload.get("expected_absent", []))
     bound = payload.get("bound")
     if bound is not None:
-        if not isinstance(bound.get("client_build"), str) or not isinstance(bound.get("source_dbc_sha256"), dict):
-            raise SpellPolicyError("bound requires client_build:str and source_dbc_sha256:dict")
+        _validate_bound(bound)
+        if set(bound["tables"]) != set(required_tables):
+            raise SpellPolicyError("bound.tables must equal required_tables (every required table is bound)")
+        if set(bound.get("expected_absent", [])) != set(expected_absent):
+            raise SpellPolicyError("bound.expected_absent must equal the policy expected_absent set")
+
+    content_sources = payload.get("content_sources")
+    _validate_content_sources(content_sources)
+
+    artifact_contract = _validate_artifact_contract(payload)
+
+    budget = payload.get("budget")
+    if budget is not None:
+        _validate_budget(budget)
+
+    # E0R.2 T3.2: optional at load — a policy with no adjudicated-ambiguous join needs no baseline — but
+    # strictly validated when present, because recon compares a live scan against it and a malformed
+    # baseline would decide a `verified` verdict.
+    if payload.get("ambiguity_baseline") is not None:
+        _validate_ambiguity_baseline(payload["ambiguity_baseline"], payload)
 
     declared = payload.get("sha256")
     recomputed = _sha({k: v for k, v in payload.items() if k != "sha256"})
@@ -190,10 +348,98 @@ def load_spell_policy(payload: dict) -> SpellPolicy:
     return SpellPolicy(
         schema_version=SCHEMA, reviewed=payload["reviewed"], bound=bound, sha256=recomputed,
         tables=tables, joins=joins,
-        required_tables=tuple(payload.get("required_tables", [])),
-        expected_absent=tuple(payload.get("expected_absent", [])),
+        required_tables=required_tables,
+        expected_absent=expected_absent,
+        content_sources=content_sources, artifact_contract=artifact_contract,
         anchor_set=anchor_set, _enum={"power_types": power_types, "school_bits": school_bits},
+        doc=payload,
     )
+
+
+_BASELINE_THRESHOLD_KEYS = ("min_distinct", "min_support", "valid_den", "valid_num")
+_BASELINE_CANDIDATE_KEYS = ("cell", "distinct_ids", "nonzero_count", "valid_count")
+
+
+def _validate_ambiguity_baseline(baseline, payload: dict) -> None:
+    """The reviewed FK-ambiguity baseline (E0R.2 T3.2).
+
+    It records what a live scan of each adjudicated-ambiguous join must reproduce EXACTLY: the scan
+    algorithm, its integer thresholds, the candidate cells, and each candidate's metrics — plus the
+    digest recon compares against. Every leaf is an int so the digest cannot depend on float formatting.
+
+    The `digest` is re-derived here, so a baseline whose stored candidates and digest disagree is
+    rejected at load rather than deciding a verdict that reads differently from what it enforces."""
+    from .spell_mechanics import candidates_digest       # local: spell_mechanics imports topology
+
+    if not isinstance(baseline, dict):
+        raise SpellPolicyError("ambiguity_baseline must be an object")
+    if set(baseline) != {"scan_algorithm", "thresholds", "joins"}:
+        raise SpellPolicyError(
+            "ambiguity_baseline must have exactly ['joins', 'scan_algorithm', 'thresholds'], "
+            f"got {sorted(baseline)}")
+    if not isinstance(baseline["scan_algorithm"], str) or not baseline["scan_algorithm"]:
+        raise SpellPolicyError("ambiguity_baseline.scan_algorithm must be a non-empty string")
+    thresholds = baseline["thresholds"]
+    if not isinstance(thresholds, dict) or set(thresholds) != set(_BASELINE_THRESHOLD_KEYS):
+        raise SpellPolicyError(
+            f"ambiguity_baseline.thresholds must have exactly {list(_BASELINE_THRESHOLD_KEYS)}")
+    for key, value in thresholds.items():
+        if type(value) is not int or isinstance(value, bool) or value <= 0:
+            raise SpellPolicyError(f"ambiguity_baseline.thresholds.{key} must be a positive int")
+    joins = baseline["joins"]
+    if not isinstance(joins, dict) or not joins:
+        raise SpellPolicyError("ambiguity_baseline.joins must be a non-empty object")
+    index_fields = {spec["index_field"] for spec in (payload.get("joins") or {}).values()}
+    for field, entry in joins.items():
+        where = f"ambiguity_baseline.joins.{field}"
+        if field not in index_fields:
+            raise SpellPolicyError(f"{where}: {field!r} is not an index field of any declared join")
+        if not isinstance(entry, dict) or set(entry) != {"candidates", "digest"}:
+            raise SpellPolicyError(f"{where} must have exactly ['candidates', 'digest']")
+        candidates = entry["candidates"]
+        if not isinstance(candidates, list) or not candidates:
+            raise SpellPolicyError(f"{where}.candidates must be a non-empty list")
+        cells = []
+        for c in candidates:
+            if not isinstance(c, dict) or set(c) != set(_BASELINE_CANDIDATE_KEYS):
+                raise SpellPolicyError(
+                    f"{where}.candidates[] must have exactly {list(_BASELINE_CANDIDATE_KEYS)}")
+            for key, value in c.items():
+                if type(value) is not int or isinstance(value, bool) or value < 0:
+                    raise SpellPolicyError(f"{where}.candidates[].{key} must be a non-negative int")
+            cells.append(c["cell"])
+        if cells != sorted(cells) or len(set(cells)) != len(cells):
+            raise SpellPolicyError(f"{where}.candidates must be sorted by cell and unique")
+        if entry["digest"] != candidates_digest(candidates):
+            raise SpellPolicyError(f"{where}.digest does not match its own candidates")
+
+
+def _validate_content_sources(sources) -> None:
+    """The Content JSON binding (E0R.2 T0.2). `coa_client_content.jsonl` is the one child with no WDBC
+    source, so `bound.tables` cannot express its domain and it needs its own reviewed binding: the exact
+    required file set, each file's sha256, and each file's parsed entry count. Without this the reader
+    silently skipped a missing file and the generation quietly shrank."""
+    if not isinstance(sources, dict):
+        raise SpellPolicyError("content_sources must be an object (the Content JSON binding)")
+    if not sources.get("directory"):
+        raise SpellPolicyError("content_sources.directory must be a non-empty string")
+    required = sources.get("required_files")
+    if not isinstance(required, dict) or not required:
+        raise SpellPolicyError("content_sources.required_files must be a non-empty object")
+    for filename, spec in required.items():
+        if not isinstance(filename, str) or "/" in filename or "\\" in filename or ".." in filename:
+            raise SpellPolicyError(f"content_sources: unsafe file name {filename!r}")
+        if not isinstance(spec, dict) or set(spec) != {"kind", "sha256", "source_entries"}:
+            raise SpellPolicyError(
+                f"content_sources[{filename!r}] must have exactly kind, sha256, source_entries")
+        if not isinstance(spec["kind"], str) or not spec["kind"]:
+            raise SpellPolicyError(f"content_sources[{filename!r}].kind must be a non-empty string")
+        if not isinstance(spec["sha256"], str) or len(spec["sha256"]) != 64:
+            raise SpellPolicyError(f"content_sources[{filename!r}].sha256 must be a sha256 hex digest")
+        entries = spec["source_entries"]
+        if isinstance(entries, bool) or not isinstance(entries, int) or entries < 0:
+            raise SpellPolicyError(
+                f"content_sources[{filename!r}].source_entries must be a non-negative int")
 
 
 def compute_policy_sha256(payload: dict) -> str:
@@ -202,5 +448,5 @@ def compute_policy_sha256(payload: dict) -> str:
 
 
 def load_default_policy(*, root: Path | None = None) -> SpellPolicy:
-    path = (root or _DATA_DIR) / "spell_layout_v1.json"
+    path = (root or _DATA_DIR) / "spell_layout_v2.json"
     return load_spell_policy(json.loads(path.read_text(encoding="utf-8")))

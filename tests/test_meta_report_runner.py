@@ -192,6 +192,9 @@ def test_meta_report_runner_can_attach_simulation_results():
         simulation_duration_ms=5000,
         simulation_iterations=1,
         simulation_seed=13,
+        # E0R.1 T5.4: simulate_build invents amounts/costs/cooldowns from node tags, so it runs only
+        # under explicit authorization and its output is labeled heuristic.
+        allow_heuristic=True,
     )
 
     report = MetaReportRunner(config).run()
@@ -199,7 +202,28 @@ def test_meta_report_runner_can_attach_simulation_results():
 
     assert simulation is not None
     assert simulation["schema_version"] == "coa-simulation-result-v1"
-    assert simulation["source"] == "simulated"
+    assert simulation["source"] == "heuristic"
+
+
+def test_meta_report_runner_blocks_the_build_simulation_without_explicit_authorization():
+    config = MetaRunConfig(
+        entries_path=FIXTURES / "meta_report_fixture.jsonl",
+        classes_path=FIXTURES / "meta_classes.json",
+        class_names=("Testclass",),
+        spec_names_or_ids=("Damage",),
+        top=1,
+        beam_width=2,
+        branch_width=2,
+        require_budget_fraction=0.0,
+        simulate=True,
+        simulation_duration_ms=5000,
+    )
+
+    simulation = MetaReportRunner(config).run().spec_results[0].top_builds[0].simulation_result
+
+    assert simulation["schema_version"] == "coa-simulation-result-blocked-v1"
+    assert simulation["status"] == "blocked" and simulation["source"] == "blocked"
+    assert simulation["reason"] == "heuristic_not_authorized"
 
 
 def test_meta_report_runner_can_attach_simulated_rotation_guides():
@@ -215,6 +239,7 @@ def test_meta_report_runner_can_attach_simulated_rotation_guides():
         simulate_rotations=True,
         rotation_duration_ms=10_000,
         rotation_candidates=8,
+        allow_heuristic=True,
     )
 
     report = MetaReportRunner(config).run()
@@ -222,7 +247,37 @@ def test_meta_report_runner_can_attach_simulated_rotation_guides():
 
     assert build["rotation_guide"]["schema_version"] == "coa-rotation-guide-v1"
     assert build["rotation_guide"]["simulation_summary"]["source"] == "simulated"
+    assert build["rotation_guide"]["status"] == "heuristic"     # labeled, since timing is unextracted
+    assert build["rotation_guide"]["quantitative_source"] == "heuristic"
+    assert build["rotation_guide"]["source"] == "simulated"    # the guide's own provenance kind survives
     assert build["rotation_loop"]["schema_version"] == "coa-rotation-loop-v1"
+
+
+def test_meta_report_runner_blocks_the_rotation_guide_without_explicit_authorization():
+    # E0R.1 T5.4: the SAME run without allow_heuristic returns an explicit blocked section naming the
+    # offending (action, field, reason) — never a silently estimated guide.
+    config = MetaRunConfig(
+        entries_path=FIXTURES / "meta_report_fixture.jsonl",
+        classes_path=FIXTURES / "meta_classes.json",
+        class_names=("Testclass",),
+        spec_names_or_ids=("Damage",),
+        top=1,
+        beam_width=2,
+        branch_width=2,
+        require_budget_fraction=0.0,
+        simulate_rotations=True,
+        rotation_duration_ms=10_000,
+        rotation_candidates=8,
+    )
+
+    build = MetaReportRunner(config).run().spec_results[0].top_builds[0].to_dict()
+
+    guide = build["rotation_guide"]
+    assert guide["schema_version"] == "coa-rotation-guide-blocked-v1"
+    assert guide["status"] == "blocked" and guide["source"] == "blocked"
+    assert guide["reason"] == "missing_load_bearing_data"
+    assert guide["blocking"], "a blocked section must name what is missing"
+    assert {item["field"] for item in guide["blocking"]} <= {"costs", "cooldown_ms", "gcd_ms"}
 
 
 def test_meta_report_top_builds_include_playstyle_selection_and_rotation_loop():

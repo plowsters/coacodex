@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .guide_builder import load_client_icon_catalog
 from .report_assets import AssetResolver
 from .reporting import SUPPORTED_META_ROLES, MetaReportRunner, MetaRunConfig, write_report_outputs
 
@@ -33,13 +34,19 @@ def build_parser() -> argparse.ArgumentParser:
     meta.add_argument("--no-simulate-rotations", dest="simulate_rotations", action="store_false")
     meta.add_argument("--rotation-duration-ms", type=int, default=90_000)
     meta.add_argument("--rotation-candidates", type=int, default=48)
+    meta.add_argument("--allow-heuristic", action="store_true",
+                      help="Authorize HEURISTIC estimates where client timing (gcd/cooldown/costs) is not "
+                           "yet extracted. Default off: the report emits an explicit blocked rotation "
+                           "section instead of a silently-estimated guide, and any heuristic output is "
+                           "labeled source=heuristic.")
     meta.add_argument("--gear-profile", type=Path, default=None)
     meta.add_argument("--workers", type=int, default=1)
     meta.add_argument("--format", dest="formats", action="append", choices=("json", "md", "html"), default=[])
     meta.add_argument("--out", type=Path, default=Path("reports/meta"))
     meta.add_argument("--asset-root", type=Path, default=None)
-    meta.add_argument("--db-tooltips", type=Path, default=None, help="Optional AscensionDB tooltip JSONL for static guide tooltips")
     meta.add_argument("--builder-layout-root", type=Path, default=None, help="Optional CoA Builder tree layout artifact directory")
+    meta.add_argument("--icon-catalog", type=Path, default=None,
+                      help="Optional client-native coa-client-spell-icons-v1 JSONL; guide icons resolve ONLY from it")
     meta.add_argument("--write-backend-trust", action="store_true")
     meta.add_argument("--backend-trust-out", type=Path, default=None)
     meta.set_defaults(handler=run_meta)
@@ -84,6 +91,7 @@ def run_meta(args: argparse.Namespace) -> int:
         rotation_duration_ms=args.rotation_duration_ms,
         rotation_candidates=args.rotation_candidates,
         gear_profile_path=args.gear_profile,
+        allow_heuristic=args.allow_heuristic,
     )
     _log_progress("Loading artifacts and expanding report scopes")
     _log_progress("Running build search and scoring")
@@ -106,8 +114,8 @@ def run_meta(args: argparse.Namespace) -> int:
         formats=formats,
         asset_resolver=asset_resolver,
         entries_path=args.entries,
-        db_tooltips_path=args.db_tooltips,
         builder_layout_root=args.builder_layout_root,
+        icon_catalog=load_client_icon_catalog(args.icon_catalog),
         **writer_kwargs,
     )
     _log_progress(f"Complete: wrote {len(outputs)} file(s) to {args.out}")

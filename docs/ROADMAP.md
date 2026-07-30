@@ -124,7 +124,11 @@ Implementation note:
 
 ### Milestone 1.8: Source Level and AscensionDB Enrichment
 
-Status: complete in the current repo.
+Status: complete in the current repo. **Superseded by M1.14E0R.1 (AscensionDB sunset).** The
+requirements below are history: the DB parser/cache/item-builder runtime is deleted, `ascension_db` is
+no longer a mechanics reconciliation tier (`client_dbc` ▸ `verified_builder` ▸ `inferred`), and a
+canonical build makes no network request at all. Source-level and enrichment provenance survive; their
+DB-sourced inputs do not.
 
 Requirements:
 
@@ -135,7 +139,7 @@ Requirements:
 
 Exit criteria:
 
-- `npm --prefix coa_scraper run pipeline:m1.8` regenerates normalized, enriched, and manifest artifacts.
+- The M1.8 pipeline command regenerated normalized, enriched, and manifest artifacts. It is **deleted**; the surviving command is `npm --prefix coa_scraper run pipeline`, which regenerates the normalized artifacts only.
 - Validation reports identify source-level uncertainty instead of silently treating unknown levels as reliable.
 
 ### Milestone 1.9: Combat Engine and Theorycraft Completion
@@ -167,7 +171,7 @@ Requirements:
 - Redesign the HTML report with a fel/void green-purple theme, wider responsive layouts, sticky guide navigation, readable cards, hover tooltips, and mobile-safe spacing.
 - Use player-facing WoW guide language. Move CoA Meta Analyzer internals into concise tooltip explanations for metrics such as Confidence, Projected DPS Index, and data warnings.
 - Generate individual spec guide pages with Overview, Builds, Talent Tree, Rotation, Stats, Gear, Abilities/Talents, Warnings, and Changelog-style data provenance sections.
-- Integrate icons/images from normalized `icon` fields, scraper assets, AscensionDB links, and later class/spec media assets. Every spell/talent with a spell ID should link to its `db.ascension.gg` spell page.
+- Integrate icons/images from normalized `icon` fields, scraper assets, and later class/spec media assets. **Corrected by M1.14E0R.1:** the original requirement had every spell/talent hotlink its `db.ascension.gg` page. Icons are client-native now — resolved from the published generation's icon catalog — and the guide hotlinks nothing off-site.
 - Render selected builds in a CoA-builder-like tree using normalized row/column, connection, rank, cost, level, and prerequisite fields. The tree should support hover tooltips and level/AE/TE legality feedback without requiring the live builder runtime.
 - Order build recommendations by when abilities and talents become available while still showing the level-60 build target.
 - Show the stat priority disclaimer once per spec, not once per stat entry.
@@ -180,7 +184,7 @@ Requirements:
 P1 sub-milestones:
 
 - M1.10A Guide information architecture: static route structure, guide page templates, navigation, player-facing copy rules, and metric tooltip definitions. Status: implemented. Design: [M1.10A/B Guide Information Architecture and Asset Integration](superpowers/specs/2026-07-05-m1-10-a-b-guide-ia-assets-design.md).
-- M1.10B Asset and tooltip integration: icon resolver, class/spec media catalog, AscensionDB hotlinks, hover tooltip payloads, missing-asset fallback policy, and asset manifest updates. Status: implemented. Plan: [M1.10A/B Guide IA and Asset Integration](superpowers/plans/2026-07-05-m1-10-a-b-guide-ia-assets.md).
+- M1.10B Asset and tooltip integration: icon resolver, class/spec media catalog, AscensionDB hotlinks, hover tooltip payloads, missing-asset fallback policy, and asset manifest updates. Status: implemented; **the hotlink half is superseded by M1.14E0R.1 (AscensionDB sunset)** — the resolver is client-native and emits no off-site link. Plan: [M1.10A/B Guide IA and Asset Integration](superpowers/plans/2026-07-05-m1-10-a-b-guide-ia-assets.md).
 - M1.10C CoA-style talent tree renderer: static tree layout from normalized row/column/edges, rank/cost badges, level gating, AE/TE legality checks, hover tooltips, and lightweight JavaScript for interactions. Status: implemented. Design: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/specs/2026-07-05-m1-10-c-d-tree-diversity-design.md).
 - M1.10D Rotation and build diversity heuristics: playstyle fingerprints from selected nodes/APL actions, performance-band filtering, reliability scoring, and user-facing build comparison labels. Status: implemented. Plan: [M1.10C/D Talent Tree Renderer and Build Diversity](superpowers/plans/2026-07-05-m1-10-c-d-tree-diversity.md).
 - M1.10E Role taxonomy refinement: source-backed role mapping where possible, metadata inference fallback, separate melee/caster/healer/support/tank UI roles, and broad engine-role routing for scoring/APL compatibility. Status: implemented. Design: [M1.10E/F Role Taxonomy and Gear/Stats Presentation](superpowers/specs/2026-07-05-m1-10-e-f-role-gear-stats-design.md).
@@ -202,15 +206,15 @@ Purpose: correct the guide output where M1.10 is visibly useful but not yet fait
 Requirements:
 
 - Keep the front page grouped by Tank, Healer, Support, Caster DPS, Ranged DPS, and Melee DPS with multi-select role filters.
-- Keep the front-page theorycraft disclaimer visible: outputs are based on CoA Builder and AscensionDB data, with AscensionLogs compatibility planned for more accurate tuning if CoA remains available.
+- Keep the front-page theorycraft disclaimer visible: outputs are based on CoA Builder data and the client's own DBC tables, with AscensionLogs compatibility planned for more accurate tuning if CoA remains available. (**Corrected by M1.14E0R.1:** the disclaimer named AscensionDB as a data source; it is no longer one.)
 - Preserve source spec names internally while applying user-facing legacy renames in JSON, Markdown, and HTML.
 - Treat confidence as provenance/internal data unless it becomes genuinely sensitive enough to be useful to players.
 - Replace DPS-only labels and sorting for tanks, healers, and support specs with role-specific objective indexes.
 - Build an authoritative or curated role map with provenance before relying on inference for high-confidence role labels.
 - Recreate CoA Builder tree structure accurately: separate Ability Essence class tree, Talent Essence spec tree, and automatic level passive lane.
 - Generate exact level-by-level build paths from level 10 through 60, alternating Ability Essence and Talent Essence and respecting gates.
-- Extend AscensionDB scraping to icons/images, items, weapons, armor, effects, and tooltip data with conditional requests, content hashing, and bounded concurrency.
-- Render DB tooltip tables safely as tables.
+- **Retired by M1.14E0R.1 (AscensionDB sunset).** This entry read "extend AscensionDB scraping to icons/images, items, weapons, armor, effects, and tooltip data". The DB scraper/cache runtime is deleted and a canonical build is network-free; icons, effects and mechanics come from the client's own DBC tables through the published generation. Items/weapons/armor have no client-native source yet and remain unscheduled rather than pending a DB scrape.
+- **Retired by M1.14E0R.1:** "render DB tooltip tables safely as tables" — there are no DB tooltips to render. Tooltip content that survives is builder-rendered text plus client-native mechanics.
 - Upgrade rotation generation from category summaries to guide-ready priority output backed by APL execution and role-objective simulation.
 - Improve recommended build diversity by clustering playstyle/rotation fingerprints and selecting one strong representative per meaningful playstyle.
 - Add calibration hooks for known theory/live mismatches and prepare AscensionLogs/addon data integration.
@@ -220,7 +224,7 @@ P1 sub-milestones:
 - M1.11A Report index and metadata quick fixes. Status: implemented.
 - M1.11B Authoritative role map and role-specific objective indexes. Status: implemented as a first pass. Design: [M1.11B Role Map and Role-Specific Objective Indexes](superpowers/specs/2026-07-05-m1-11-b-role-objectives-design.md). Plan: [M1.11B Implementation Plan](superpowers/plans/2026-07-05-m1-11-b-role-objectives.md).
 - M1.11C CoA Builder talent tree parity capture and renderer separation. Status: implemented. Renderer separation and normalized tree layout render faithfully across specs; CoA Builder DOM/screenshot parity was judged unnecessary (see [DECISIONS.md](DECISIONS.md) Decision 17), so the browser-capture checklist is an optional spot-check rather than a required exit item. Design: [M1.11C CoA Builder Talent Tree Parity](superpowers/specs/2026-07-05-m1-11-c-builder-tree-parity-design.md). Plan: [M1.11C Implementation Plan](superpowers/plans/2026-07-05-m1-11-c-builder-tree-parity.md). Checklist: [Tree Parity Checklist](tree-parity-checklist.md).
-- M1.11D Cache-aware AscensionDB asset and canonical data scraper. Status: implemented as a first pass. Design: [M1.11D AscensionDB Asset and Canonical Data Cache](superpowers/specs/2026-07-06-m1-11-d-ascensiondb-asset-cache-design.md). Plan: [M1.11D Implementation Plan](superpowers/plans/2026-07-06-m1-11-d-ascensiondb-asset-cache.md).
+- M1.11D Cache-aware AscensionDB asset and canonical data scraper. Status: implemented as a first pass, then **superseded by M1.14E0R.1 (AscensionDB sunset)** — the parser, cache and item-builder runtime are deleted; the sole surviving `db.ascension.gg` touch is an opt-in icon downloader that refuses to run without `--authorize` and writes only under `diagnostic/`. Design: [M1.11D AscensionDB Asset and Canonical Data Cache](superpowers/specs/2026-07-06-m1-11-d-ascensiondb-asset-cache-design.md). Plan: [M1.11D Implementation Plan](superpowers/plans/2026-07-06-m1-11-d-ascensiondb-asset-cache.md).
 - M1.11E Rotation simulation and guide-ready priority output. Status: implemented as a first pass. Design: [M1.11E Rotation Simulation and Guide-Ready Priority Output](superpowers/specs/2026-07-06-m1-11-e-rotation-simulation-guide-output-design.md). Plan: [M1.11E Implementation Plan](superpowers/plans/2026-07-06-m1-11-e-rotation-simulation-guide-output.md).
 - M1.11F Exact leveling path and build diversity clustering. Status: implemented as a first pass. Design: [M1.11F Exact Leveling Path and Build Diversity Correctness](superpowers/specs/2026-07-06-m1-11-f-leveling-path-build-diversity-design.md). Plan: [M1.11F Implementation Plan](superpowers/plans/2026-07-06-m1-11-f-leveling-path-build-diversity.md).
 - M1.11G Backend verification and trust heuristic. Status: implemented as a first pass; user-facing empirical calibration remains P2-gated. Design: [M1.11G Backend Verification and Trust Heuristic](superpowers/specs/2026-07-06-m1-11-g-backend-trust-heuristic-design.md). Plan: [M1.11G Implementation Plan](superpowers/plans/2026-07-06-m1-11-g-backend-trust-heuristic.md).
@@ -236,14 +240,16 @@ Exit criteria:
 
 ### Phase 1 Continuation: Public Release and Systems Correctness (M1.12–M1.20)
 
-The M1.11 first pass is useful but not yet a defensible public resource: it depends on a stale
-db.ascension.gg source, its calculators do not model WoW's actual power systems, and it has visible
-correctness/UX gaps. Milestones M1.12–M1.20 take the tool to a public GitHub Pages release whose
+The M1.11 first pass is useful but not yet a defensible public resource: it depended on a stale
+db.ascension.gg source (since **removed** — M1.14E0R replaced it with client-native extraction), its
+calculators do not model WoW's actual power systems, and it has visible correctness/UX gaps. Milestones M1.12–M1.20 take the tool to a public GitHub Pages release whose
 numbers are grounded in the real game systems. Full decomposition, findings, and strategic decisions
 are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpowers/specs/2026-07-06-m1-12-to-m1-20-public-release-roadmap-design.md).
 
 - **M1.12 Public-Release UI Quick Fixes.** Status: implemented. Icons on nodes and spec cards
-  (AscensionDB hotlink), select-to-include role filter, updated disclaimer, header GitHub link,
+  (originally an AscensionDB hotlink; **superseded** by M1.14E0R.1's client-native icon catalog, so the
+  guide now renders a bundled client asset or an honest placeholder and links nothing off-site),
+  select-to-include role filter, updated disclaimer, header GitHub link,
   footer, and removal of leveling-path boilerplate. No engine/data changes. Design:
   [M1.12 UI Quick Fixes](superpowers/specs/2026-07-06-m1-12-public-release-ui-quick-fixes-design.md).
   Plan: [M1.12 Implementation Plan](superpowers/plans/2026-07-06-m1-12-public-release-ui-quick-fixes.md).
@@ -286,9 +292,10 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
   - **M1.14C Reconciliation and DB Sunset.** Status: implemented and merged to `main` (merge
     `9788714`, 2026-07-16; all 16 TDD tasks plus a final whole-branch review, zero Critical findings).
     Attribution-scoped (`is_coa`) client-spell projection plus per-field source-precedence
-    reconciliation (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred) in the Node mechanics
-    builder, retaining every competing value + a stable selection reason in an additive
-    `field_provenance`; demotes db.ascension.gg mechanical enrichment to fallback-only; keeps
+    reconciliation (`client_dbc` ▸ verified Builder ▸ AscensionDB ▸ inferred — the `ascension_db` tier
+    was later **removed** outright by M1.14E0R, leaving `client_dbc` ▸ `verified_builder` ▸ `inferred`)
+    in the Node mechanics builder, retaining every competing value + a stable selection reason in an
+    additive `field_provenance`; demotes db.ascension.gg mechanical enrichment to fallback-only; keeps
     `coa-mechanics-v1` (loader round-trips the new field). Fails closed without a valid projection
     (`--allow-fallback-mechanics` writes a separate degraded artifact); real projection/manifest stay
     untracked. The mechanics manifest (`coa-mechanics-manifest-v1`) carries an aggregate audit
@@ -319,6 +326,19 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     viable/not-viable spike — must resolve every discovered class resource's runtime carrier + behavior
     via APIs/events/UI/controlled gameplay and emit `coa-resource-contract-v1` records). Delineated in
     the umbrella; each gets its own spec when next in line.
+  - **M1.14G also owns the three unresolved `Spell.dbc` joins** (assigned in E0R.3). E0R ran value-anchor
+    joined-pair discovery for all four required joins and promoted one — `spell_icon_id` → cell 133.
+    `casting_time_index` (`SpellCastTimes`), `duration_index` (`SpellDuration`), and `range_index`
+    (`SpellRange`) came back **`reviewed_ambiguous`**: the FK-validity scan yields 30 / 34 / 14 candidate
+    columns and no admissible evidence distinguishes them, so cast time, effect duration, and spell range
+    are **unavailable** through E1/E2/E3 — not deferred pending effort, measured as unresolvable from the
+    evidence that exists. Promotion needs a **value anchor** (one known spell's ms/yards from an
+    admissible source); the Builder payload does not carry it and client strings do not encode it, so G is
+    the first milestone whose controlled-client instrument could produce one — and only if the
+    anchor-evidence precedence is explicitly extended to admit a measured value, which is an owner
+    decision. A second FK-validity scan is **not** new evidence; the recon report already records what it
+    yields. Detail:
+    [E0R → Impact on M1.14E1](superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md#impact-on-m114e1).
   - **M1.14E Mechanics Extraction Completion.** Status: specced (real-client recon done). Extend client
     extraction to the per-spell operands M1.14A/C/D left on the stale db/inferred tiers — cooldown +
     category cooldown, the GCD base operands D pushed here (`StartRecoveryTime`/`StartRecoveryCategory`,
@@ -333,11 +353,17 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
     classes is a hard gate) as `coa-resource-candidate-v1` (candidates + adjudication, **no** live claims);
     live carrier resolution + canonical `coa-resource-contract-v1` are M1.14G, the resource state machine
     is M1.16. Also adds an operands sidecar + CoA mechanical dependency closure and bumps the client
-    extract to `coa-client-spell-v2`. Decomposed E0 (correctness/publication) → E1 (raw operands +
-    closure) → E2 (per-slot interpretations) → E3 (static resource discovery). Depends on A + C;
-    independent of D. Design:
-    [M1.14E Mechanics Extraction Completion](superpowers/specs/2026-07-18-m1-14-e-mechanics-extraction-completion-design.md).
-    See also the [client DBC reference](data/client-dbc-reference.md).
+    extract to `coa-client-spell-v2`. Decomposed E0 (correctness/publication) → **E0R (correctness &
+    AscensionDB sunset — inserted after E0, before E1)** → E1 (raw operands + closure) → E2 (per-slot
+    interpretations) → E3 (static resource discovery). Depends on A + C; independent of D. Design:
+    [M1.14E Mechanics Extraction Completion](superpowers/specs/2026-07-18-m1-14-e-mechanics-extraction-completion-design.md)
+    and [M1.14E0R correctness & sunset remediation](superpowers/specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md).
+    E0R makes the E0 evidence model enforced/non-bypassable at every boundary (evidence ≠ authorization,
+    one shared full-topology hard hold, transactional candidate→pointer publication, streaming within a
+    three-part budget), hard-cuts `db.ascension.gg` from the canonical spell-mechanics pipeline
+    (`coa-mechanics-v2` nullable costs + field readiness, consumer fail-closed interlock, client-native
+    icons), and records a real-client regenerate within budget. See also the
+    [client DBC reference](data/client-dbc-reference.md).
   - **M1.14F carried-forward audit item (from M1.14B, M1 follow-up).** The `coa-builder-parity-v3`
     `per_class`/`per_tab` breakdown tables group on raw, un-canonicalized class labels, so the four
     CamelCase CoA classes (`WitchDoctor`, `WitchHunter`, `KnightOfXoroth`, `SunCleric`) surface
@@ -392,6 +418,19 @@ are in [M1.12–M1.20 Public-Release and Systems-Correctness Roadmap](superpower
   bridge (never inferred from power type; D emits `class_context_resolution` evidence, never a Boolean),
   and add the HP-regen pair (`gtRegenHPPerSpt`+`gtOCTRegenHP`) only if base/passive health regen becomes
   an explicit modeled term.
+  - **M1.16 guide-honesty item (deferred out of M1.14E0R.1): label heuristic build rankings as
+    candidates, not recommendations.** `MetaReportRunner` ranks builds with `TheoryScorer` and the guide
+    presents the result in "top theorycraft" language. Those rankings are heuristic until client
+    mechanics, per-slot interpretation, combat logs and expert review converge — which is what M1.16's
+    model exists to supply. Until then the copy must say candidate/hypothesis, and the rewire that makes
+    them genuine recommendations is this milestone's, not a copy edit.
+  - **M1.16 guide-honesty item (deferred out of M1.14E0R.1): report renderable icon coverage separately
+    from source coverage.** Acceptance measures ~179,749 **source** BLPs present in the client; the guide
+    renders only converted assets, and conversion is prohibited until its bundle validator exists
+    (E0R.2 T2.5) — so renderable coverage is currently zero while the reported number is six figures.
+    Report source / renderable / CoA-domain / Builder-domain as four separate denominators, resolve the
+    catalog through the published generation's normalized icon children (`coa-client-spell-icons-v2` +
+    `coa-client-icon-assets-v1`), and cache by `spell_id` or `asset_ref` rather than by label.
 - **M1.17 Rotation Quality.** Status: planned. Derive true core loops from the model; build-archetype
   taxonomy beyond "DoT loop"; concise opener/priority/cooldown/role sections.
 - **M1.18 Gear/Stat Interaction and Breakpoints.** Status: planned. Model-derived stat weights per

@@ -1,0 +1,1264 @@
+{
+  "ambiguity_baseline": {
+    "joins": {
+      "casting_time_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 6,
+            "nonzero_count": 390,
+            "valid_count": 388
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 28,
+            "distinct_ids": 67,
+            "nonzero_count": 208776,
+            "valid_count": 208761
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 14,
+            "nonzero_count": 2734,
+            "valid_count": 2721
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6331
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 26,
+            "nonzero_count": 4071,
+            "valid_count": 4051
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 17,
+            "nonzero_count": 2883,
+            "valid_count": 2880
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 16,
+            "nonzero_count": 1836,
+            "valid_count": 1823
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 10,
+            "nonzero_count": 720,
+            "valid_count": 716
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 40,
+            "nonzero_count": 77902,
+            "valid_count": 77424
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 27,
+            "nonzero_count": 3382,
+            "valid_count": 3378
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 135,
+            "distinct_ids": 13,
+            "nonzero_count": 32640,
+            "valid_count": 32568
+          },
+          {
+            "cell": 208,
+            "distinct_ids": 35,
+            "nonzero_count": 86639,
+            "valid_count": 86560
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6515
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          }
+        ],
+        "digest": "5d159aa8a6b4a177b6f6e99167f03156efa5197b9b0904ac69d814d6f86b61a1"
+      },
+      "duration_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 3,
+            "distinct_ids": 31,
+            "nonzero_count": 12411,
+            "valid_count": 12411
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 3,
+            "nonzero_count": 20940,
+            "valid_count": 20940
+          },
+          {
+            "cell": 20,
+            "distinct_ids": 13,
+            "nonzero_count": 341,
+            "valid_count": 338
+          },
+          {
+            "cell": 21,
+            "distinct_ids": 12,
+            "nonzero_count": 455,
+            "valid_count": 455
+          },
+          {
+            "cell": 22,
+            "distinct_ids": 7,
+            "nonzero_count": 390,
+            "valid_count": 390
+          },
+          {
+            "cell": 23,
+            "distinct_ids": 5,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 36,
+            "distinct_ids": 13,
+            "nonzero_count": 2734,
+            "valid_count": 2720
+          },
+          {
+            "cell": 40,
+            "distinct_ids": 165,
+            "nonzero_count": 113855,
+            "valid_count": 113855
+          },
+          {
+            "cell": 43,
+            "distinct_ids": 12,
+            "nonzero_count": 245,
+            "valid_count": 245
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 60,
+            "distinct_ids": 30,
+            "nonzero_count": 6365,
+            "valid_count": 6338
+          },
+          {
+            "cell": 61,
+            "distinct_ids": 28,
+            "nonzero_count": 4071,
+            "valid_count": 4068
+          },
+          {
+            "cell": 62,
+            "distinct_ids": 18,
+            "nonzero_count": 2883,
+            "valid_count": 2881
+          },
+          {
+            "cell": 63,
+            "distinct_ids": 17,
+            "nonzero_count": 1836,
+            "valid_count": 1829
+          },
+          {
+            "cell": 64,
+            "distinct_ids": 12,
+            "nonzero_count": 1197,
+            "valid_count": 1191
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 11,
+            "nonzero_count": 720,
+            "valid_count": 720
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 64,
+            "nonzero_count": 77902,
+            "valid_count": 77460
+          },
+          {
+            "cell": 83,
+            "distinct_ids": 28,
+            "nonzero_count": 3382,
+            "valid_count": 3382
+          },
+          {
+            "cell": 84,
+            "distinct_ids": 24,
+            "nonzero_count": 2900,
+            "valid_count": 2900
+          },
+          {
+            "cell": 85,
+            "distinct_ids": 19,
+            "nonzero_count": 660,
+            "valid_count": 660
+          },
+          {
+            "cell": 104,
+            "distinct_ids": 17,
+            "nonzero_count": 4607,
+            "valid_count": 4581
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 10,
+            "nonzero_count": 2286,
+            "valid_count": 2285
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 8,
+            "nonzero_count": 1429,
+            "valid_count": 1429
+          },
+          {
+            "cell": 212,
+            "distinct_ids": 18,
+            "nonzero_count": 6558,
+            "valid_count": 6504
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 219,
+            "distinct_ids": 3,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          },
+          {
+            "cell": 223,
+            "distinct_ids": 2,
+            "nonzero_count": 228,
+            "valid_count": 226
+          },
+          {
+            "cell": 225,
+            "distinct_ids": 28,
+            "nonzero_count": 204892,
+            "valid_count": 202885
+          }
+        ],
+        "digest": "363ad3bef343a3a29c992ca0c64a4e7be1d88e94f96418f11bd41c376363d8ae"
+      },
+      "range_index": {
+        "candidates": [
+          {
+            "cell": 2,
+            "distinct_ids": 10,
+            "nonzero_count": 20410,
+            "valid_count": 20410
+          },
+          {
+            "cell": 19,
+            "distinct_ids": 2,
+            "nonzero_count": 20940,
+            "valid_count": 20939
+          },
+          {
+            "cell": 45,
+            "distinct_ids": 3,
+            "nonzero_count": 14,
+            "valid_count": 14
+          },
+          {
+            "cell": 46,
+            "distinct_ids": 265,
+            "nonzero_count": 207507,
+            "valid_count": 207505
+          },
+          {
+            "cell": 65,
+            "distinct_ids": 9,
+            "nonzero_count": 720,
+            "valid_count": 715
+          },
+          {
+            "cell": 66,
+            "distinct_ids": 5,
+            "nonzero_count": 577,
+            "valid_count": 577
+          },
+          {
+            "cell": 67,
+            "distinct_ids": 3,
+            "nonzero_count": 328,
+            "valid_count": 328
+          },
+          {
+            "cell": 76,
+            "distinct_ids": 52,
+            "nonzero_count": 77902,
+            "valid_count": 77376
+          },
+          {
+            "cell": 105,
+            "distinct_ids": 9,
+            "nonzero_count": 2286,
+            "valid_count": 2264
+          },
+          {
+            "cell": 106,
+            "distinct_ids": 7,
+            "nonzero_count": 1429,
+            "valid_count": 1428
+          },
+          {
+            "cell": 213,
+            "distinct_ids": 3,
+            "nonzero_count": 70647,
+            "valid_count": 70647
+          },
+          {
+            "cell": 214,
+            "distinct_ids": 3,
+            "nonzero_count": 51330,
+            "valid_count": 51330
+          },
+          {
+            "cell": 220,
+            "distinct_ids": 2,
+            "nonzero_count": 12,
+            "valid_count": 12
+          },
+          {
+            "cell": 221,
+            "distinct_ids": 3,
+            "nonzero_count": 18,
+            "valid_count": 18
+          }
+        ],
+        "digest": "fe7c131c5741845ac3ee8ed0feffedcd37dde0e3657830e32cf6775505cefe0a"
+      }
+    },
+    "scan_algorithm": "fk_validity_v1",
+    "thresholds": {
+      "min_distinct": 2,
+      "min_support": 2,
+      "valid_den": 100,
+      "valid_num": 99
+    }
+  },
+  "anchor_set": {
+    "joins": {
+      "casting_time_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellCastTimes"
+      },
+      "duration_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 34 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellDuration"
+      },
+      "range_index": {
+        "adjudication": "reviewed_ambiguous",
+        "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+        "side_table": "SpellRange"
+      },
+      "spell_icon_id": {
+        "anchors": [
+          {
+            "expected_state": "resolved",
+            "expected_value": 28001,
+            "spell_id": 92081
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 27327,
+            "spell_id": 300695
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 27330,
+            "spell_id": 500715
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 7504,
+            "spell_id": 511109
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 4932,
+            "spell_id": 560057
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 2719,
+            "spell_id": 561215
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 140,
+            "spell_id": 680496
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 13612,
+            "spell_id": 704115
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 5944,
+            "spell_id": 704947
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 64337,
+            "spell_id": 705565
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 34438,
+            "spell_id": 707364
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 24445,
+            "spell_id": 804892
+          },
+          {
+            "expected_state": "resolved",
+            "expected_value": 7685,
+            "spell_id": 806100
+          }
+        ],
+        "evidence": "Builder-payload icon paths mapped through the hash-bound client SpellIcon.dbc to unique icon ids; jointly-unique discovery adopts cell 133. Provenance below lists each anchor's Builder spell + scraped icon path.",
+        "provenance": [
+          {
+            "class_name": "Barbarian",
+            "icon": "Interface\\Icons\\_Orc_06",
+            "icon_id": 28001,
+            "name": "Excessive Power",
+            "spell_id": 92081
+          },
+          {
+            "class_name": "Primalist",
+            "icon": "Interface\\Icons\\_D3earthquake",
+            "icon_id": 27327,
+            "name": "Blessed by the Earth",
+            "spell_id": 300695
+          },
+          {
+            "class_name": "Cultist",
+            "icon": "Interface\\Icons\\_D3energyarmor",
+            "icon_id": 27330,
+            "name": "Void Shield",
+            "spell_id": 500715
+          },
+          {
+            "class_name": "Pyromancer",
+            "icon": "Interface\\Icons\\achievment_boss_madnessofdeathwing",
+            "icon_id": 7504,
+            "name": "Breath of Neltharion",
+            "spell_id": 511109
+          },
+          {
+            "class_name": "Felsworn",
+            "icon": "Interface\\Icons\\ability_demonhunter_felblade",
+            "icon_id": 4932,
+            "name": "Chaos Soldier",
+            "spell_id": 560057
+          },
+          {
+            "class_name": "Necromancer",
+            "icon": "Interface\\Icons\\Spell_DeathKnight_EmpowerRuneBlade",
+            "icon_id": 2719,
+            "name": "Forbidden Technique",
+            "spell_id": 561215
+          },
+          {
+            "class_name": "Witch Hunter",
+            "icon": "Interface\\Icons\\Spell_Shadow_SealOfKings",
+            "icon_id": 140,
+            "name": "Bulwark of Darkness",
+            "spell_id": 680496
+          },
+          {
+            "class_name": "Bloodmage",
+            "icon": "Interface\\Icons\\inv_hand_1h_pvpdraenors2_d_01",
+            "icon_id": 13612,
+            "name": "Clotting",
+            "spell_id": 704115
+          },
+          {
+            "class_name": "Sun Cleric",
+            "icon": "Interface\\Icons\\ability_skyreach_solar_burst",
+            "icon_id": 5944,
+            "name": "Radiant Marks",
+            "spell_id": 704947
+          },
+          {
+            "class_name": "Runemaster",
+            "icon": "Interface\\icons\\nhi_watersword_Border",
+            "icon_id": 64337,
+            "name": "Waveforged",
+            "spell_id": 705565
+          },
+          {
+            "class_name": "Templar",
+            "icon": "Interface\\Icons\\custom_23_Light_blow_Border",
+            "icon_id": 34438,
+            "name": "Guardian of the Light",
+            "spell_id": 707364
+          },
+          {
+            "class_name": "Guardian",
+            "icon": "Interface\\Icons\\sha_ability_rogue_sturdyrecuperate",
+            "icon_id": 24445,
+            "name": "Refuse To Die",
+            "spell_id": 804892
+          },
+          {
+            "class_name": "Stormbringer",
+            "icon": "Interface\\Icons\\5_shamanskill41nobg_Border",
+            "icon_id": 7685,
+            "name": "Fog",
+            "spell_id": 806100
+          }
+        ],
+        "side_id_cell": 0,
+        "side_table": "SpellIcon",
+        "side_value_cells": [
+          0
+        ],
+        "side_value_kind": "uint32"
+      }
+    },
+    "sha256": "3fd0f9e62bfa3ba72b7b16c816b930adf709d1922fefe53855551cace80ee2b9",
+    "spells": [
+      {
+        "id": 133,
+        "name": "Fireball",
+        "power_type": 0,
+        "school_mask": 4
+      },
+      {
+        "id": 116,
+        "name": "Frostbolt",
+        "power_type": 0,
+        "school_mask": 16
+      },
+      {
+        "id": 585,
+        "name": "Smite",
+        "power_type": 0,
+        "school_mask": 2
+      },
+      {
+        "id": 78,
+        "name": "Heroic Strike",
+        "power_type": 1,
+        "school_mask": 1
+      },
+      {
+        "id": 686,
+        "name": "Shadow Bolt",
+        "power_type": 0,
+        "school_mask": 32
+      },
+      {
+        "id": 5176,
+        "name": "Wrath",
+        "power_type": 0,
+        "school_mask": 8
+      },
+      {
+        "id": 1449,
+        "name": "Arcane Explosion",
+        "power_type": 0,
+        "school_mask": 64
+      },
+      {
+        "id": 2098,
+        "name": "Eviscerate",
+        "power_type": 3,
+        "school_mask": 1
+      }
+    ]
+  },
+  "artifact_contract": {
+    "icon_observation_domain": [
+      "spell_icon_id"
+    ],
+    "nullable_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ],
+    "required_mechanics_keys": [
+      "cast_time_ms",
+      "duration_ms",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ],
+    "required_raw_observations": [
+      "cast_time_ms",
+      "description",
+      "duration_ms",
+      "id",
+      "name",
+      "power_type",
+      "range_max_yd",
+      "range_min_yd",
+      "school_mask"
+    ]
+  },
+  "bound": {
+    "client_build": "3.3.5a+patch-CZZ",
+    "expected_absent": [
+      "SpellEffect",
+      "SpellCooldowns"
+    ],
+    "tables": {
+      "CharacterAdvancement": {
+        "header": {
+          "field_count": 179,
+          "magic": "WDBC",
+          "record_count": 10182,
+          "record_size": 692,
+          "string_block_size": 227896
+        },
+        "sha256": "0983830dcba39b2bcb9a6bb8b4eab5734f4b44317af1b071564d93f71a645e26",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancement.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementClassTypes": {
+        "header": {
+          "field_count": 23,
+          "magic": "WDBC",
+          "record_count": 46,
+          "record_size": 92,
+          "string_block_size": 627
+        },
+        "sha256": "02da78174798c0db90b5509fac6d829d6b3b91db39410b4d61772c184b61bedb",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementClassTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementEssence": {
+        "header": {
+          "field_count": 9,
+          "magic": "WDBC",
+          "record_count": 5600,
+          "record_size": 36,
+          "string_block_size": 0
+        },
+        "sha256": "ac6715bca5de98692ecc59f3ee08836d27c450bdf4851c17762e490027e175f7",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementEssence.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "CharacterAdvancementTabTypes": {
+        "header": {
+          "field_count": 19,
+          "magic": "WDBC",
+          "record_count": 94,
+          "record_size": 76,
+          "string_block_size": 910
+        },
+        "sha256": "f1c295b4acfcf71d03d3a9ce9749885dbca10c243b9be912b8803e3c1268fde4",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\CharacterAdvancementTabTypes.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "SkillLineAbility": {
+        "header": {
+          "field_count": 14,
+          "magic": "WDBC",
+          "record_count": 40904,
+          "record_size": 56,
+          "string_block_size": 0
+        },
+        "sha256": "f60ac7eb808870c9c1959387707eb88f0e649842b41cba2dcd8fcf29ef4d8893",
+        "source": {
+          "effective_archive": "patch-M.MPQ",
+          "member": "DBFilesClient\\SkillLineAbility.dbc",
+          "patch_chain": [
+            "patch-M.MPQ"
+          ]
+        }
+      },
+      "Spell": {
+        "header": {
+          "field_count": 234,
+          "magic": "WDBC",
+          "record_count": 208776,
+          "record_size": 936,
+          "string_block_size": 13284455
+        },
+        "sha256": "fc9d91cacf354e1578bcfc979dc140bd3bc3efe233de5b02196ef54cf6c59e4f",
+        "source": {
+          "effective_archive": "patch-T.MPQ",
+          "member": "DBFilesClient\\Spell.dbc",
+          "patch_chain": [
+            "patch-T.MPQ"
+          ]
+        }
+      },
+      "SpellCastTimes": {
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 71,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "sha256": "82e5f22dbbd21971947601a50e6df12587953cf5d5af2739785e7b040d049981",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellCastTimes.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellDuration": {
+        "header": {
+          "field_count": 4,
+          "magic": "WDBC",
+          "record_count": 866,
+          "record_size": 16,
+          "string_block_size": 0
+        },
+        "sha256": "eeae44ef0185924f3d6ec57ab2701c66566db86e51ab0bae017a9449126eb3a0",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellDuration.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellIcon": {
+        "header": {
+          "field_count": 2,
+          "magic": "WDBC",
+          "record_count": 16354,
+          "record_size": 8,
+          "string_block_size": 654236
+        },
+        "sha256": "b8f1c1ffffef9f8ffaf3ff1b292bc903131edad3d44a70709ef20a02d51ddf3a",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellIcon.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      },
+      "SpellRange": {
+        "header": {
+          "field_count": 40,
+          "magic": "WDBC",
+          "record_count": 323,
+          "record_size": 160,
+          "string_block_size": 3707
+        },
+        "sha256": "bb899631818942a7a7100abfb7a970612a79ac99637b1b459561e2b108125ddd",
+        "source": {
+          "effective_archive": "patch-S.MPQ",
+          "member": "DBFilesClient\\SpellRange.dbc",
+          "patch_chain": [
+            "patch-S.MPQ"
+          ]
+        }
+      }
+    }
+  },
+  "budget": {
+    "max_serialized_bytes_per_child": 471859200,
+    "max_whole_generation_bytes": 536870912,
+    "node_elapsed_s": 1200,
+    "node_peak_rss_mb": 4096,
+    "python_elapsed_s": 1200,
+    "python_peak_rss_mb": 4096
+  },
+  "content_sources": {
+    "directory": "Content",
+    "required_files": {
+      "CharacterAdvancementData.json": {
+        "kind": "character_advancement",
+        "sha256": "bc121f89f0d31fa6f76457dba5d43c3bad3cdf7a98b64a7c24aa816358b9ef77",
+        "source_entries": 23709
+      },
+      "ItemVariationData.json": {
+        "kind": "item_variation",
+        "sha256": "770e8d41dc546b6ddee027000d3cb2287614f7b9c28835a29d5cfc0f341b8f7a",
+        "source_entries": 10830
+      },
+      "SpellRankData.json": {
+        "kind": "spell_rank",
+        "sha256": "fb342952d8fe61896dca2030fe91f51c78fde96b22186f18421da425efb02fd4",
+        "source_entries": 13311
+      },
+      "SpellToRoleSuggestionData.json": {
+        "kind": "spell_role_suggestion",
+        "sha256": "ede962dff5f83360443ae26025a4f1126b375e2f819366b9646c6fa289881bd3",
+        "source_entries": 2447
+      },
+      "SpellToStatSuggestionData.json": {
+        "kind": "spell_stat_suggestion",
+        "sha256": "1b239b79a03c66781ede7c670393f37dd180a3801e66400d5d217c9add82fce9",
+        "source_entries": 2447
+      }
+    }
+  },
+  "enum_policy": {
+    "power_types": [
+      -2,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "school_bits": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "sha256": "8dc4ce2a375be787fd85f5b06d82b9291f458f6927fb4b19a4a68cbf7c8c4089"
+  },
+  "expected_absent": [
+    "SpellEffect",
+    "SpellCooldowns"
+  ],
+  "joins": {
+    "cast_time_ms": {
+      "index_field": "casting_time_index",
+      "promotion": "raw_only",
+      "side_table": "SpellCastTimes",
+      "side_value_field": "base_ms"
+    },
+    "duration_ms": {
+      "index_field": "duration_index",
+      "promotion": "raw_only",
+      "side_table": "SpellDuration",
+      "side_value_field": "base_ms"
+    },
+    "range_max_yd": {
+      "index_field": "range_index",
+      "promotion": "raw_only",
+      "side_table": "SpellRange",
+      "side_value_field": "max_yd"
+    },
+    "range_min_yd": {
+      "index_field": "range_index",
+      "promotion": "raw_only",
+      "side_table": "SpellRange",
+      "side_value_field": "min_yd"
+    },
+    "spell_icon_id": {
+      "index_field": "spell_icon_id",
+      "promotion": "normalized",
+      "side_table": "SpellIcon",
+      "side_value_field": "path"
+    }
+  },
+  "provenance_note": "E0R structured bound authored from real-client recon (build 3.3.5a+patch-CZZ). Every required table byte-bound by sha256 + full WDBC header + logical member/effective-archive/patch-chain. M1.14E0R.1 T1.2 adjudicates all four side-table joins: spell_icon_id ADOPTED at cell 133 (joined-pair value-anchor discovery from Builder-payload icon paths, non-circular blind plurality 293:1); casting_time_index/duration_index/range_index reviewed_ambiguous (null cell, raw_only). T1.3 DEMOTES power_type to raw_only@41 with a withheld decode (no static signed anchor; value 7 unknown); power_type=7 stays withheld per-value. No field is normalized-authorized beyond id/name/school_mask.",
+  "required_tables": [
+    "CharacterAdvancement",
+    "CharacterAdvancementClassTypes",
+    "CharacterAdvancementEssence",
+    "CharacterAdvancementTabTypes",
+    "SkillLineAbility",
+    "Spell",
+    "SpellCastTimes",
+    "SpellDuration",
+    "SpellIcon",
+    "SpellRange"
+  ],
+  "reviewed": true,
+  "schema_version": "coa-spell-layout-v2",
+  "sha256": "1c6376c656910b9e224de674b16de8167205509a9d895abcfd6bcb87387cf3f4",
+  "tables": {
+    "CharacterAdvancement": {
+      "expected_field_count": 179,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementClassTypes": {
+      "expected_field_count": 23,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementEssence": {
+      "expected_field_count": 9,
+      "key_cell": 0,
+      "unique": true
+    },
+    "CharacterAdvancementTabTypes": {
+      "expected_field_count": 19,
+      "key_cell": 0,
+      "unique": true
+    },
+    "SkillLineAbility": {
+      "expected_field_count": 14,
+      "key_cell": 0,
+      "unique": true
+    },
+    "Spell": {
+      "expected_field_count": 234,
+      "fields": {
+        "casting_time_index": {
+          "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellCastTimes is not uniquely resolvable. A bare FK-validity scan yields 30 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base cast time (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
+          "kind": "uint32",
+          "layout": "unproven",
+          "promotion": "raw_only"
+        },
+        "description": {
+          "cell": 170,
+          "evidence": "tooltip text @170 confirmed on anchors (Fireball/Smite/etc.); tooltip macros ($s1) are unresolved templates, so interpretation is reference, not verified.",
+          "interpretation": "reference",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "duration_index": {
+          "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellDuration is not uniquely resolvable. A bare FK-validity scan yields 34 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's base effect duration (ms): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
+          "kind": "uint32",
+          "layout": "unproven",
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "spell id; M1.14A/B id anchor, unique across 208431 rows.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "name": {
+          "cell": 136,
+          "evidence": "localized enUS name @136; normalized-exact match on 8 stock spells (Fireball 133, Frostbolt 116, Smite 585, Heroic Strike 78, Shadow Bolt 686, Wrath 5176, Arcane Explosion 1449, Eviscerate 2098) vs real client 3.3.5a+patch-CZZ.",
+          "interpretation": "verified",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "power_type": {
+          "cell": 41,
+          "evidence": "power_type at cell 41 (the stock-3.3.5 @110 is wrong on this client), enum mapping evidenced by 8 anchors (rage=1 Heroic Strike, energy=3 Eviscerate, etc.). DEMOTED to raw_only in M1.14E0R.1 T1.3: the signed int32 reading has NO static health-cost anchor and value 7 is an unknown symbol, so the full semantic decode is WITHHELD (the streaming producer emits decoded_reason 'proof_withheld' and no normalized power_type, for every value including 7). layout stays verified (the cell is proven); interpretation is reference (documented enum, not authoritative). Re-promotion awaits a static negative anchor + resolution of value 7.",
+          "interpretation": "reference",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "range_index": {
+          "cell": null,
+          "evidence": "reviewed_ambiguous: the FK into SpellRange is not uniquely resolvable. A bare FK-validity scan yields 14 candidate columns on the real client (3.3.5a+patch-CZZ), and no admissible independent evidence encodes a spell's min/max range (yards): the Builder payload does not carry it, client strings/BLP paths do not encode it, and stock-3.3.5 values are corroboration-only (remembered values are inadmissible). Recorded with a null cell; emitted value stays raw_only. Not deferred to E1.",
+          "interpretation": "unproven",
+          "kind": "uint32",
+          "layout": "unproven",
+          "promotion": "raw_only"
+        },
+        "school_mask": {
+          "cell": 225,
+          "evidence": "confirmed @225 via 7 single-school anchors (Physical=1,Holy=2,Fire=4,Nature=8,Frost=16,Shadow=32,Arcane=64); stock 3.3.5a @139 is wrong on this client.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "spell_icon_id": {
+          "cell": 133,
+          "evidence": "FK into SpellIcon, adjudicated to cell 133 by joined-pair value-anchor discovery against the real client (3.3.5a+patch-CZZ). Expected icon ids come from admissible independent evidence only: Builder-payload (coa_scraper/dist/coa_entries.jsonl) icon paths (precedence #2) mapped through the hash-bound client SpellIcon.dbc to a UNIQUE icon id (non-unique paths excluded); no AscensionDB, remembered, runtime, or candidate-column-derived value is used. Cell 133 is the unique cell resolving all 13 anchors; a blind plurality of 293 unique-path Builder-icon spells resolves at 133 vs 1 at the next-best cell (bare FK-validity alone yields 75 candidate columns). layout+interpretation are verified and the string-join is promoted (T2.3): the FK resolves deterministically through the hash-bound client SpellIcon.dbc to the client icon path, so the join is normalized (like Spell.name). The resolved path feeds the coa-client-spell-icons-v1 catalog, not spell mechanics.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellCastTimes": {
+      "expected_field_count": 4,
+      "fields": {
+        "base_ms": {
+          "cell": 1,
+          "evidence": "base cast time in ms @1 (sample: id2=250, id3=500, id4=1000, id5=2000). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id, column 0.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellDuration": {
+      "expected_field_count": 4,
+      "fields": {
+        "base_ms": {
+          "cell": 1,
+          "evidence": "base duration in ms @1. side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "int32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id, column 0.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellIcon": {
+      "expected_field_count": 2,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id (icon id), column 0.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "normalized"
+        },
+        "path": {
+          "cell": 1,
+          "evidence": "SpellIcon path string @1 (2-column WDBC: id, path). A hash-bound client string at a proven column; with the Spell->SpellIcon FK adjudicated to cell 133 (T1.2), the icon string-join is promoted (T2.3): normalized/verified, resolved via make_string_join into the coa-client-spell-icons-v1 catalog.",
+          "interpretation": "verified",
+          "kind": "string",
+          "layout": "verified",
+          "promotion": "normalized"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    },
+    "SpellRange": {
+      "expected_field_count": 40,
+      "fields": {
+        "id": {
+          "cell": 0,
+          "evidence": "WDBC row id, column 0.",
+          "interpretation": "verified",
+          "kind": "uint32",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "max_yd": {
+          "cell": 3,
+          "evidence": "max range (yards) @3 (sample: id2=5, id3=20, id4=30). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "float",
+          "layout": "verified",
+          "promotion": "raw_only"
+        },
+        "min_yd": {
+          "cell": 1,
+          "evidence": "min range (yards) @1 (sample rows show 0 for the min-hostile column). side value cell position confirmed by sample rows on the real client; the JOIN from Spell is unproven until the index column is disambiguated (M1.14E1), so interpretation stays reference and the emitted value is raw_only.",
+          "interpretation": "reference",
+          "kind": "float",
+          "layout": "verified",
+          "promotion": "raw_only"
+        }
+      },
+      "key_cell": 0,
+      "unique": true
+    }
+  }
+}

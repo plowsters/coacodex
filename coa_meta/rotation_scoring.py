@@ -229,7 +229,7 @@ def _resource_efficiency(result: RotationSimulationResult, action_catalog: Actio
         if action is None:
             continue
         generated += sum(float(value) for value in action.generates.values()) * usage.count
-        spent += sum(float(value) for value in action.costs.values()) * usage.count
+        spent += sum(float(value) for value in (action.costs or {}).values()) * usage.count
     if generated <= 0:
         return 0.0
     return min(1.0, spent / generated)
@@ -241,7 +241,7 @@ def _mana_efficiency(result: RotationSimulationResult, action_catalog: ActionCat
         action = action_catalog.actions_by_key.get(action_key)
         if action is None:
             continue
-        for resource, cost in action.costs.items():
+        for resource, cost in (action.costs or {}).items():
             if resource.casefold() == "mana":
                 mana_spent += float(cost) * usage.count
     if mana_spent <= 0:
@@ -253,7 +253,7 @@ def _cooldown_usage(result: RotationSimulationResult, action_catalog: ActionCata
     total = 0
     for action_key, usage in result.action_usage.items():
         action = action_catalog.actions_by_key.get(action_key)
-        if action and action.cooldown_ms > 0:
+        if action and (action.cooldown_ms or 0) > 0:
             total += usage.count
     return total
 

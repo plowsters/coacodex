@@ -29,13 +29,33 @@ StormLib absent is a separate fail-closed (exit **2**).
   that matches **all** present anchors; it never assumes the policy's cell.
 - `index_fk`: per adjudicated join index field — the discovered FK cell + validity stats, or a
   `no_unique_index_cell` finding. Only joins whose policy index cell is non-null are re-checked.
+- `join_pairs`: per join carrying value-anchors — `{table, pair, winners, scanned, side_table_missing}`.
+  A join adjudicated `reviewed_ambiguous` additionally carries `adjudication`, `evidence`, and (E0R.2
+  T3.1) a LIVE scan: `candidates` (`[{cell, nonzero_count, valid_count, distinct_ids}]`, sorted by cell,
+  every metric an integer), `scan_algorithm`, `scan_thresholds`, `candidates_digest`. `scanned: false`
+  with `side_table_missing: true` means the side table could not be opened — distinct from "ambiguous",
+  which before E0R.2 it was not.
+- `ambiguity_agreement`: per ambiguous join — `null` when the live scan matches the policy's reviewed
+  `ambiguity_baseline` exactly, else the reason it does not. E0R.2 T3.2: `verified` requires exact
+  agreement on algorithm, thresholds, candidate cells and per-candidate metrics. `pair: None` alone no
+  longer counts — a join that was never scanned and one whose candidates were replaced wholesale both
+  used to read as unchanged, and even "any candidate set of size ≥ 2" would accept `{10,11}` → `{90,91}`.
 - `enum_domains`: `power_type_observed`, `unknown_power_types`, `unknown_school_bits` — unseen symbols
   are recorded, never blocking (the extractor's per-value gate withholds them downstream).
 - `topology`: per required / expected-absent table — `{present, required|expected_absent}`
 - `proposed_policy_delta`: `{field: discovered_cell}` for every uniquely-discovered anchor + index
   cell. This is the recon's ONLY output about layout — a human applies it to the policy.
-- `duplicates`, `budget`: duplicate spell ids (sample) and the real budget report (serialized bytes,
-  elapsed, peak RSS ceilings).
+- `duplicates`: duplicate spell ids (sample).
+- `budget`: `{peak_rss_mb, elapsed_s, ceilings, within_budget, breach}` — the two quantities a recon
+  actually measures, gated against the REVIEWED policy's `budget` block (`python_peak_rss_mb`,
+  `python_elapsed_s`; the `node_*` ceilings belong to a boundary a recon never runs). A policy declaring
+  no budget block is refused rather than held to hard-coded limits nobody reviewed.
+  **E0R.2 T3.3: recon makes no artifact-size claim.** It used to report `serialized_mb` from
+  `record_count * record_size` — the raw DBC byte count of the *source* table, gated as though it
+  forecast the serialized artifact; on the real client that read ~187 MB against a real ~523 MB
+  generation, off by 2.8× in the optimistic direction. A forecast from a serialized sample is an
+  explicit non-goal: a wrong forecast is worse than none, and publication measures the real thing
+  exactly, per child and whole-generation.
 
 ## Discovery is genuine, not a policy echo
 
@@ -56,3 +76,11 @@ cell by resolving through to KNOWN cast/duration/range values for anchor spells)
    Re-hash the policy (`compute_policy_sha256`).
 4. Re-run recon → exit 0 (`verified`). Only a `verified`, bound policy lets `regenerate` emit canonical
    v2 artifacts. This procedure is deliberately human — recon never self-approves.
+
+## M1.14E0R
+
+Recon and regenerate share **one** source-topology verifier (`verify_source_topology`): sha256 + full
+5-field header + member/effective-archive/patch-chain + density + key-uniqueness per required table, plus
+the expected-absent set, matched facet-for-facet against the reviewed policy's structured `bound`. Recon
+also reports joined-pair value-anchor discovery (all four side-table joins), a static `power_type`
+negative anchor (a signed reading proven by an observed negative), and the three-part budget.

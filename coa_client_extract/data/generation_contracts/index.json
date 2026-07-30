@@ -1,0 +1,19 @@
+{
+  "schema_version": "coa-generation-contract-index-v1",
+  "note": "The supported generation-contract revisions, each pinned by the canonical digest of its parsed document (sorted keys, no whitespace). Revision FILES are immutable: to change a contract, add a new file and a new entry here, then move `current`. Older entries stay so generations published under them remain independently resolvable.",
+  "current": "e0r-v3",
+  "supported": {
+    "e0r-v1": {
+      "path": "e0r-v1.json",
+      "sha256": "708a00e28cb6d11872acc6c338d714133bd3768ecb45d8227de7c38c9732078d"
+    },
+    "e0r-v2": {
+      "path": "e0r-v2.json",
+      "sha256": "7f256a352cef15bd0dcc9e72c7eced399fd2d3b31d393bac1f77882935d05e82"
+    },
+    "e0r-v3": {
+      "path": "e0r-v3.json",
+      "sha256": "d2180203b3b9cd443a16d1c3cd0a2223ce49872bd02f6b38e562d860a4811c9c"
+    }
+  }
+}

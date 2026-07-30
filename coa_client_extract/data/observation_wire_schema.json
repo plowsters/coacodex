@@ -1,0 +1,19 @@
+{
+  "schema_version": "coa-observation-wire-v1",
+  "note": "IMMUTABLE. The closed observation vocabularies and their integer wire codes, read by BOTH languages. Never edit this file: a new vocabulary entry means a new coa-observation-wire-vN file referenced by a new generation-contract revision, because editing changes the hash that published contracts pin. Enumerated from every Envelope/StringObservation/JoinObservation construction site in spell_proof.py; a grep over string literals conflates these with manifest.publication_state and with contracts.READINESS_REASON_CODES.",
+  "states": {
+    "not_applicable": 0,
+    "present": 1,
+    "resolved": 2,
+    "unresolved": 3
+  },
+  "decoded_reasons": {
+    "decoded": 0,
+    "index_zero": 1,
+    "non_finite": 2,
+    "not_present": 3,
+    "proof_withheld": 4,
+    "side_row_missing": 5,
+    "value_out_of_domain": 6
+  }
+}

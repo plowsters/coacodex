@@ -4,7 +4,9 @@ Item records use schema version `coa-item-v1`.
 
 ## Purpose
 
-Item records describe equipment, weapons, armor, and item effects used by gear recommendations and later personal simulations. M1.9 item records are sourced primarily from AscensionDB power payloads and may be partial until richer item pages or in-game snapshots are available.
+Item records describe equipment, weapons, armor, and item effects used by gear recommendations and later personal simulations.
+
+M1.9 sourced item records primarily from AscensionDB power payloads. That pipeline was **removed** by M1.14E0R and no client-native item extraction replaced it yet, so this schema currently has **no producer**: it documents the target shape for a later milestone, not an artifact the repository builds today.
 
 ## Required Fields
 

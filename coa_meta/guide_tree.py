@@ -7,7 +7,6 @@ from .builder_tree_layout import BuilderLayoutTree, BuilderTreeLayout
 from .builds import BuildConfig, BuildRules
 from .domain import SelectedRank, TalentNode, ValidationIssue
 from .guide_models import GuideAsset, GuideNode, GuideNodeGate, GuideTree, GuideTreeEdge, GuideTreePanel, GuideTreeSnapshot
-from .guide_tooltips import ascension_spell_url
 from .repository import TalentRepository
 
 
@@ -484,7 +483,7 @@ def _guide_node_from_talent(node: TalentNode) -> GuideNode:
         te_cost=node.te_cost,
         tags=tuple(node.tags),
         active=not node.is_passive,
-        db_url=ascension_spell_url(node.spell_id),
+        db_url=None,
         tooltip_id=f"spell:{node.spell_id}" if node.spell_id is not None else f"entry:{node.entry_id}",
         asset=asset,
     )

@@ -27,7 +27,7 @@ def build_manifest(
     }
 
 
-def build_manifest_v2(
+def build_manifest_v3(
     *,
     base: dict,
     generation_id: str,
@@ -36,14 +36,18 @@ def build_manifest_v2(
     children: dict,
     unknown_symbol_inventory: dict,
     binding: dict,
+    publication_state: str = "candidate",
 ) -> dict:
-    """A generation-local manifest: a SUPERSET of all ten v1 fields (from `base`) plus generation
-    identity, monotonic `published_at` (ns), the pointer's prior target `predecessor_generation_id`,
-    the exact `children` inventory, the per-value `unknown_symbol_inventory`, and source/policy/anchor/
-    enum `binding` hashes. `outputs` is re-derived as a deterministic {name: sha256} INDEX VIEW over
-    `children` — for migrated resolvers only, NOT backward compatibility for unmigrated v1 consumers."""
+    """The E0R generation manifest (coa-client-extract-manifest-v3): a SUPERSET of all ten v1 fields
+    (from `base`) plus generation identity, monotonic `published_at` (ns), the pointer's prior target
+    `predecessor_generation_id`, the exact `children` inventory (with `outputs` re-derived as a
+    deterministic {name: sha256} index view over it), the per-value `unknown_symbol_inventory`,
+    source/policy/anchor/enum `binding` hashes, and an explicit `publication_state`
+    ("candidate" | "published"): a candidate manifest is NEVER pointer-resolvable, so an interrupted
+    publish leaves no half-live generation. The candidate_trust_sha256 is added by the publisher over
+    everything except the three CANDIDATE_MUTABLE_KEYS."""
     manifest = dict(base)
-    manifest["schema_version"] = "coa-client-extract-manifest-v2"
+    manifest["schema_version"] = "coa-client-extract-manifest-v3"
     manifest["outputs"] = {name: meta["sha256"] for name, meta in sorted(children.items())}
     manifest["generation_id"] = generation_id
     manifest["published_at"] = published_at
@@ -51,4 +55,5 @@ def build_manifest_v2(
     manifest["children"] = children
     manifest["unknown_symbol_inventory"] = unknown_symbol_inventory
     manifest["binding"] = binding
+    manifest["publication_state"] = publication_state
     return manifest

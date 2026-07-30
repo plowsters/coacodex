@@ -63,7 +63,6 @@ def test_writes_json_markdown_and_html_outputs(tmp_path):
         tmp_path,
         formats=("json", "md", "html"),
         entries_path=FIXTURES / "meta_report_fixture.jsonl",
-        db_tooltips_path=FIXTURES / "guide_db_tooltips.jsonl",
     )
 
     names = {path.name for path in written}

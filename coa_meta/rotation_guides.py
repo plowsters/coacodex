@@ -254,6 +254,7 @@ def _empty_result(candidate_id: str) -> RotationSimulationResult:
 
     return RotationSimulationResult(
         source=candidate_id,
+        source_kind="unavailable",       # no simulation ran at all
         duration_ms=0,
         events=tuple(),
         resources={},
@@ -352,7 +353,7 @@ def _section_rules(
         action = action_by_key.get(apl_action.action_key)
         if apl_action.action_key not in used_keys:
             continue
-        if apl_action.category != category and not (category == "cooldown" and action and action.cooldown_ms > 0):
+        if apl_action.category != category and not (category == "cooldown" and action and (action.cooldown_ms or 0) > 0):
             continue
         rules.append(_rule_from_action(apl_action.action_key, category, apl_action, action, len(rules) + 1))
     return tuple(rules[:12])
@@ -462,11 +463,9 @@ def _action_icon(action: CatalogAction | None) -> str | None:
     return None
 
 
-def _db_url(action: CatalogAction | None, apl_action: APLAction | None) -> str | None:
-    spell_id = action.spell_id if action else apl_action.spell_id if apl_action else None
-    if not spell_id:
-        return None
-    return f"https://db.ascension.gg/?spell={spell_id}"
+def _db_url(action: CatalogAction | None, apl_action: APLAction | None) -> None:
+    # E0R AscensionDB sunset: rotation actions no longer link out to the remote DB.
+    return None
 
 
 def _uptime_pct(action: CatalogAction | None, count: int, duration_ms: int) -> float | None:

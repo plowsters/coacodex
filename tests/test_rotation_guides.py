@@ -128,6 +128,7 @@ def _result(
         )
     return RotationSimulationResult(
         source=candidate_id,
+        source_kind="verified",
         duration_ms=max(60_000, len(keys) * 1500),
         events=tuple(events),
         resources={},

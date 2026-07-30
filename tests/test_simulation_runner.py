@@ -33,13 +33,15 @@ def test_simulation_runner_executes_generated_apl_for_build():
         validation.state,
         repo,
         apl,
-        SimulationConfig(duration_ms=10_000, iterations=2, seed=11),
+        # E0R.1 T5.4: this path invents amounts/costs/cooldowns, so it is heuristic by construction
+        # and must be authorized explicitly; its output is labeled source=heuristic.
+        SimulationConfig(duration_ms=10_000, iterations=2, seed=11, allow_heuristic=True),
     )
 
     payload = result.to_dict()
 
     assert payload["schema_version"] == "coa-simulation-result-v1"
-    assert payload["source"] == "simulated"
+    assert payload["source"] == "heuristic"
     assert payload["iterations"] == 2
     assert payload["dps"] > 0
     assert payload["spell_breakdown"]
