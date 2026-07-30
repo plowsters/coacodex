@@ -2926,7 +2926,9 @@ git commit -m "feat(e0r2): T8.2 — real-client acceptance record and the E1 hea
 - **Actually adjudicating the three numeric joins.** T3.1/T3.2 make the standing ambiguity honest and
   drift-detecting; they do not resolve it. Resolution needs admissible independent evidence that does
   not exist today under the anchor-evidence precedence — a controlled local client where a known
-  spell's cast time can be read back, or a Builder field that explicitly encodes it. This is the E1
-  blocker to schedule next.
+  spell's cast time can be read back, or a Builder field that explicitly encodes it. **Scheduled in
+  E0R.3: owned by M1.14G, and inherited by E1 as `unavailable`** — see
+  [E0R.3](2026-07-29-m1-14-e0r3-close-final-review-blockers.md) and the E0R design's
+  [Impact on M1.14E1](../specs/2026-07-19-m1-14-e0r-correctness-sunset-remediation-design.md#impact-on-m114e1).
 - **The two guide-product findings.** Not blockers while the guide is unpublished/experimental, but
   T7.2 lands them as explicit ROADMAP items rather than leaving them in a plan appendix.
